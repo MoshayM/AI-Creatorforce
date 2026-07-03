@@ -144,6 +144,17 @@ Standard error codes reused (`api.md` §1): `BUDGET_EXCEEDED`, `COMPLIANCE_BLOCK
 
 Avatar/presenter generation (consent-gated), stock-footage connectors (licensed only), GPU render farm auto-scaling, per-scene style transfer, podcast→video repurposing (roadmap M4).
 
+## 16a. Implementation Status (2026-07-03)
+
+Shipped in `apps/api/src/modules/media/` + `apps/api/src/workers/`:
+
+- **Provider abstraction** (`media.types.ts`, `media.service.ts`): Voice/Image/Music/Video adapter interfaces; env-selected (`VOICE_PROVIDER` etc.) with automatic fallback down the chain. Real adapters: OpenAI TTS, OpenAI Images (active when `OPENAI_API_KEY` valid). Always-available offline adapters: cadence-synth voice (timing-accurate placeholder), chord-pad music (royalty-free generated), gradient stills, ffmpeg Ken Burns scene video. ElevenLabs/Suno/Runway adapters plug into the same interfaces without touching business logic.
+- **Storage**: local-disk driver (`storage/` — R2 key scheme, R2 driver swap-ready). Asset/AssetVersion rows carry write-once provenance; request-hash caching means identical requests never regenerate.
+- **Render**: deterministic ffmpeg composition (`adapters/ffmpeg.util.ts` via `ffmpeg-static`): scene clips/stills concat + Ken Burns, narration + ducked music (`amix`), SRT burn-in, H.264 MP4.
+- **Subtitles**: SRT/VTT serialized deterministically from cue data (`subtitle.util.ts`) — never delegated to the model.
+- **`FULL_PRODUCTION` job** (`pipeline-plan.ts` + supervisor worker): one-click orchestration with scopes (FULL/VOICE/MUSIC/IMAGES/VIDEO), parallel stage batches, resume (completed stages skipped), historical-average ETAs, and a hard compliance gate before any media generation. Publishing is intentionally excluded — human approval required (claude.md rule 2). Stages run as real child `agent_jobs` rows so results persist and the dashboard reflects each step live.
+- **Exports** (`exports.service.ts`, `GET /media/exports/:projectId[/:file]`): upload-ready package — `final.mp4`, `voice.*`, `music.*`, `captions.srt/vtt`, `description.md`, `hashtags.txt`, `chapters.txt`, `seo.json`, `thumbnail-brief.json`, `manifest.json`.
+
 ## 17. Cross References
 
 `video-editor.md` (timeline, EditPlanAgent) · `agents.md` (roster) · `workflows.md` (WF-1 expanded, WF-8) · `database.md` §5a · `api.md` §10a–§12a · `model-routing.md` §7 (media providers) · `token-optimization.md` §5–6 · `compliance.md` · `monetization-framework.md`.

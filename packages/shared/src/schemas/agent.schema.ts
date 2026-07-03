@@ -221,8 +221,9 @@ export type SubtitleOutput = z.infer<typeof SubtitleOutputSchema>;
 
 export const TimelineClipSchema = z.object({
   id: z.string(),
-  assetId: z.string().optional(),
-  assetVersionId: z.string().optional(),
+  // Nullable: a first-cut clip may reference an asset that doesn't exist yet
+  assetId: z.string().nullable().optional(),
+  assetVersionId: z.string().nullable().optional(),
   kind: z.enum(['voice', 'video', 'image', 'music', 'subtitle', 'overlay']),
   startMs: z.number().int(),
   durationMs: z.number().int(),
@@ -237,10 +238,12 @@ export const EditPlanOutputSchema = z.object({
   projectId: z.string().optional(),
   label: z.string().default('AI first cut'),
   fps: z.number().int().default(30),
-  resolution: z.object({ width: z.number().int(), height: z.number().int() }),
+  resolution: z.object({ width: z.number().int(), height: z.number().int() })
+    .default({ width: 1920, height: 1080 }),
   totalDurationMs: z.number().int(),
   tracks: z.array(z.object({
-    index: z.number().int(),
+    // Optional: array position is the authoritative order; filled in on save
+    index: z.number().int().optional(),
     kind: z.enum(['voice', 'video', 'music', 'subtitle', 'overlay']),
     label: z.string(),
     clips: z.array(TimelineClipSchema),

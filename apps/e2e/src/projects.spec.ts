@@ -76,6 +76,13 @@ test.describe('Project Detail', () => {
     await expect(page.getByText(/TechReview Pro/)).toBeVisible();
   });
 
+  test('shows AI production studio card with one-click generate', async ({ page }) => {
+    await expect(page.getByText('AI Video Production Studio')).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole('button', { name: /^generate$/i })).toBeVisible();
+    await expect(page.getByRole('combobox')).toBeVisible();
+    await expect(page.getByText(/compliance-gated/i)).toBeVisible();
+  });
+
   test('shows run agent buttons', async ({ page }) => {
     await expect(page.getByRole('button', { name: /analyze trends/i })).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('button', { name: /analyze audience/i })).toBeVisible();

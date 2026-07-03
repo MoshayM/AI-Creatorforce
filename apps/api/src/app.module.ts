@@ -24,6 +24,7 @@ import { GrowthModule } from './modules/growth/growth.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { TimelineModule } from './modules/timeline/timeline.module';
 import { RenderModule } from './modules/render/render.module';
+import { MediaModule } from './modules/media/media.module';
 import { WorkersModule } from './workers/workers.module';
 import { GatewayModule } from './gateway/gateway.module';
 
@@ -65,6 +66,7 @@ import { GatewayModule } from './gateway/gateway.module';
     AssetsModule,
     TimelineModule,
     RenderModule,
+    MediaModule,
     WorkersModule,
     GatewayModule,
   ],

@@ -13,6 +13,8 @@ import {
   Music, Sparkles, Zap, RefreshCw, Copy, Download, Check,
   RotateCcw, ArrowRightLeft, Timer, Mic,
 } from 'lucide-react';
+import { ElapsedBadge, formatDuration } from '@/components/ai-activity';
+import { FullProductionCard, type PipelineProgress } from '@/components/full-production';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,6 +23,7 @@ interface Job {
   type: string;
   status: string;
   createdAt: string;
+  startedAt?: string | null;
   completedAt?: string | null;
   result?: unknown;
   error?: string | null;
@@ -610,8 +613,18 @@ export default function ProjectDetailPage() {
   const [liveStatus, setLiveStatus] = useState<Record<string, { status: string; detail?: string }>>({});
   // Per-job activity log: messages streamed in real-time via WebSocket
   const [jobLogs, setJobLogs] = useState<Record<string, Array<{ msg: string; detail?: string }>>>({});
+  // FULL_PRODUCTION pipeline progress (stage n/m + ETA) streamed via job events
+  const [pipelineProgress, setPipelineProgress] = useState<PipelineProgress | null>(null);
 
   const handleJobEvent = useCallback((event: Record<string, unknown>) => {
+    if (event['pipelineStage'] !== undefined) {
+      setPipelineProgress({
+        stage: String(event['pipelineStage']),
+        index: Number(event['pipelineIndex'] ?? 0),
+        count: Number(event['pipelineCount'] ?? 0),
+        etaSecs: Number(event['etaSecs'] ?? 0),
+      });
+    }
     const jobId = String(event['jobId'] ?? '');
     const status = String(event['status'] ?? '');
     if (!jobId || !status) return;
@@ -752,6 +765,17 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
+      {/* One-click AI production studio */}
+      <FullProductionCard
+        projectId={id}
+        runningJob={
+          project.jobs
+            .filter((j) => j.type === 'FULL_PRODUCTION' && ['RUNNING', 'QUEUED', 'PENDING'].includes(j.status))
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
+        }
+        progress={pipelineProgress}
+      />
+
       {/* Pipeline Progress Bar */}
       <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5">
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Content Pipeline</h2>
@@ -829,12 +853,12 @@ export default function ProjectDetailPage() {
         </div>
       )}
       {lastRan && !runError && (
-        <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-4">
-          <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
-          <p className="text-sm text-green-700 flex-1">
-            <span className="font-semibold">{lastRan.replace(/_/g, ' ')}</span> completed — results are ready below.
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4">
+          <Loader2 className="w-4 h-4 text-blue-600 flex-shrink-0 animate-spin" />
+          <p className="text-sm text-blue-700 flex-1">
+            <span className="font-semibold">{lastRan.replace(/_/g, ' ')}</span> agent started — follow its live progress below.
           </p>
-          <button onClick={() => setLastRan(null)} className="text-green-400 hover:text-green-600 text-xs flex-shrink-0">✕</button>
+          <button onClick={() => setLastRan(null)} className="text-blue-400 hover:text-blue-600 text-xs flex-shrink-0">✕</button>
         </div>
       )}
 
@@ -904,6 +928,9 @@ export default function ProjectDetailPage() {
                                   {STATUS_ICON[displayStatus]}
                                   {STATUS_LABEL[displayStatus] ?? displayStatus}
                                 </span>
+                                {job.status === 'RUNNING' && (
+                                  <ElapsedBadge since={job.startedAt ?? job.createdAt} className="pr-1" />
+                                )}
                                 {live?.detail && (
                                   <span className="text-xs text-gray-400 pr-1">{live.detail}</span>
                                 )}
@@ -1001,6 +1028,7 @@ export default function ProjectDetailPage() {
                                     <p className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5">
                                       <Loader2 className="w-3 h-3 animate-spin text-green-500" />
                                       <span className="text-green-500 font-medium">Agent running</span>
+                                      <ElapsedBadge since={job.startedAt ?? job.createdAt} className="!text-gray-500" />
                                     </p>
                                   )}
                                   {logs.map((entry, i) => {
@@ -1069,10 +1097,13 @@ export default function ProjectDetailPage() {
                       </p>
                       <p className="text-xs text-gray-400">
                         {new Date(job.createdAt).toLocaleString()}
-                        {job.completedAt && ` · ${Math.round((new Date(job.completedAt).getTime() - new Date(job.createdAt).getTime()) / 1000)}s`}
+                        {job.completedAt && ` · took ${formatDuration(new Date(job.completedAt).getTime() - new Date(job.startedAt ?? job.createdAt).getTime())}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {job.status === 'RUNNING' && (
+                        <ElapsedBadge since={job.startedAt ?? job.createdAt} />
+                      )}
                       <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_BADGE[job.status] ?? 'bg-gray-100 text-gray-600'}`}>
                         {STATUS_ICON[job.status]}
                         {job.status}

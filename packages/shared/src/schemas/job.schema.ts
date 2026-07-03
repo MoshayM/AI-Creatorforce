@@ -22,6 +22,7 @@ export const JobTypeSchema = z.enum([
   'SUBTITLE_GENERATE',
   'EDIT_PLAN',
   'RENDER',
+  'FULL_PRODUCTION',
   'ANALYTICS',
   'GROWTH_REPORT',
 ]);

@@ -78,6 +78,12 @@ export const api = {
         cancelUrl: `${window.location.origin}/settings`,
       }),
   },
+  media: {
+    listExports: (projectId: string) =>
+      apiClient.get<Array<{ name: string; sizeBytes: number }>>(`/media/exports/${projectId}`),
+    downloadExport: (projectId: string, fileName: string) =>
+      apiClient.get(`/media/exports/${projectId}/${encodeURIComponent(fileName)}`, { responseType: 'blob' }),
+  },
   settings: {
     getApiKeys: () =>
       apiClient.get<Array<{ key: string; label: string; masked: string; set: boolean }>>('/settings/api-keys'),
