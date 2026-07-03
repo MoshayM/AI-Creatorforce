@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import { Search, TrendingUp, Loader2, Lightbulb, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
+import { ResultActions } from '@/components/result-actions';
+import { AiWorkingCard, formatDuration } from '@/components/ai-activity';
 
 interface TrendItem {
   topic: string;
@@ -21,16 +23,19 @@ export default function DiscoverPage() {
   const [result, setResult] = useState<TrendsResult | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState('');
+  const [durationMs, setDurationMs] = useState<number | null>(null);
 
   async function analyze() {
     if (!niche.trim()) return;
     setIsPending(true);
     setError('');
+    const startedAt = Date.now();
 
     try {
       const res = await api.trends.analyze(niche.trim());
       const data = res.data as TrendsResult;
       setResult({ trending: data.trending ?? [], recommendations: data.recommendations ?? [], analysisDate: data.analysisDate ?? '' });
+      setDurationMs(Date.now() - startedAt);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } }; message?: string };
       const serverMsg = axiosErr?.response?.data?.message;
@@ -47,7 +52,7 @@ export default function DiscoverPage() {
         <p className="text-gray-500 mt-1">Find trending YouTube topics in your niche</p>
       </div>
 
-      <div className="flex gap-3 mb-8">
+      <div className="flex gap-3 mb-8 no-print">
         <input
           value={niche}
           onChange={(e) => setNiche(e.target.value)}
@@ -81,9 +86,26 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {result && (
-        <div className="space-y-6">
-          <p className="text-xs text-gray-400">Analysis date: {result.analysisDate}</p>
+      {isPending && (
+        <AiWorkingCard
+          title={`Analyzing "${niche.trim()}" trends`}
+          steps={[
+            'Scanning YouTube trend signals',
+            'Scoring topics for virality and competition',
+            'Compiling recommendations',
+          ]}
+        />
+      )}
+
+      {result && !isPending && (
+        <div className="space-y-6 fade-in">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-400">
+              Analysis date: {result.analysisDate}
+              {durationMs != null && ` · analyzed in ${formatDuration(durationMs)}`}
+            </p>
+            <ResultActions data={result} filename={`trends-${niche.trim().toLowerCase() || 'analysis'}`} />
+          </div>
 
           <div className="space-y-4">
             {result.trending.map((t, i) => (

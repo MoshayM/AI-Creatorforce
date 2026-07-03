@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { BarChart2, TrendingUp, TrendingDown, Minus, Lightbulb, RefreshCw, ChevronRight } from 'lucide-react';
+import { ResultActions } from '@/components/result-actions';
+import { AiWorkingCard, formatDuration } from '@/components/ai-activity';
 
 interface Insight {
   metric: string;
@@ -63,6 +65,8 @@ export default function AnalyticsPage() {
   const [loadingGrowth, setLoadingGrowth] = useState(false);
   const [error, setError] = useState('');
   const [channels, setChannels] = useState<Array<{ id: string; title: string }>>([]);
+  const [analyticsDurationMs, setAnalyticsDurationMs] = useState<number | null>(null);
+  const [growthDurationMs, setGrowthDurationMs] = useState<number | null>(null);
 
   useState(() => {
     callApi<Array<{ id: string; title: string }>>('/channels')
@@ -74,9 +78,11 @@ export default function AnalyticsPage() {
     if (!channelId) return;
     setLoadingAnalytics(true);
     setError('');
+    const startedAt = Date.now();
     try {
       const report = await callApi<AnalyticsReport>(`/analytics/${channelId}/report`, 'POST');
       setAnalytics(report);
+      setAnalyticsDurationMs(Date.now() - startedAt);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analytics failed');
     } finally {
@@ -88,12 +94,14 @@ export default function AnalyticsPage() {
     if (!analytics) return;
     setLoadingGrowth(true);
     setError('');
+    const startedAt = Date.now();
     try {
       const report = await callApi<GrowthReport>('/growth/report', 'POST', {
         channelId: analytics.channelId,
         analyticsReport: analytics,
       });
       setGrowth(report);
+      setGrowthDurationMs(Date.now() - startedAt);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Growth report failed');
     } finally {
@@ -112,7 +120,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Channel selector + run */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 no-print">
         <label className="block text-sm font-medium text-gray-700 mb-2">Select Channel</label>
         <div className="flex gap-3">
           {channels.length > 0 ? (
@@ -147,9 +155,31 @@ export default function AnalyticsPage() {
         {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
       </div>
 
+      {loadingAnalytics && (
+        <AiWorkingCard
+          title="Analyzing channel performance"
+          steps={[
+            'Fetching channel metrics',
+            'Diagnosing CTR and retention patterns',
+            'Writing insights and suggestions',
+          ]}
+        />
+      )}
+
       {/* Analytics report */}
-      {analytics && (
-        <div className="space-y-6">
+      {analytics && !loadingAnalytics && (
+        <div className="space-y-6 fade-in">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-400">
+              {analyticsDurationMs != null && `Report generated in ${formatDuration(analyticsDurationMs)}`}
+              {growthDurationMs != null && ` · growth report in ${formatDuration(growthDurationMs)}`}
+            </p>
+            <ResultActions
+              data={growth ? { analytics, growth } : analytics}
+              filename={`analytics-${analytics.channelId}`}
+            />
+          </div>
+
           {/* Score card */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -217,11 +247,21 @@ export default function AnalyticsPage() {
           )}
 
           {/* Growth button */}
-          {!growth && (
+          {loadingGrowth && (
+            <AiWorkingCard
+              title="Generating growth report"
+              steps={[
+                'Reviewing your analytics report',
+                'Ranking next-topic opportunities',
+                'Prioritizing optimization actions',
+              ]}
+            />
+          )}
+          {!growth && !loadingGrowth && (
             <button
               onClick={runGrowth}
               disabled={loadingGrowth}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-brand-300 rounded-xl text-brand-600 font-medium hover:bg-brand-50 disabled:opacity-50"
+              className="no-print w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-brand-300 rounded-xl text-brand-600 font-medium hover:bg-brand-50 disabled:opacity-50"
             >
               {loadingGrowth ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
               {loadingGrowth ? 'Generating growth recommendations…' : 'Generate Growth Report & Next Topics'}
@@ -229,8 +269,8 @@ export default function AnalyticsPage() {
           )}
 
           {/* Growth report */}
-          {growth && (
-            <div className="space-y-4">
+          {growth && !loadingGrowth && (
+            <div className="space-y-4 fade-in">
               <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <h2 className="font-semibold text-gray-900 mb-2 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-brand-600" /> Growth Summary</h2>
                 <p className="text-sm text-gray-600">{growth.summary}</p>

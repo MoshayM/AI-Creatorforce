@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Activity, CheckCircle, XCircle, Clock, Play, AlertCircle, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useProjectJobEvents } from '@/hooks/use-job-events';
+import { ElapsedBadge, formatDuration } from '@/components/ai-activity';
 import { useSearchParams } from 'next/navigation';
 
 interface AgentJob {
@@ -30,8 +31,8 @@ const STATUS_CONFIG: Record<string, { icon: React.ReactNode; cls: string; label:
 function JobRow({ job }: { job: AgentJob }) {
   const cfg = STATUS_CONFIG[job.status] ?? { icon: <Play className="w-4 h-4" />, cls: 'bg-gray-100 text-gray-600', label: job.status };
 
-  const duration = job.startedAt && job.completedAt
-    ? Math.round((new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()) / 1000)
+  const durationMs = job.startedAt && job.completedAt
+    ? new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()
     : null;
 
   return (
@@ -50,8 +51,11 @@ function JobRow({ job }: { job: AgentJob }) {
           )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {duration !== null && (
-            <span className="text-xs text-gray-400">{duration}s</span>
+          {job.status === 'RUNNING' && (
+            <ElapsedBadge since={job.startedAt ?? job.createdAt} />
+          )}
+          {durationMs !== null && (
+            <span className="text-xs text-gray-400">{formatDuration(durationMs)}</span>
           )}
           <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${cfg.cls}`}>
             {cfg.icon}

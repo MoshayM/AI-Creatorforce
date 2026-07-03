@@ -137,7 +137,7 @@ export default function AssetsPage() {
                         {asset.label ?? `${kind} — ${asset.id.slice(0, 8)}`}
                       </p>
                       <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ml-2 ${status.color}`}>
-                        <StatusIcon className="w-3 h-3" />
+                        <StatusIcon className={`w-3 h-3 ${asset.status === 'GENERATING' ? 'animate-spin' : ''}`} />
                         {status.label}
                       </span>
                     </div>

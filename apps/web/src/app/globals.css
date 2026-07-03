@@ -11,3 +11,54 @@
     @apply bg-white text-gray-900 antialiased;
   }
 }
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-bar {
+  background: linear-gradient(90deg, #fce7f3 25%, #f472b6 50%, #fce7f3 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fade-in {
+  animation: fade-in-up 0.3s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-bar,
+  .fade-in,
+  .animate-pulse {
+    animation: none !important;
+  }
+}
+
+@media print {
+  aside,
+  .no-print {
+    display: none !important;
+  }
+  .h-screen {
+    height: auto !important;
+  }
+  main {
+    overflow: visible !important;
+  }
+}
