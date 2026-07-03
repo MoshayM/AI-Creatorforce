@@ -1,0 +1,13 @@
+{
+  "name": "@cf/prompts",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cf/tsconfig": "workspace:*",
+    "typescript": "^5.7.3"
+  }
+}

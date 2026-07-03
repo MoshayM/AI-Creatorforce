@@ -1,0 +1,62 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cf_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cf
+      POSTGRES_PASSWORD: cf
+      POSTGRES_DB: creatorforce
+    ports:
+      - '5434:5432'
+    volumes:
+      - cf_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cf']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: cf_redis
+    restart: unless-stopped
+    ports:
+      - '6380:6379'
+    volumes:
+      - cf_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: cf_n8n
+    restart: unless-stopped
+    ports:
+      - '5679:5678'
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5679
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: cf
+      DB_POSTGRESDB_PASSWORD: cf
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - cf_n8n_data:/home/node/.n8n
+
+volumes:
+  cf_postgres_data:
+  cf_redis_data:
+  cf_n8n_data:

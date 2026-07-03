@@ -1,0 +1,34 @@
+{
+  "name": "creatorforce-ai",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:migrate": "pnpm --filter @cf/db migrate:dev",
+    "db:push": "pnpm --filter @cf/db db:push",
+    "db:seed": "pnpm --filter @cf/db db:seed",
+    "db:studio": "pnpm --filter @cf/db studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3",
+    "prettier": "^3.4.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@sentry/cli",
+      "@sentry/profiling-node",
+      "bcrypt",
+      "prisma",
+      "@prisma/client"
+    ]
+  }
+}

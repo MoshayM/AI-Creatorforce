@@ -1,0 +1,581 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Users & Auth ──────────────────────────────────────────────────────────────
+
+enum UserRole {
+  OWNER
+  MEMBER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  avatarUrl     String?
+  passwordHash  String?
+  emailVerified DateTime?
+  role          UserRole  @default(OWNER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  channels      Channel[]
+  projects      Project[]
+  apiKeys       ApiKey[]
+  subscription  Subscription?
+  usageLogs     UsageLog[]
+
+  @@map("users")
+}
+
+model SystemConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_configs")
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  keyHash   String   @unique
+  lastUsed  DateTime?
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}
+
+// ── YouTube Channels ──────────────────────────────────────────────────────────
+
+model Channel {
+  id               String   @id @default(cuid())
+  userId           String
+  youtubeChannelId String   @unique
+  title            String
+  description      String?
+  thumbnailUrl     String?
+  customUrl        String?
+  subscriberCount  Int      @default(0)
+  videoCount       Int      @default(0)
+  encryptedTokens  String?  // AES-256-GCM encrypted JSON {access,refresh,expiry}; null for read-only connections
+  tokenExpiresAt   DateTime?
+  scopes           String[] @default([])
+  readOnly         Boolean  @default(false)
+  active           Boolean  @default(true)
+  lastSyncedAt     DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  niche            String?
+  voiceProfile     Json?   // tone/style + consented TTS voice refs
+  brandKit         Json?   // colors/fonts/thumbnail style/overlay templates
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects Project[]
+  videos   Video[]
+  analyticsSnapshots AnalyticsSnapshot[]
+
+  @@map("channels")
+}
+
+// ── Projects (content campaigns) ─────────────────────────────────────────────
+
+model Project {
+  id          String        @id @default(cuid())
+  userId      String
+  channelId   String
+  title       String
+  description String?
+  status      ProjectStatus @default(DRAFT)
+  niche       String?
+  targetLang  String        @default("en")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  jobs      AgentJob[]
+  videos    Video[]
+  approvals Approval[]
+  assets    Asset[]
+  timelines Timeline[]
+  renders   Render[]
+
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+// ── Agent Jobs ────────────────────────────────────────────────────────────────
+
+model AgentJob {
+  id          String    @id @default(cuid())
+  projectId   String
+  type        JobType
+  status      JobStatus @default(PENDING)
+  payload     Json      @default("{}")
+  result      Json?
+  error       String?
+  attempts    Int       @default(0)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentLogs  AgentLog[]
+  approval   Approval?
+
+  @@map("agent_jobs")
+}
+
+enum JobType {
+  RESEARCH
+  SCRIPT
+  FACT_CHECK
+  COMPLIANCE
+  METADATA
+  THUMBNAIL
+  TREND_ANALYSIS
+  SEO_OPTIMIZATION
+  AUDIENCE_ANALYSIS
+  PUBLISH
+  // Beta: media pipeline & editor
+  VOICE_SPEC
+  VOICE_GENERATE
+  IMAGE_BRIEF
+  IMAGE_GENERATE
+  MUSIC_BRIEF
+  MUSIC_GENERATE
+  VIDEO_SCENE_PLAN
+  VIDEO_GENERATE
+  SUBTITLE_GENERATE
+  EDIT_PLAN
+  RENDER
+  ANALYTICS
+  GROWTH_REPORT
+}
+
+enum JobStatus {
+  PENDING
+  QUEUED
+  RUNNING
+  WAITING_APPROVAL
+  APPROVED
+  REJECTED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ── Agent Execution Logs ──────────────────────────────────────────────────────
+
+model AgentLog {
+  id        String   @id @default(cuid())
+  jobId     String
+  agentName String
+  step      String
+  input     Json?
+  output    Json?
+  tokensIn  Int      @default(0)
+  tokensOut Int      @default(0)
+  latencyMs Int      @default(0)
+  createdAt DateTime @default(now())
+
+  job AgentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("agent_logs")
+}
+
+// ── Compliance Results ────────────────────────────────────────────────────────
+
+model ComplianceResult {
+  id          String            @id @default(cuid())
+  jobId       String            @unique
+  passed      Boolean
+  score       Float
+  flags       ComplianceFlag[]
+  reviewedAt  DateTime          @default(now())
+  reviewerAI  String
+
+  @@map("compliance_results")
+}
+
+model ComplianceFlag {
+  id                 String           @id @default(cuid())
+  complianceResultId String
+  category           String
+  severity           FlagSeverity
+  description        String
+  excerpt            String?
+
+  result ComplianceResult @relation(fields: [complianceResultId], references: [id], onDelete: Cascade)
+
+  @@map("compliance_flags")
+}
+
+enum FlagSeverity {
+  INFO
+  WARNING
+  CRITICAL
+  BLOCK
+}
+
+// ── Human Approvals ───────────────────────────────────────────────────────────
+
+model Approval {
+  id          String         @id @default(cuid())
+  projectId   String
+  jobId       String         @unique
+  status      ApprovalStatus @default(PENDING)
+  reviewedBy  String?
+  notes       String?
+  reviewedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime       @default(now())
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  job     AgentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("approvals")
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+// ── Videos ────────────────────────────────────────────────────────────────────
+
+model Video {
+  id               String      @id @default(cuid())
+  projectId        String
+  channelId        String
+  youtubeVideoId   String?     @unique
+  title            String
+  description      String?
+  tags             String[]    @default([])
+  thumbnailUrl     String?
+  status           VideoStatus @default(DRAFT)
+  scheduledAt      DateTime?
+  publishedAt      DateTime?
+  viewCount        Int         @default(0)
+  likeCount        Int         @default(0)
+  commentCount     Int         @default(0)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  channel  Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  scripts  Script[]
+
+  @@map("videos")
+}
+
+enum VideoStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  FAILED
+}
+
+// ── Scripts ───────────────────────────────────────────────────────────────────
+
+model Script {
+  id        String   @id @default(cuid())
+  videoId   String
+  version   Int      @default(1)
+  content   String
+  wordCount Int      @default(0)
+  sources   Json     @default("[]")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@map("scripts")
+}
+
+// ── Billing ───────────────────────────────────────────────────────────────────
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  stripeCustomerId     String             @unique
+  stripeSubscriptionId String?            @unique
+  plan                 Plan               @default(FREE)
+  status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+enum Plan {
+  FREE
+  STARTER
+  PRO
+  AGENCY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  TRIALING
+}
+
+model UsageLog {
+  id        String      @id @default(cuid())
+  userId    String
+  resource  UsageType
+  quantity  Int         @default(1)
+  meta      Json        @default("{}")
+  createdAt DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("usage_logs")
+}
+
+enum UsageType {
+  AI_TOKENS
+  VIDEO_GENERATED
+  VIDEO_PUBLISHED
+  RESEARCH_QUERY
+  COMPLIANCE_CHECK
+  VOICE_SECONDS
+  IMAGE_GENERATED
+  MUSIC_GENERATED
+  VIDEO_CLIP_GENERATED
+  RENDER_MINUTES
+}
+
+// ── Media Assets ──────────────────────────────────────────────────────────────
+
+enum AssetKind {
+  MUSIC
+  VIDEO
+  THUMBNAIL
+  VOICE
+  IMAGE
+  SUBTITLE
+  RENDER_SOURCE
+  UPLOAD
+}
+
+enum AssetStatus {
+  BRIEFED
+  GENERATING
+  READY
+  FAILED
+  ACCEPTED
+}
+
+model Asset {
+  id               String      @id @default(cuid())
+  projectId        String
+  kind             AssetKind
+  currentVersionId String?
+  status           AssetStatus @default(BRIEFED)
+  label            String?
+  deletedAt        DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  project  Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions AssetVersion[]
+
+  @@index([projectId, kind, status])
+  @@map("assets")
+}
+
+model AssetVersion {
+  id             String   @id @default(cuid())
+  assetId        String
+  version        Int
+  r2Key          String?
+  contentHash    String?
+  provider       String?
+  model          String?
+  prompt         Json?
+  params         Json?
+  provenance     Json?
+  sizeBytes      BigInt   @default(0)
+  durationMs     Int?
+  wordTimestamps Json?
+  createdAt      DateTime @default(now())
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, version])
+  @@index([contentHash])
+  @@map("asset_versions")
+}
+
+// ── Timeline & Render ─────────────────────────────────────────────────────────
+
+model Timeline {
+  id          String   @id @default(cuid())
+  projectId   String
+  version     Int      @default(1)
+  label       String?
+  fps         Int      @default(30)
+  resolution  Json     @default("{\"width\":1920,\"height\":1080}")
+  tracks      Json     @default("{\"schemaVersion\":1,\"tracks\":[]}")
+  contentHash String?
+  isDraft     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  renders Render[]
+
+  @@index([projectId, version])
+  @@map("timelines")
+}
+
+enum RenderPreset {
+  DRAFT_PROXY
+  YT_1080P
+  YT_4K
+  SHORTS_1080X1920
+}
+
+enum RenderStatus {
+  QUEUED
+  RENDERING
+  READY
+  FAILED
+}
+
+model Render {
+  id              String       @id @default(cuid())
+  projectId       String
+  timelineId      String
+  timelineVersion Int
+  preset          RenderPreset
+  status          RenderStatus @default(QUEUED)
+  progressPct     Int          @default(0)
+  r2Key           String?
+  sizeBytes       BigInt?
+  durationMs      Int?
+  checksum        String?
+  costCredits     Decimal      @default(0) @db.Decimal(10, 4)
+  error           Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  timeline Timeline @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, timelineVersion, preset])
+  @@map("renders")
+}
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+model AnalyticsSnapshot {
+  id          String   @id @default(cuid())
+  channelId   String
+  ytVideoId   String?
+  capturedAt  DateTime @default(now())
+  metrics     Json     // ctr, retentionCurve, watchTime, revenue, subs, impressions
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, ytVideoId, capturedAt])
+  @@map("analytics_snapshots")
+}
+
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  target    String?
+  meta      Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+// ── Prompt Versions ───────────────────────────────────────────────────────────
+
+model PromptVersion {
+  id        String   @id @default(cuid())
+  key       String
+  version   Int
+  body      String
+  active    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([key, version])
+  @@index([key, active])
+  @@map("prompt_versions")
+}
+
+// ── Teams (Beta) ──────────────────────────────────────────────────────────────
+
+model Team {
+  id        String           @id @default(cuid())
+  name      String
+  ownerId   String
+  planTier  String           @default("free")
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  memberships TeamMembership[]
+
+  @@map("teams")
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  EDITOR
+  REVIEWER
+  VIEWER
+}
+
+model TeamMembership {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      TeamRole @default(VIEWER)
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_memberships")
+}

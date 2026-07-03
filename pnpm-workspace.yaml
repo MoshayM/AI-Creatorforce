@@ -1,0 +1,16 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'packages/config/*'
+allowBuilds:
+  '@nestjs/core': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@scarf/scarf': false
+  '@sentry/cli': true
+  '@sentry/profiling-node': true
+  msgpackr-extract: true
+  msw: true
+  prisma: true
+  sharp: true
+  unrs-resolver: true

@@ -1,0 +1,6 @@
+{
+  "allowBuilds": {
+    "@sentry/cli": true,
+    "@sentry/profiling-node": true
+  }
+}

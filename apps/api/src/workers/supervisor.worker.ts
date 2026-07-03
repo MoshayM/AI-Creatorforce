@@ -1,0 +1,516 @@
+import { Injectable } from '@nestjs/common';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job } from 'bullmq';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { ContentService } from '../modules/content/content.service';
+import { ComplianceService } from '../modules/compliance/compliance.service';
+import { MetadataService } from '../modules/metadata/metadata.service';
+import { PublishingService } from '../modules/publishing/publishing.service';
+import { TrendService } from '../modules/trend/trend.service';
+import { SeoService } from '../modules/seo/seo.service';
+import { AudienceService } from '../modules/audience/audience.service';
+import { ApprovalsService } from '../modules/approvals/approvals.service';
+import { JobsService } from '../modules/jobs/jobs.service';
+import { VoiceService } from '../modules/voice/voice.service';
+import { MusicService } from '../modules/music/music.service';
+import { ImageService } from '../modules/image/image.service';
+import { AnalyticsService } from '../modules/analytics/analytics.service';
+import { GrowthService } from '../modules/growth/growth.service';
+import { AssetsService } from '../modules/assets/assets.service';
+import { EventsGateway } from '../gateway/events.gateway';
+import { AGENT_QUEUE } from '../modules/jobs/jobs.module';
+import { callAIStructured } from '@cf/shared';
+import { VideoScenePlanOutputSchema, SubtitleOutputSchema, EditPlanOutputSchema } from '@cf/shared';
+import type { JobType, ResearchOutput, ScriptOutput, AnalyticsOutput } from '@cf/shared';
+
+interface JobPayload {
+  jobId: string;
+  projectId: string;
+  type: JobType;
+  payload: Record<string, unknown>;
+}
+
+@Injectable()
+@Processor(AGENT_QUEUE)
+export class SupervisorWorker extends WorkerHost {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly content: ContentService,
+    private readonly compliance: ComplianceService,
+    private readonly metadata: MetadataService,
+    private readonly publishing: PublishingService,
+    private readonly trend: TrendService,
+    private readonly seo: SeoService,
+    private readonly audience: AudienceService,
+    private readonly approvals: ApprovalsService,
+    private readonly jobs: JobsService,
+    private readonly voice: VoiceService,
+    private readonly music: MusicService,
+    private readonly image: ImageService,
+    private readonly analytics: AnalyticsService,
+    private readonly growth: GrowthService,
+    private readonly assets: AssetsService,
+    private readonly events: EventsGateway,
+  ) {
+    super();
+  }
+
+  async process(job: Job<JobPayload>): Promise<unknown> {
+    const { jobId, projectId, type, payload } = job.data;
+    const t0 = Date.now();
+
+    await this.prisma.agentJob.update({ where: { id: jobId }, data: { status: 'RUNNING', startedAt: new Date() } });
+    this.events.emitJobUpdate(jobId, { status: 'RUNNING', type }, projectId);
+
+    try {
+      const result = await this.dispatch(type, projectId, jobId, payload);
+      const elapsed = Date.now() - t0;
+      // METADATA sets job to WAITING_APPROVAL mid-dispatch — don't overwrite that status,
+      // but always persist the result so downstream can read it.
+      const currentJob = await this.prisma.agentJob.findUnique({ where: { id: jobId }, select: { status: true } });
+      if (currentJob?.status === 'RUNNING') {
+        await this.prisma.agentJob.update({
+          where: { id: jobId },
+          data: { status: 'COMPLETED', result: result as never, completedAt: new Date() },
+        });
+        this.events.emitJobComplete(jobId, { result, elapsedMs: elapsed }, projectId);
+      } else {
+        // Already transitioned (e.g., WAITING_APPROVAL) — store result without touching status
+        await this.prisma.agentJob.update({
+          where: { id: jobId },
+          data: { result: result as never },
+        });
+      }
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await this.prisma.agentJob.update({
+        where: { id: jobId },
+        data: { status: 'FAILED', error: msg, completedAt: new Date() },
+      });
+      this.events.emitJobLog(jobId, projectId, `Agent error: ${msg.slice(0, 120)}`);
+      this.events.emitJobFailed(jobId, msg, projectId);
+      // Do NOT rethrow — state is persisted in PostgreSQL; rethrowing causes BullMQ to
+      // re-queue the job (we set attempts:1 but this is the safety valve) and triggers
+      // Redis stream errors on old Redis 5.x. Our AI client handles its own retries.
+    }
+  }
+
+  private async lastResult<T>(projectId: string, type: JobType): Promise<T | null> {
+    const job = await this.prisma.agentJob.findFirst({
+      where: { projectId, type, status: 'COMPLETED' },
+      orderBy: { completedAt: 'desc' },
+      select: { result: true },
+    });
+    return (job?.result as T) ?? null;
+  }
+
+  private log(jobId: string, projectId: string, message: string, detail?: string) {
+    this.events.emitJobLog(jobId, projectId, message, detail);
+  }
+
+  private async dispatch(
+    type: JobType,
+    projectId: string,
+    jobId: string,
+    payload: Record<string, unknown>,
+  ): Promise<unknown> {
+    const project = await this.prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+
+    switch (type) {
+      case 'TREND_ANALYSIS': {
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Analyzing trending topics…', `Niche: ${project.niche ?? 'General'}`);
+        const result = await this.trend.analyze(project.niche ?? 'General', undefined);
+        const topTrend = (result as { trending?: Array<{ topic: string; score: number }> }).trending?.[0];
+        this.log(jobId, projectId, 'Trend analysis complete', topTrend ? `Top: "${topTrend.topic}" (${topTrend.score})` : undefined);
+        await this.jobs.logStep(jobId, 'TrendAgent', 'analyze', { niche: project.niche }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'TREND_ANALYSIS', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'AUDIENCE_ANALYSIS': {
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Profiling target audience…', `Niche: ${project.niche ?? 'General'}`);
+        const result = await this.audience.analyze(project.niche ?? 'General');
+        this.log(jobId, projectId, 'Audience analysis complete');
+        await this.jobs.logStep(jobId, 'AudienceAgent', 'analyze', { niche: project.niche }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'AUDIENCE_ANALYSIS', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'RESEARCH': {
+        const topic = payload['topic'] as string ?? project.title;
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Starting research…', `"${topic.slice(0, 70)}"`);
+        const result = await this.content.research(topic, project.niche ?? undefined, project.targetLang);
+        const r = result as { sources?: unknown[]; trendScore?: number };
+        this.log(jobId, projectId, 'Research complete', `${r.sources?.length ?? 0} sources · trend score ${r.trendScore ?? '?'}`);
+        await this.jobs.logStep(jobId, 'ResearchAgent', 'research', { topic }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'RESEARCH', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'SCRIPT': {
+        this.log(jobId, projectId, 'Loading research results…');
+        const research = (payload['research'] as ResearchOutput | undefined)
+          ?? await this.lastResult<ResearchOutput>(projectId, 'RESEARCH');
+        if (!research) throw new Error('Research not found — complete the Research Topic step first.');
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Calling AI script writer…', `Topic: "${research.topic.slice(0, 60)}"`);
+        const script = await this.content.writeScript(research);
+        const s = script as { totalWordCount?: number; sections?: unknown[]; estimatedDurationMins?: number; title?: string };
+        this.log(jobId, projectId, 'Script ready', `${s.totalWordCount ?? '?'} words · ${s.sections?.length ?? '?'} sections · ~${s.estimatedDurationMins ?? '?'} min`);
+        await this.jobs.logStep(jobId, 'ScriptAgent', 'write', { research: research.topic }, script, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'SCRIPT', status: 'COMPLETED' }, projectId);
+        return script;
+      }
+
+      case 'FACT_CHECK': {
+        this.log(jobId, projectId, 'Loading script and sources…');
+        const script = (payload['script'] as ScriptOutput | undefined)
+          ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
+        const research = (payload['research'] as ResearchOutput | undefined)
+          ?? await this.lastResult<ResearchOutput>(projectId, 'RESEARCH');
+        if (!script) throw new Error('Script not found — complete the Write Script step first.');
+        if (!research) throw new Error('Research not found — complete the Research Topic step first.');
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Verifying claims against sources…', `${research.sources?.length ?? 0} source(s)`);
+        const result = await this.content.factCheck(script, research.sources);
+        const fc = result as { accuracyScore?: number; overallVerdict?: string };
+        this.log(jobId, projectId, 'Fact-check complete', fc.accuracyScore != null ? `${fc.accuracyScore}% accurate` : fc.overallVerdict ?? undefined);
+        await this.jobs.logStep(jobId, 'FactCheckAgent', 'check', { script: script.title }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'FACT_CHECK', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'COMPLIANCE': {
+        this.log(jobId, projectId, 'Loading script for compliance review…');
+        const script = (payload['script'] as ScriptOutput | undefined)
+          ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
+        if (!script) throw new Error('Script not found — complete the Write Script step first.');
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Sending to AI compliance auditor…', `"${script.title.slice(0, 60)}"`);
+
+        const result = await this.compliance.enforce(
+          {
+            title: script.title,
+            script: script.sections.map((s) => s.content).join('\n\n'),
+          },
+          (event) => {
+            if (event.type === 'RETRYING') {
+              this.log(jobId, projectId, `Retrying AI call…`, `Attempt ${event.attempt}/${event.maxAttempts} via ${event.provider}`);
+              this.events.emitJobUpdate(jobId, {
+                status: 'RETRYING', step: 'COMPLIANCE',
+                attempt: event.attempt, maxAttempts: event.maxAttempts,
+                waitMs: event.waitMs, provider: event.provider,
+              }, projectId);
+            } else if (event.type === 'PROVIDER_SWITCHING') {
+              this.log(jobId, projectId, `Switching AI provider…`, `${event.from} → ${event.to}`);
+              this.events.emitJobUpdate(jobId, {
+                status: 'PROVIDER_SWITCHING', step: 'COMPLIANCE',
+                from: event.from, to: event.to, reason: event.reason,
+              }, projectId);
+            } else if (event.type === 'RATE_LIMITED') {
+              this.log(jobId, projectId, `Rate limited — waiting…`, `${event.provider} · ${Math.round((event.waitMs ?? 0) / 1000)}s`);
+              this.events.emitJobUpdate(jobId, {
+                status: 'RATE_LIMITED', step: 'COMPLIANCE',
+                provider: event.provider, waitMs: event.waitMs, reason: event.reason,
+              }, projectId);
+            } else if (event.type === 'QUEUED') {
+              this.log(jobId, projectId, `Request queued…`, `Est. wait ${Math.round((event.estimatedWaitMs ?? 0) / 1000)}s`);
+              this.events.emitJobUpdate(jobId, {
+                status: 'QUEUED', step: 'COMPLIANCE', estimatedWaitMs: event.estimatedWaitMs,
+              }, projectId);
+            }
+          },
+        );
+
+        const passed = (result as { passed?: boolean; score?: number; flags?: unknown[] }).passed;
+        const score = (result as { score?: number }).score;
+        const flagCount = (result as { flags?: unknown[] }).flags?.length ?? 0;
+        this.log(jobId, projectId,
+          `Compliance ${passed ? 'passed ✓' : 'failed ✗'} — score ${score}/100`,
+          `${flagCount} flag${flagCount !== 1 ? 's' : ''} found`,
+        );
+
+        await this.jobs.logStep(jobId, 'ComplianceAgent', 'check', { title: script.title }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'COMPLIANCE', status: 'COMPLETED', score: result.score }, projectId);
+        return result;
+      }
+
+      case 'METADATA': {
+        this.log(jobId, projectId, 'Loading script for metadata generation…');
+        const script = (payload['script'] as ScriptOutput | undefined)
+          ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
+        if (!script) throw new Error('Script not found — complete the Write Script step first.');
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Generating SEO title, description and tags…');
+        const meta = await this.metadata.generate(script, project.niche ?? undefined);
+        this.log(jobId, projectId, 'Metadata generated', `Title: "${(meta as { title?: string }).title?.slice(0, 50) ?? '?'}"`);
+        await this.jobs.logStep(jobId, 'MetadataAgent', 'generate', { title: script.title }, meta, 0, 0, Date.now() - t0);
+
+        this.log(jobId, projectId, 'Running keyword & SEO analysis…');
+        const seoResult = await this.seo.optimize(
+          (meta as { title?: string }).title ?? script.title,
+          (meta as { description?: string }).description ?? '',
+          project.niche ?? undefined,
+        );
+        await this.jobs.logStep(jobId, 'SEOAgent', 'optimize', { title: (meta as { title?: string }).title }, seoResult, 0, 0, 0);
+        this.log(jobId, projectId, 'SEO analysis complete — creating approval request…');
+
+        await this.prisma.agentJob.update({
+          where: { id: jobId },
+          data: { status: 'WAITING_APPROVAL' },
+        });
+        await this.approvals.createApproval(projectId, jobId);
+        this.events.emitJobUpdate(jobId, { step: 'METADATA', status: 'WAITING_APPROVAL' }, projectId);
+        return { metadata: meta, seo: seoResult, awaitingApproval: true };
+      }
+
+      case 'SEO_OPTIMIZATION': {
+        this.log(jobId, projectId, 'Loading metadata results…');
+        const metaJob = await this.lastResult<{ metadata: { title: string; description: string } }>(projectId, 'METADATA');
+        const title = (payload['title'] as string | undefined) ?? metaJob?.metadata?.title ?? '';
+        const description = (payload['description'] as string | undefined) ?? metaJob?.metadata?.description ?? '';
+        if (!title) throw new Error('Metadata not found — complete the Generate Metadata step first.');
+        this.log(jobId, projectId, 'Running SEO keyword optimization…', `"${title.slice(0, 50)}"`);
+        const result = await this.seo.optimize(title, description, project.niche ?? undefined);
+        const primaryKw = (result as { primaryKeywords?: string[] }).primaryKeywords?.[0];
+        this.log(jobId, projectId, 'SEO optimization complete', primaryKw ? `Top keyword: "${primaryKw}"` : undefined);
+        this.events.emitJobUpdate(jobId, { step: 'SEO_OPTIMIZATION', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'THUMBNAIL': {
+        this.log(jobId, projectId, 'Loading script for thumbnail brief…');
+        const script = (payload['script'] as ScriptOutput | undefined)
+          ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
+        this.log(jobId, projectId, 'Generating thumbnail visual brief…');
+        const brief = {
+          concept: script
+            ? `Thumbnail for: "${script.title}". Hook: "${script.hook.slice(0, 80)}"`
+            : `Thumbnail brief for project: ${project.title}`,
+          suggestedTextOverlay: script?.title.slice(0, 40) ?? project.title,
+          colorScheme: 'High-contrast: brand primary + white text, dark background',
+          visualElements: [
+            'Presenter face (reaction/emotion shot)',
+            `Topic graphic related to: ${project.niche ?? 'General'}`,
+            'Bold sans-serif text overlay',
+          ],
+          aspectRatio: '16:9 (1280×720 minimum, 2560×1440 recommended)',
+          note: 'Generated as a brief — actual image creation is Phase 2 (in-app asset generation).',
+        };
+        this.log(jobId, projectId, 'Thumbnail brief ready', `Text overlay: "${brief.suggestedTextOverlay}"`);
+        await this.jobs.logStep(jobId, 'ThumbnailAgent', 'brief', { projectId }, brief, 0, 0, 0);
+        this.events.emitJobUpdate(jobId, { step: 'THUMBNAIL', status: 'COMPLETED', brief: true }, projectId);
+        return brief;
+      }
+
+      case 'PUBLISH': {
+        const approvalId = payload['approvalId'] as string;
+        const videoId = payload['videoId'] as string;
+        const channelId = payload['channelId'] as string;
+        const title = payload['title'] as string;
+        const description = payload['description'] as string;
+        const tags = payload['tags'] as string[] ?? [];
+        const categoryId = payload['categoryId'] as string | undefined;
+        const scheduledAt = payload['scheduledAt'] ? new Date(payload['scheduledAt'] as string) : undefined;
+        const videoFilePath = payload['videoFilePath'] as string | undefined;
+
+        this.log(jobId, projectId, 'Publishing to YouTube…', `"${title?.slice(0, 60)}"`);
+        const t0 = Date.now();
+        const youtubeVideoId = await this.publishing.publish(
+          { videoId, channelId, title, description, tags, categoryId, scheduledAt, videoFilePath },
+          approvalId,
+        );
+        this.log(jobId, projectId, 'Published to YouTube ✓', `Video ID: ${youtubeVideoId}`);
+        await this.jobs.logStep(jobId, 'PublishAgent', 'publish', { videoId, channelId }, { youtubeVideoId }, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'PUBLISH', status: 'COMPLETED', youtubeVideoId }, projectId);
+        return { youtubeVideoId };
+      }
+
+      case 'VOICE_SPEC': {
+        this.log(jobId, projectId, 'Loading script for voice direction…');
+        const script = (payload['script'] as ScriptOutput | undefined)
+          ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
+        if (!script) throw new Error('Script not found — complete the Write Script step first.');
+        const channel = await this.prisma.channel.findFirst({ where: { projects: { some: { id: projectId } } } });
+        const voiceProfile = channel?.voiceProfile as Record<string, unknown> | undefined;
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Generating per-section voice narration specs…', `${script.sections.length} sections`);
+        const result = await this.voice.generateSpec(script, projectId, voiceProfile);
+        const sectionCount = (result as { sections?: unknown[] }).sections?.length ?? 0;
+        this.log(jobId, projectId, 'Voice specs ready ✓', `${sectionCount} section(s) · disclosure: ${(result as { disclosureRequired?: boolean }).disclosureRequired ? 'required' : 'not required'}`);
+        await this.jobs.logStep(jobId, 'VoiceAgent', 'spec', { sections: sectionCount }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'VOICE_SPEC', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'IMAGE_BRIEF': {
+        this.log(jobId, projectId, 'Loading script for image briefs…');
+        const script = (payload['script'] as ScriptOutput | undefined)
+          ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
+        if (!script) throw new Error('Script not found — complete the Write Script step first.');
+        const channel2 = await this.prisma.channel.findFirst({ where: { projects: { some: { id: projectId } } } });
+        const brandKit = channel2?.brandKit as Record<string, unknown> | undefined;
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Generating per-scene image briefs…', `${script.sections.length} scenes`);
+        const result = await this.image.generateBriefs(script, projectId, brandKit);
+        const briefCount = (result as { briefs?: unknown[] }).briefs?.length ?? 0;
+        this.log(jobId, projectId, 'Image briefs ready ✓', `${briefCount} brief(s)`);
+        await this.jobs.logStep(jobId, 'ImageAgent', 'brief', { scenes: briefCount }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'IMAGE_BRIEF', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'MUSIC_BRIEF': {
+        this.log(jobId, projectId, 'Loading script for music brief…');
+        const script = (payload['script'] as ScriptOutput | undefined)
+          ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
+        if (!script) throw new Error('Script not found — complete the Write Script step first.');
+        const t0 = Date.now();
+        const mood = payload['mood'] as string | undefined;
+        const genre = payload['genre'] as string | undefined;
+        this.log(jobId, projectId, 'Generating music production brief…', mood ? `Mood: ${mood}` : undefined);
+        const result = await this.music.generateBrief(script, projectId, mood, genre);
+        const brief = result as { genre?: string; bpm?: number; energy?: string };
+        this.log(jobId, projectId, 'Music brief ready ✓', `${brief.genre ?? '?'} · ${brief.bpm ?? '?'} BPM · ${brief.energy ?? '?'} energy`);
+        await this.jobs.logStep(jobId, 'MusicAgent', 'brief', { duration: script.estimatedDurationMins }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'MUSIC_BRIEF', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'VIDEO_SCENE_PLAN': {
+        this.log(jobId, projectId, 'Loading script for video scene plan…');
+        const script = (payload['script'] as ScriptOutput | undefined)
+          ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
+        if (!script) throw new Error('Script not found — complete the Write Script step first.');
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Planning video scenes and shot list…', `${script.sections.length} sections → scenes`);
+        const VIDEO_SCENE_PROMPT = `You are a video director. Create a scene plan from a script. Respond only with valid JSON.`;
+        const sectionsJson = JSON.stringify(script.sections.map((s, i) => ({ id: `section-${i}`, heading: s.heading, durationSecs: s.durationEstimateSecs, content: s.content.slice(0, 200) })));
+        const result = await callAIStructured(
+          [{ role: 'user', content: `Create scene plan for "${script.title}". Sections: ${sectionsJson}. Project: ${projectId}. Generate scene id, title, description, durationSecs, shotType, videoPrompt, negativePrompt, transition for each section. Include totalDurationSecs and providerRecommendation.` }],
+          VideoScenePlanOutputSchema,
+          { systemPrompt: VIDEO_SCENE_PROMPT, maxTokens: 4096 },
+        );
+        const sceneCount = (result as { scenes?: unknown[] }).scenes?.length ?? 0;
+        this.log(jobId, projectId, 'Scene plan ready ✓', `${sceneCount} scene(s)`);
+        await this.jobs.logStep(jobId, 'VideoAgent', 'plan', { scenes: sceneCount }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'VIDEO_SCENE_PLAN', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'SUBTITLE_GENERATE': {
+        this.log(jobId, projectId, 'Loading script for subtitle generation…');
+        const script = (payload['script'] as ScriptOutput | undefined)
+          ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
+        if (!script) throw new Error('Script not found — complete the Write Script step first.');
+        const t0 = Date.now();
+        const estimatedDurationMs = script.estimatedDurationMins * 60 * 1000;
+        const lang = (payload['language'] as string | undefined) ?? project.targetLang ?? 'en';
+        this.log(jobId, projectId, 'Generating subtitle cues…', `~${Math.round(estimatedDurationMs / 1000)}s, language: ${lang}`);
+        const SUBTITLE_PROMPT = `You are a subtitle specialist. Generate timed subtitle cues from a script. Respond only with valid JSON.`;
+        const result = await callAIStructured(
+          [{ role: 'user', content: `Create subtitle cues for "${script.title}". Duration: ${Math.round(estimatedDurationMs / 1000)}s. Language: ${lang}. Sections: ${JSON.stringify(script.sections.map((s, i) => ({ id: `s${i}`, heading: s.heading, durationSecs: s.durationEstimateSecs, content: s.content.slice(0, 200) })))}. Generate sequential index, startMs, endMs, text (max 2 lines 42 chars), sectionRef. Include SRT string, VTT string, totalCues count, style (fontFamily: Arial, fontSize: 18, color: #FFFFFF).` }],
+          SubtitleOutputSchema,
+          { systemPrompt: SUBTITLE_PROMPT, maxTokens: 6000 },
+        );
+        const cueCount = (result as { totalCues?: number }).totalCues ?? 0;
+        this.log(jobId, projectId, 'Subtitles ready ✓', `${cueCount} cues · ${lang}`);
+        await this.jobs.logStep(jobId, 'SubtitleAgent', 'generate', { cues: cueCount, lang }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'SUBTITLE_GENERATE', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'EDIT_PLAN': {
+        this.log(jobId, projectId, 'Loading script and assets for first-cut timeline…');
+        const script = (payload['script'] as ScriptOutput | undefined)
+          ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
+        if (!script) throw new Error('Script not found — complete the Write Script step first.');
+
+        const projectAssets = await this.prisma.asset.findMany({
+          where: { projectId, deletedAt: null, status: { in: ['READY', 'ACCEPTED'] } },
+          include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+        });
+
+        const availableAssets = projectAssets.map(a => ({
+          id: a.id,
+          kind: a.kind.toLowerCase(),
+          label: a.label ?? a.kind,
+          durationMs: a.versions[0]?.durationMs ?? undefined,
+          sectionRef: undefined,
+        }));
+
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'EditPlanAgent assembling first-cut timeline…', `${script.sections.length} sections, ${availableAssets.length} assets`);
+
+        const EDIT_PROMPT = `You are a video editor AI. Assemble a first-cut timeline. Respond only with valid JSON.`;
+        const channel3 = await this.prisma.channel.findFirst({ where: { projects: { some: { id: projectId } } } });
+        const brandKit = channel3?.brandKit;
+
+        const result = await callAIStructured(
+          [{ role: 'user', content: `Create AI first-cut timeline for "${script.title}". Format: 16:9. Sections: ${JSON.stringify(script.sections.map((s, i) => ({ heading: s.heading, durationSecs: s.durationEstimateSecs })))}. Assets: ${JSON.stringify(availableAssets.slice(0, 20))}. Brand: ${JSON.stringify(brandKit ?? {})}. Project: ${projectId}. Generate multi-track timeline: voice, video, music, subtitle, overlay tracks. Each clip needs id, assetId (if available), kind, startMs, durationMs, trackIndex, label.` }],
+          EditPlanOutputSchema,
+          { systemPrompt: EDIT_PROMPT, maxTokens: 6000 },
+        );
+
+        const clipCount = (result as { tracks?: Array<{ clips?: unknown[] }> }).tracks?.reduce((s, t) => s + (t.clips?.length ?? 0), 0) ?? 0;
+        this.log(jobId, projectId, 'First-cut timeline ready ✓', `${clipCount} clips assembled`);
+
+        // Save as draft timeline
+        const totalDurationMs = (result as { totalDurationMs?: number }).totalDurationMs ?? script.estimatedDurationMins * 60000;
+        const tracks = (result as { tracks?: unknown }).tracks;
+        await this.prisma.timeline.upsert({
+          where: { id: `draft-${projectId}` },
+          create: { id: `draft-${projectId}`, projectId, version: 1, label: 'AI first cut', tracks: tracks as never, isDraft: true },
+          update: { tracks: tracks as never, label: 'AI first cut', updatedAt: new Date() },
+        }).catch(() => {
+          // upsert by custom id fails if id field doesn't allow it — create separately
+          return this.prisma.timeline.create({
+            data: { projectId, version: 1, label: 'AI first cut', tracks: tracks as never, isDraft: true },
+          });
+        });
+
+        await this.jobs.logStep(jobId, 'EditPlanAgent', 'assemble', { clips: clipCount }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'EDIT_PLAN', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'ANALYTICS': {
+        this.log(jobId, projectId, 'Loading channel data for analytics report…');
+        const channel4 = await this.prisma.channel.findFirst({ where: { projects: { some: { id: projectId } } } });
+        if (!channel4) throw new Error('Channel not found for this project.');
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Running analytics diagnosis…', `Channel: ${channel4.title}`);
+        const result = await this.analytics.generateReport(channel4.id, project.userId);
+        const score = (result as { overallScore?: number }).overallScore;
+        this.log(jobId, projectId, 'Analytics report ready ✓', `Score: ${score ?? '?'}/100`);
+        await this.jobs.logStep(jobId, 'AnalyticsAgent', 'report', { channelId: channel4.id }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'ANALYTICS', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      case 'GROWTH_REPORT': {
+        this.log(jobId, projectId, 'Loading analytics for growth recommendations…');
+        const analyticsResult = (payload['analyticsReport'] as AnalyticsOutput | undefined)
+          ?? await this.lastResult<AnalyticsOutput>(projectId, 'ANALYTICS');
+        if (!analyticsResult) throw new Error('Analytics not found — run Analytics first.');
+        const channel5 = await this.prisma.channel.findFirst({ where: { projects: { some: { id: projectId } } } });
+        if (!channel5) throw new Error('Channel not found for this project.');
+        const t0 = Date.now();
+        this.log(jobId, projectId, 'Generating next-video recommendations…');
+        const result = await this.growth.generateRecommendations(channel5.id, analyticsResult, project.userId);
+        const topicCount = (result as { nextTopics?: unknown[] }).nextTopics?.length ?? 0;
+        this.log(jobId, projectId, 'Growth report ready ✓', `${topicCount} next topic idea(s)`);
+        await this.jobs.logStep(jobId, 'GrowthAgent', 'recommend', { channelId: channel5.id }, result, 0, 0, Date.now() - t0);
+        this.events.emitJobUpdate(jobId, { step: 'GROWTH_REPORT', status: 'COMPLETED' }, projectId);
+        return result;
+      }
+
+      default:
+        throw new Error(`Unknown job type: ${String(type)}`);
+    }
+  }
+}
