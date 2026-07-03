@@ -33,7 +33,12 @@ export class JobsService {
       );
     }
 
-    await this.prisma.agentJob.update({ where: { id: job.id }, data: { status: 'QUEUED' } });
+    // Guarded transition: the worker may have already picked the job up and set
+    // RUNNING (or even COMPLETED) — only PENDING may move to QUEUED.
+    await this.prisma.agentJob.updateMany({
+      where: { id: job.id, status: 'PENDING' },
+      data: { status: 'QUEUED' },
+    });
     return job;
   }
 
