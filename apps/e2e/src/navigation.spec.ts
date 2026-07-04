@@ -72,6 +72,6 @@ test.describe('Navigation', () => {
     await page.goto('/projects');
     await page.waitForLoadState('domcontentloaded');
     const projectLink = page.locator('a[href="/projects"]');
-    await expect(projectLink).toHaveClass(/text-brand-700/);
+    await expect(projectLink).toHaveClass(/bg-white\/20/);
   });
 });

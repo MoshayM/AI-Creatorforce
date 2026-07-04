@@ -22,7 +22,7 @@
 }
 
 .shimmer-bar {
-  background: linear-gradient(90deg, #fce7f3 25%, #f472b6 50%, #fce7f3 75%);
+  background: linear-gradient(90deg, #ede9fe 25%, #a78bfa 50%, #ede9fe 75%);
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
 }
@@ -52,11 +52,18 @@
 
 @media print {
   aside,
-  .no-print {
+  .no-print,
+  .dash-topbar {
     display: none !important;
   }
-  .h-screen {
+  .h-screen,
+  .dash-shell {
     height: auto !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+  body {
+    background: white !important;
   }
   main {
     overflow: visible !important;

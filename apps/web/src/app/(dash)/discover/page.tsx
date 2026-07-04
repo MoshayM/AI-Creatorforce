@@ -47,6 +47,15 @@ export default function DiscoverPage() {
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
+      {/* Welcome hero (design ref: ux.jpg) */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-[#9d6ff0] to-[#c084fc] rounded-2xl px-7 py-6 mb-8 text-white no-print">
+        <div className="absolute -right-6 -top-8 w-36 h-36 bg-white/10 rounded-full" aria-hidden />
+        <div className="absolute right-16 -bottom-10 w-24 h-24 bg-white/10 rounded-full" aria-hidden />
+        <p className="text-xs text-white/80">{new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        <h2 className="text-2xl font-bold mt-1.5">Welcome back! 👋</h2>
+        <p className="text-sm text-white/85 mt-1">Let&rsquo;s find your next trending video idea</p>
+      </div>
+
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Discover Trends</h1>
         <p className="text-gray-500 mt-1">Find trending YouTube topics in your niche</p>
