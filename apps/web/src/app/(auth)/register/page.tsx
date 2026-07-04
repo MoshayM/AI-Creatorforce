@@ -2,7 +2,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { User, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { AuthShell, AuthPillInput, SocialRow } from '@/components/auth-shell';
 
 const MOCK_MODE = process.env['NEXT_PUBLIC_USE_MOCK'] === 'true';
 const MOCK_TOKEN = 'mock-jwt-token-for-testing';
@@ -11,6 +13,7 @@ const OWNER_EMAIL = 'ethonanpasumvalki@gmail.com';
 export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState({ email: '', password: '', name: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +25,7 @@ export default function RegisterPage() {
     // In mock mode validate directly — no API call needed.
     if (MOCK_MODE) {
       if (form.email === OWNER_EMAIL) {
-        setError('Email already registered. Please sign in instead.');
+        setError('Email already registered. Please log in instead.');
         setLoading(false);
         return;
       }
@@ -38,7 +41,7 @@ export default function RegisterPage() {
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 409) {
-        setError('Email already registered. Please sign in instead.');
+        setError('Email already registered. Please log in instead.');
       } else {
         setError('Registration failed. Please try again.');
       }
@@ -48,42 +51,71 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Get Started</h1>
-          <p className="text-gray-500 mt-2">Create your AI CreatorForce account</p>
-        </div>
-        <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">
-          {(['name', 'email', 'password'] as const).map((field) => (
-            <div key={field}>
-              <label htmlFor={field} className="block text-sm font-medium text-gray-700 capitalize">{field}</label>
-              <input
-                id={field}
-                type={field === 'password' ? 'password' : field === 'email' ? 'email' : 'text'}
-                value={form[field]}
-                onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
-                required={field !== 'name'}
-                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-          ))}
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
-          >
-            {loading ? 'Creating account...' : 'Create Account'}
-          </button>
-        </form>
-        <p className="text-center text-sm text-gray-500 mt-4">
+    <AuthShell
+      brand="AI CreatorForce"
+      title="Create Account"
+      subtitle="Sign up to start your journey"
+      mascot="🤗"
+      footer={
+        <>
           Already have an account?{' '}
-          <Link href="/login" className="text-brand-600 hover:underline">
-            Sign in
+          <Link href="/login" className="text-[#7b5ec7] font-semibold hover:underline">
+            Login
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">
+        <AuthPillInput
+          icon={<User className="w-4 h-4" />}
+          type="text"
+          aria-label="Name"
+          placeholder="Name"
+          value={form.name}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+        />
+        <AuthPillInput
+          icon={<Mail className="w-4 h-4" />}
+          type="email"
+          aria-label="Email"
+          placeholder="Email"
+          value={form.email}
+          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          required
+        />
+        <div className="relative">
+          <AuthPillInput
+            icon={<Lock className="w-4 h-4" />}
+            type={showPassword ? 'text' : 'password'}
+            aria-label="Password"
+            placeholder="Password"
+            value={form.password}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            required
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-3 bg-[#8b74d8] hover:bg-[#7a63cb] text-white rounded-full font-semibold shadow-lg shadow-[#8b74d8]/40 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+        >
+          {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+          {loading ? 'Creating account…' : 'Sign Up'}
+        </button>
+      </form>
+
+      <SocialRow />
+    </AuthShell>
   );
 }

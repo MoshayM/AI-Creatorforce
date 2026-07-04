@@ -2,7 +2,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { User, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { AuthShell, AuthPillInput, SocialRow } from '@/components/auth-shell';
 
 const MOCK_MODE = process.env['NEXT_PUBLIC_USE_MOCK'] === 'true';
 const MOCK_TOKEN = 'mock-jwt-token-for-testing';
@@ -11,7 +13,9 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -47,51 +51,74 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">AI CreatorForce</h1>
-          <p className="text-gray-500 mt-2">Sign in to your account</p>
-        </div>
-        <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-        <p className="text-center text-sm text-gray-500 mt-4">
-          No account?{' '}
-          <Link href="/register" className="text-brand-600 hover:underline">
-            Register
+    <AuthShell
+      brand="AI CreatorForce"
+      title="Welcome Back"
+      subtitle="Login to continue your journey"
+      mascot="🙋‍♀️"
+      footer={
+        <>
+          Don&rsquo;t have an account?{' '}
+          <Link href="/register" className="text-[#7b5ec7] font-semibold hover:underline">
+            Sign Up
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">
+        <AuthPillInput
+          icon={<User className="w-4 h-4" />}
+          type="email"
+          aria-label="Email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        <div className="relative">
+          <AuthPillInput
+            icon={<Lock className="w-4 h-4" />}
+            type={showPassword ? 'text' : 'password'}
+            aria-label="Password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+
+        <div className="text-right">
+          <button
+            type="button"
+            onClick={() => setInfo('Password reset is coming soon — contact support to reset your password.')}
+            className="text-xs text-[#7b5ec7] hover:underline"
+          >
+            Forgot Password?
+          </button>
+        </div>
+
+        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+        {info && <p className="text-[#7b5ec7] text-xs text-center">{info}</p>}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-3 bg-[#8b74d8] hover:bg-[#7a63cb] text-white rounded-full font-semibold shadow-lg shadow-[#8b74d8]/40 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+        >
+          {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+          {loading ? 'Logging in…' : 'Login'}
+        </button>
+      </form>
+
+      <SocialRow />
+    </AuthShell>
   );
 }
