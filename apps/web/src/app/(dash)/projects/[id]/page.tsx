@@ -601,9 +601,16 @@ export default function ProjectDetailPage() {
               const isJobRunning = job.status === 'RUNNING';
               const logOpen = isJobRunning || expandedIds.has(logKey);
 
+              // Whole row is clickable: opens the result details, or the
+              // activity log when the run produced no result payload
+              const rowToggleKey = job.result ? histKey : hasLogs && !isJobRunning ? logKey : null;
+
               return (
                 <div key={job.id} className="px-6 py-3">
-                  <div className="flex items-center justify-between gap-3">
+                  <div
+                    className={`flex items-center justify-between gap-3 -mx-2 px-2 py-1 rounded-lg ${rowToggleKey ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                    onClick={rowToggleKey ? () => toggle(rowToggleKey) : undefined}
+                  >
                     <div>
                       <p className="font-medium text-gray-800 text-sm">
                         {job.type}
@@ -634,19 +641,19 @@ export default function ProjectDetailPage() {
                         {job.status}
                       </span>
                       {!!job.result && (
-                        <button onClick={() => toggle(histKey)} className="text-gray-400 hover:text-gray-600">
+                        <button onClick={(e) => { e.stopPropagation(); toggle(histKey); }} className="text-gray-400 hover:text-gray-600">
                           {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </button>
                       )}
                       {!['PENDING', 'QUEUED', 'RUNNING'].includes(job.status) && (
                         confirmDeleteJob === job.id ? (
                           <span className="flex items-center gap-1.5">
-                            <button onClick={() => deleteJobMutation.mutate(job.id)} disabled={deleteJobMutation.isPending} className="text-xs px-2 py-1 bg-red-600 text-white rounded-lg disabled:opacity-50">Delete</button>
-                            <button onClick={() => setConfirmDeleteJob(null)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg text-gray-500">Cancel</button>
+                            <button onClick={(e) => { e.stopPropagation(); deleteJobMutation.mutate(job.id); }} disabled={deleteJobMutation.isPending} className="text-xs px-2 py-1 bg-red-600 text-white rounded-lg disabled:opacity-50">Delete</button>
+                            <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteJob(null); }} className="text-xs px-2 py-1 border border-gray-200 rounded-lg text-gray-500">Cancel</button>
                           </span>
                         ) : (
                           <button
-                            onClick={() => setConfirmDeleteJob(job.id)}
+                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteJob(job.id); }}
                             aria-label={`Delete ${job.type} run`}
                             title="Delete this run from history. If it is the latest result for a stage, the stage reverts to the previous run."
                             className="text-gray-300 hover:text-red-500 transition-colors"
