@@ -83,12 +83,12 @@ test.describe('Project Detail', () => {
     }
   });
 
-  test('shows AI production studio card with one-click generate', async ({ page }) => {
-    await expect(page.getByText('AI Video Production Studio')).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByRole('button', { name: /^generate$/i })).toBeVisible();
-    await expect(page.getByRole('combobox').first()).toBeVisible();
+  test('AI Video Production Studio card is dissolved into pipeline tiles', async ({ page }) => {
+    await expect(page.getByText('AI Video Production Studio')).toHaveCount(0);
+    // Production settings (incl. platform select) now live in the Analyse tile detail
+    await page.getByLabel('Expand Analyse').click();
     await expect(page.getByRole('combobox', { name: 'Target platform' })).toBeVisible();
-    await expect(page.getByText(/compliance-gated/i)).toBeVisible();
+    await expect(page.getByText('Production settings')).toBeVisible();
   });
 
   test('analyse tile runs trend analysis', async ({ page }) => {

@@ -12,8 +12,7 @@ import {
   RotateCcw, ArrowRightLeft, Timer,
 } from 'lucide-react';
 import { ElapsedBadge, formatDuration } from '@/components/ai-activity';
-import { FullProductionCard, type PipelineProgress } from '@/components/full-production';
-import { StudioFlow } from '@/components/studio-flow';
+import { StudioFlow, type PipelineProgress } from '@/components/studio-flow';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -555,23 +554,18 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* One-click AI production studio */}
-      <FullProductionCard
-        projectId={id}
-        runningJob={
-          project.jobs
-            .filter((j) => j.type === 'FULL_PRODUCTION' && ['RUNNING', 'QUEUED', 'PENDING'].includes(j.status))
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
-        }
-        progress={pipelineProgress}
-      />
-
       {/* Guided step-by-step studio flow (design ref: image.png / project.PNG) */}
       <StudioFlow
         projectId={id}
         channel={project.channel}
         jobs={project.jobs}
         anyPipelineRunning={project.jobs.some((j) => j.type === 'FULL_PRODUCTION' && ['RUNNING', 'QUEUED', 'PENDING'].includes(j.status))}
+        progress={pipelineProgress}
+        runningPipeline={
+          project.jobs
+            .filter((j) => j.type === 'FULL_PRODUCTION' && ['RUNNING', 'QUEUED', 'PENDING'].includes(j.status))
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
+        }
       />
 
       {/* Full Job History */}

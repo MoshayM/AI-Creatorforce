@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Youtube, BarChart2, Lightbulb, FileText, Mic, Music, Clapperboard,
   Play, RefreshCw, Loader2, CheckCircle, ChevronDown, ChevronUp, Save, Pencil, AlertTriangle, X,
+  KeyRound, Sparkles, Download, FileVideo, FileAudio, FileImage, FileText as FileTextIcon, ShieldCheck,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { ElapsedBadge } from '@/components/ai-activity';
+import { ElapsedBadge, formatElapsed } from '@/components/ai-activity';
 import { getErrorMessage } from '@/lib/getErrorMessage';
 
 /**
@@ -17,6 +18,13 @@ import { getErrorMessage } from '@/lib/getErrorMessage';
  * edits persist via the stage-override endpoint so downstream stages use
  * the edited version.
  */
+
+export interface PipelineProgress {
+  stage: string;
+  index: number;
+  count: number;
+  etaSecs: number;
+}
 
 interface Job {
   id: string;
@@ -44,12 +52,22 @@ interface Props {
   channel: { title: string; youtubeChannelId: string };
   jobs: Job[];
   anyPipelineRunning: boolean;
+  progress: PipelineProgress | null;
+  runningPipeline: { id: string; startedAt?: string | null; createdAt: string } | null;
 }
 
 const RUNNING_STATES = ['PENDING', 'QUEUED', 'RUNNING'];
 
 // Target distribution platform — shapes research/script tone and format
 const PLATFORMS = ['YouTube', 'Facebook', 'Instagram', 'TikTok', 'LinkedIn', 'Podcast', 'Custom'] as const;
+
+const PRESETS = [
+  { value: 'LANDSCAPE', label: 'Landscape 16:9' },
+  { value: 'VERTICAL',  label: 'Vertical 9:16' },
+  { value: 'SQUARE',    label: 'Square 1:1' },
+] as const;
+
+const FULL_MEDIA_REGENERATE = ['VOICE_GENERATE', 'IMAGE_GENERATE', 'MUSIC_GENERATE', 'VIDEO_GENERATE', 'EDIT_PLAN', 'RENDER'] as const;
 
 function latest(jobs: Job[], type: string): Job | undefined {
   return jobs
@@ -78,6 +96,30 @@ function latestFailure(jobs: Job[], ...types: string[]): Job | undefined {
 function completedAt(jobs: Job[], type: string): string | undefined {
   const j = latest(jobs, type);
   return j?.status === 'COMPLETED' ? (j.completedAt ?? undefined) : undefined;
+}
+
+// ── File helpers (for exports grid) ──────────────────────────────────────────
+
+function fileIcon(name: string) {
+  if (/\.(mp4|mov|webm)$/i.test(name)) return <FileVideo className="w-4 h-4 text-brand-600" />;
+  if (/\.(mp3|wav)$/i.test(name)) return <FileAudio className="w-4 h-4 text-purple-600" />;
+  if (/\.(png|jpg|jpeg)$/i.test(name)) return <FileImage className="w-4 h-4 text-green-600" />;
+  return <FileTextIcon className="w-4 h-4 text-gray-400" />;
+}
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+async function downloadBlob(res: { data: unknown }, name: string) {
+  const url = URL.createObjectURL(res.data as Blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function StatusBadge({ state, updatedAt }: { state: 'done' | 'running' | 'failed' | 'notStarted'; updatedAt?: string }) {
@@ -218,7 +260,7 @@ function RunButton({ label, onClick, disabled, rerun }: { label: string; onClick
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Props) {
+export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progress, runningPipeline }: Props) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState<string | null>(null);
   // Mount the detail content exactly once: inline below the card on mobile,
@@ -237,14 +279,25 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
     typeof window !== 'undefined' ? localStorage.getItem(`cf_topic_${projectId}`) ?? '' : '');
   const [platform, setPlatform] = useState<(typeof PLATFORMS)[number]>(() =>
     (typeof window !== 'undefined' ? localStorage.getItem(`cf_platform_${projectId}`) : null) as (typeof PLATFORMS)[number] | null ?? 'YouTube');
+  const [preset, setPreset] = useState<(typeof PRESETS)[number]['value']>(() =>
+    (typeof window !== 'undefined' ? (localStorage.getItem(`cf_preset_${projectId}`) as (typeof PRESETS)[number]['value'] | null) : null) ?? 'LANDSCAPE');
+  const [refreshMedia, setRefreshMedia] = useState(false);
   const [customTopic, setCustomTopic] = useState('');
   const [mood, setMood] = useState('');
   const [genre, setGenre] = useState('');
   const [scriptDraft, setScriptDraft] = useState<ScriptResult | null>(null);
+  const [voiceKey, setVoiceKey] = useState('');
+  const [voiceKeySaved, setVoiceKeySaved] = useState(false);
 
   const { data: channels = [] } = useQuery({
     queryKey: ['channels'],
     queryFn: () => api.channels.list().then((r) => r.data as Array<{ id: string; title: string; youtubeChannelId: string }>),
+  });
+
+  const { data: exportFiles = [] } = useQuery({
+    queryKey: ['exports', projectId],
+    queryFn: () => api.media.listExports(projectId).then((r) => r.data),
+    refetchInterval: runningPipeline ? 15_000 : false,
   });
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['project', projectId] });
@@ -272,6 +325,12 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
     onError: (err: unknown) => setError(getErrorMessage(err) || 'Failed to save script'),
   });
 
+  const saveVoiceKey = useMutation({
+    mutationFn: (key: string) => api.settings.updateApiKeys({ ELEVENLABS_API_KEY: key.trim() }),
+    onSuccess: () => { setVoiceKeySaved(true); setVoiceKey(''); },
+    onError: (err: unknown) => setError(getErrorMessage(err) || 'Failed to save the voice key'),
+  });
+
   function chooseTopic(t: string) {
     setTopic(t);
     localStorage.setItem(`cf_topic_${projectId}`, t);
@@ -280,6 +339,11 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
   function choosePlatform(p: (typeof PLATFORMS)[number]) {
     setPlatform(p);
     localStorage.setItem(`cf_platform_${projectId}`, p);
+  }
+
+  function choosePreset(p: (typeof PRESETS)[number]['value']) {
+    setPreset(p);
+    localStorage.setItem(`cf_preset_${projectId}`, p);
   }
 
   const busy = enqueue.isPending || anyPipelineRunning;
@@ -298,13 +362,28 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
   const musicBrief = latest(jobs, 'MUSIC_BRIEF')?.result as { mood?: string; genre?: string } | undefined;
   const videoJob = latest(jobs, 'VIDEO_GENERATE');
   const videoResult = videoJob?.status === 'COMPLETED' ? (videoJob.result as { videos?: Array<{ sceneId: string; versionId?: string; provider: string }> }) : null;
+  const renderJob = latest(jobs, 'RENDER');
+  const renderDone = isDone(jobs, 'RENDER');
+  const renderResult = renderJob?.status === 'COMPLETED'
+    ? (renderJob.result as { versionId?: string; preset?: string; durationSecs?: number } | undefined)
+    : undefined;
 
   const runningFoundation = isRunning(jobs, 'RESEARCH', 'SCRIPT', 'FACT_CHECK', 'COMPLIANCE', 'FULL_PRODUCTION');
   const effectiveTopic = topic || customTopic;
 
   const toggle = (key: string) => setExpanded((e) => (e === key ? null : key));
 
+  // Progress bar pct for rendering section
+  const pct = progress && progress.count > 0 ? Math.round((progress.index / progress.count) * 100) : 0;
+
   // ── Detail content variables ──────────────────────────────────────────────
+
+  // Compliance info for analyse detail
+  const complianceJob = latest(jobs, 'COMPLIANCE');
+  const complianceDone = complianceJob?.status === 'COMPLETED';
+  const complianceResult = complianceDone
+    ? (complianceJob?.result as { passed?: boolean; score?: number } | undefined)
+    : undefined;
 
   const analyseDetail = (
     <>
@@ -418,6 +497,75 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
           );
         })()}
       </div>
+
+      {/* Production settings */}
+      <div className="mt-4 border-t border-gray-100 pt-3 space-y-3">
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Production settings</p>
+
+        <div className="space-y-2">
+          <label className="flex items-center justify-between gap-2 text-xs">
+            <span className="font-medium text-gray-700 shrink-0">Platform</span>
+            <select
+              value={platform}
+              onChange={(e) => choosePlatform(e.target.value as (typeof PLATFORMS)[number])}
+              aria-label="Target platform"
+              className="border border-gray-200 bg-white rounded-full px-3 py-1.5 text-xs font-medium text-gray-700"
+            >
+              {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </label>
+
+          <label className="flex items-center justify-between gap-2 text-xs">
+            <span className="font-medium text-gray-700 shrink-0">Output format</span>
+            <select
+              value={preset}
+              onChange={(e) => choosePreset(e.target.value as (typeof PRESETS)[number]['value'])}
+              aria-label="Output format"
+              className="border border-gray-200 bg-white rounded-full px-3 py-1.5 text-xs font-medium text-gray-700"
+            >
+              {PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={refreshMedia}
+              onChange={(e) => setRefreshMedia(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <span className="text-gray-700">Regenerate media on next render</span>
+          </label>
+          <p className="text-[11px] text-gray-400 pl-5">Ignores cached voice/music/images when rendering.</p>
+        </div>
+
+        {/* Compliance status */}
+        <div className="flex items-center gap-2 text-xs pt-1">
+          {complianceDone && complianceResult ? (
+            complianceResult.passed ? (
+              <span className="flex items-center gap-1.5 text-green-700">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Compliance passed · score {complianceResult.score ?? '?'}/100
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-red-600">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Compliance failed · score {complianceResult.score ?? '?'}/100
+              </span>
+            )
+          ) : (
+            <span className="flex items-center gap-1.5 text-gray-400">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Runs automatically before any media generation
+            </span>
+          )}
+        </div>
+
+        <p className="text-[11px] text-gray-400 flex items-center gap-1">
+          <ShieldCheck className="w-3 h-3 shrink-0" />
+          Compliance-gated · publishing always needs your approval
+        </p>
+      </div>
     </>
   );
 
@@ -426,6 +574,16 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
     const growthTopics = (growthJob?.status === 'COMPLETED'
       ? (growthJob.result as { nextTopics?: Array<{ topic: string }> } | undefined)?.nextTopics
       : undefined) ?? [];
+
+    // AI recommendations from TREND_ANALYSIS + GROWTH_REPORT
+    const trendRecs = (analyseJob?.status === 'COMPLETED'
+      ? (analyseJob.result as { recommendations?: string[] } | undefined)?.recommendations
+      : undefined) ?? [];
+    const growthActions = (growthJob?.status === 'COMPLETED'
+      ? (growthJob.result as { optimizationActions?: Array<{ priority: string; action: string }> } | undefined)?.optimizationActions
+      : undefined) ?? [];
+    const hasAiRecs = trendRecs.length > 0 || growthActions.length > 0;
+
     return (
       <div className="space-y-3">
         {trends.length > 0 && (
@@ -476,109 +634,301 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
             Use
           </button>
         </div>
+
+        {hasAiRecs && (
+          <div className="mt-3 border-t border-gray-100 pt-3 space-y-2">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">AI recommendations</p>
+            {trendRecs.slice(0, 3).map((rec, i) => (
+              <div key={i} className="flex gap-2 text-xs text-gray-700">
+                <span className="text-brand-500 font-bold shrink-0">•</span>
+                <span>{rec}</span>
+              </div>
+            ))}
+            {growthActions.slice(0, 2).map((a, i) => (
+              <div key={i} className="flex gap-2 text-xs text-gray-700">
+                <span className="text-indigo-500 font-bold shrink-0 uppercase text-[10px] mt-0.5">{a.priority}</span>
+                <span>{a.action}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   })();
 
-  const scriptDetail = (
-    <div className="space-y-3">
-      <div>
-        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Script topic</label>
-        <input
-          value={effectiveTopic}
-          onChange={(e) => chooseTopic(e.target.value)}
-          placeholder="Pick a topic in Suggestion or type one here"
-          aria-label="Script topic"
-          className="mt-1 w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400"
-        />
-        <p className="text-[11px] text-gray-400 mt-1">Selected suggestions appear here automatically — edit freely before running.</p>
-      </div>
-      {script ? (
-        scriptDraft ? (
-          <div className="space-y-3">
-            <input
-              value={scriptDraft.title}
-              onChange={(e) => setScriptDraft({ ...scriptDraft, title: e.target.value })}
-              aria-label="Script title"
-              className="w-full text-sm font-semibold px-3 py-2 border border-gray-200 rounded-xl"
-            />
-            <textarea
-              value={scriptDraft.hook}
-              onChange={(e) => setScriptDraft({ ...scriptDraft, hook: e.target.value })}
-              aria-label="Hook"
-              rows={2}
-              className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl"
-            />
-            {scriptDraft.sections.map((s, i) => (
-              <div key={i}>
-                <input
-                  value={s.heading}
-                  onChange={(e) => setScriptDraft({ ...scriptDraft, sections: scriptDraft.sections.map((x, j) => j === i ? { ...x, heading: e.target.value } : x) })}
-                  aria-label={`Section ${i + 1} heading`}
-                  className="w-full text-xs font-semibold px-3 py-1.5 border border-gray-200 rounded-t-xl"
-                />
-                <textarea
-                  value={s.content}
-                  onChange={(e) => setScriptDraft({ ...scriptDraft, sections: scriptDraft.sections.map((x, j) => j === i ? { ...x, content: e.target.value } : x) })}
-                  aria-label={`Section ${i + 1} content`}
-                  rows={4}
-                  className="w-full text-sm px-3 py-2 border border-t-0 border-gray-200 rounded-b-xl"
-                />
-              </div>
-            ))}
-            <textarea
-              value={scriptDraft.callToAction}
-              onChange={(e) => setScriptDraft({ ...scriptDraft, callToAction: e.target.value })}
-              aria-label="Call to action"
-              rows={2}
-              className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => saveScript.mutate(scriptDraft)}
-                disabled={saveScript.isPending}
-                className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-xs font-semibold rounded-full disabled:opacity-50"
-              >
-                {saveScript.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                Save edits
-              </button>
-              <button onClick={() => setScriptDraft(null)} className="px-4 py-2 text-xs text-gray-500">Cancel</button>
-            </div>
-            <p className="text-xs text-gray-400">Saved edits flow into voice, subtitles, and video automatically.</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-400">{script.totalWordCount ?? '?'} words · {script.sections.length} sections</p>
-              <button
-                onClick={() => setScriptDraft(JSON.parse(JSON.stringify(script)) as ScriptResult)}
-                className="flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
-              >
-                <Pencil className="w-3 h-3" /> Edit script
-              </button>
-            </div>
-            <p className="text-sm font-semibold text-gray-800">{script.title}</p>
-            <p className="text-sm text-gray-600 italic">&ldquo;{script.hook}&rdquo;</p>
-            <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
-              {script.sections.map((s, i) => (
+  const scriptDetail = (() => {
+    // Publishing content from METADATA + SEO_OPTIMIZATION
+    const metaJob = latest(jobs, 'METADATA');
+    const metaResult = metaJob?.status === 'COMPLETED'
+      ? (metaJob.result as { metadata?: { title?: string; description?: string; tags?: string[] } } | undefined)?.metadata
+      : undefined;
+    const seoJob = latest(jobs, 'SEO_OPTIMIZATION');
+    const seoResult = seoJob?.status === 'COMPLETED'
+      ? (seoJob.result as { title?: string; description?: string; tags?: string[] } | undefined)
+      : undefined;
+
+    // Chapters from script sections
+    const chapters = script
+      ? (() => {
+          let cumSecs = 0;
+          return script.sections.map((s) => {
+            const mm = Math.floor(cumSecs / 60).toString().padStart(2, '0');
+            const ss = (cumSecs % 60).toString().padStart(2, '0');
+            const line = `${mm}:${ss} ${s.heading}`;
+            cumSecs += s.durationEstimateSecs ?? 30;
+            return line;
+          });
+        })()
+      : [];
+
+    const hasPublishing = !!(metaResult || seoResult);
+
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Script topic</label>
+          <input
+            value={effectiveTopic}
+            onChange={(e) => chooseTopic(e.target.value)}
+            placeholder="Pick a topic in Suggestion or type one here"
+            aria-label="Script topic"
+            className="mt-1 w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">Selected suggestions appear here automatically — edit freely before running.</p>
+        </div>
+        {script ? (
+          scriptDraft ? (
+            <div className="space-y-3">
+              <input
+                value={scriptDraft.title}
+                onChange={(e) => setScriptDraft({ ...scriptDraft, title: e.target.value })}
+                aria-label="Script title"
+                className="w-full text-sm font-semibold px-3 py-2 border border-gray-200 rounded-xl"
+              />
+              <textarea
+                value={scriptDraft.hook}
+                onChange={(e) => setScriptDraft({ ...scriptDraft, hook: e.target.value })}
+                aria-label="Hook"
+                rows={2}
+                className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl"
+              />
+              {scriptDraft.sections.map((s, i) => (
                 <div key={i}>
-                  <p className="text-xs font-semibold text-gray-500 uppercase">{s.heading}</p>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{s.content}</p>
+                  <input
+                    value={s.heading}
+                    onChange={(e) => setScriptDraft({ ...scriptDraft, sections: scriptDraft.sections.map((x, j) => j === i ? { ...x, heading: e.target.value } : x) })}
+                    aria-label={`Section ${i + 1} heading`}
+                    className="w-full text-xs font-semibold px-3 py-1.5 border border-gray-200 rounded-t-xl"
+                  />
+                  <textarea
+                    value={s.content}
+                    onChange={(e) => setScriptDraft({ ...scriptDraft, sections: scriptDraft.sections.map((x, j) => j === i ? { ...x, content: e.target.value } : x) })}
+                    aria-label={`Section ${i + 1} content`}
+                    rows={4}
+                    className="w-full text-sm px-3 py-2 border border-t-0 border-gray-200 rounded-b-xl"
+                  />
                 </div>
               ))}
+              <textarea
+                value={scriptDraft.callToAction}
+                onChange={(e) => setScriptDraft({ ...scriptDraft, callToAction: e.target.value })}
+                aria-label="Call to action"
+                rows={2}
+                className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => saveScript.mutate(scriptDraft)}
+                  disabled={saveScript.isPending}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-xs font-semibold rounded-full disabled:opacity-50"
+                >
+                  {saveScript.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                  Save edits
+                </button>
+                <button onClick={() => setScriptDraft(null)} className="px-4 py-2 text-xs text-gray-500">Cancel</button>
+              </div>
+              <p className="text-xs text-gray-400">Saved edits flow into voice, subtitles, and video automatically.</p>
             </div>
-          </div>
-        )
-      ) : <p className="text-sm text-gray-400">Pick a topic, then run — includes fact-check and the compliance gate.</p>}
-    </div>
-  );
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-400">{script.totalWordCount ?? '?'} words · {script.sections.length} sections</p>
+                <button
+                  onClick={() => setScriptDraft(JSON.parse(JSON.stringify(script)) as ScriptResult)}
+                  className="flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+                >
+                  <Pencil className="w-3 h-3" /> Edit script
+                </button>
+              </div>
+              <p className="text-sm font-semibold text-gray-800">{script.title}</p>
+              <p className="text-sm text-gray-600 italic">&ldquo;{script.hook}&rdquo;</p>
+              <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+                {script.sections.map((s, i) => (
+                  <div key={i}>
+                    <p className="text-xs font-semibold text-gray-500 uppercase">{s.heading}</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{s.content}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        ) : <p className="text-sm text-gray-400">Pick a topic, then run — includes fact-check and the compliance gate.</p>}
+
+        {/* Publishing content section */}
+        <div className="mt-3 border-t border-gray-100 pt-3">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Publishing content</p>
+          {hasPublishing ? (
+            <div className="space-y-3">
+              {(metaResult?.title ?? seoResult?.title) && (
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">SEO Title</p>
+                  <p className="text-sm text-gray-800 font-medium">{metaResult?.title ?? seoResult?.title}</p>
+                </div>
+              )}
+              {(metaResult?.description ?? seoResult?.description) && (
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Description</p>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    {((metaResult?.description ?? seoResult?.description) ?? '').slice(0, 200)}
+                    {((metaResult?.description ?? seoResult?.description) ?? '').length > 200 ? '…' : ''}
+                  </p>
+                </div>
+              )}
+              {((metaResult?.tags ?? seoResult?.tags) ?? []).length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Hashtags</p>
+                  <div className="flex flex-wrap gap-1">
+                    {((metaResult?.tags ?? seoResult?.tags) ?? []).map((tag, i) => (
+                      <span key={i} className="px-2 py-0.5 bg-brand-50 text-brand-700 text-xs rounded-full">#{tag}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {chapters.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Chapters</p>
+                  <div className="font-mono text-[11px] text-gray-600 space-y-0.5">
+                    {chapters.map((line, i) => (
+                      <div key={i}>{line}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">Generated during the Video stage.</p>
+          )}
+        </div>
+      </div>
+    );
+  })();
 
   const voiceDetail = voiceResult?.versionId ? (
     <div className="space-y-2">
-      <MediaPlayer versionId={voiceResult.versionId} kind="audio" />
+      <div className="flex items-center gap-2">
+        <MediaPlayer versionId={voiceResult.versionId} kind="audio" />
+        <button
+          onClick={async () => {
+            const res = await api.media.versionFile(voiceResult.versionId!);
+            await downloadBlob(res, 'voice-narration');
+          }}
+          className="flex items-center gap-1 text-xs font-medium text-brand-700 border border-brand-200 rounded-full px-3 py-1.5 hover:bg-brand-50 shrink-0"
+          title="Download narration"
+        >
+          <Download className="w-3 h-3" />
+        </button>
+      </div>
       {voiceResult.notes && <p className="text-xs text-amber-600">{voiceResult.notes}</p>}
+      {(voiceResult.provider === 'offline-synth-voice' || voiceKeySaved) && (
+        <div className="border border-brand-200 bg-brand-50 rounded-xl p-3 space-y-2">
+          <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+            {voiceKeySaved ? 'Real voice enabled — regenerate to hear it' : 'Enable real voice narration'}
+          </p>
+          {!voiceKeySaved && (
+            <>
+              <p className="text-[11px] text-gray-500">
+                Paste your ElevenLabs API key (from elevenlabs.io → profile → API Keys). It activates instantly and is stored securely — also available in Settings → API Keys.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={voiceKey}
+                  onChange={(e) => setVoiceKey(e.target.value)}
+                  placeholder="ElevenLabs API key"
+                  aria-label="ElevenLabs API key"
+                  className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400"
+                />
+                <button
+                  onClick={() => saveVoiceKey.mutate(voiceKey)}
+                  disabled={!voiceKey.trim() || saveVoiceKey.isPending}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-brand-600 text-white rounded-xl disabled:opacity-40"
+                >
+                  {saveVoiceKey.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <KeyRound className="w-3 h-3" />}
+                  Save
+                </button>
+              </div>
+            </>
+          )}
+          {voiceKeySaved && (
+            <button
+              onClick={() => enqueue.mutate({ type: 'FULL_PRODUCTION', payload: { scope: 'VOICE', regenerate: ['VOICE_SPEC', 'VOICE_GENERATE'] } })}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-brand-600 text-white rounded-full disabled:opacity-40"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Regenerate with real voice
+            </button>
+          )}
+        </div>
+      )}
     </div>
-  ) : <p className="text-sm text-gray-400">Run to generate the narration from your (edited) script.</p>;
+  ) : (
+    <>
+      <p className="text-sm text-gray-400">Run to generate the narration from your (edited) script.</p>
+      <div className="border border-brand-200 bg-brand-50 rounded-xl p-3 space-y-2">
+        <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+          {voiceKeySaved ? 'Real voice enabled — regenerate to hear it' : 'Enable real voice narration'}
+        </p>
+        {!voiceKeySaved && (
+          <>
+            <p className="text-[11px] text-gray-500">
+              Paste your ElevenLabs API key (from elevenlabs.io → profile → API Keys). It activates instantly and is stored securely — also available in Settings → API Keys.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={voiceKey}
+                onChange={(e) => setVoiceKey(e.target.value)}
+                placeholder="ElevenLabs API key"
+                aria-label="ElevenLabs API key"
+                className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400"
+              />
+              <button
+                onClick={() => saveVoiceKey.mutate(voiceKey)}
+                disabled={!voiceKey.trim() || saveVoiceKey.isPending}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-brand-600 text-white rounded-xl disabled:opacity-40"
+              >
+                {saveVoiceKey.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <KeyRound className="w-3 h-3" />}
+                Save
+              </button>
+            </div>
+          </>
+        )}
+        {voiceKeySaved && (
+          <button
+            onClick={() => enqueue.mutate({ type: 'FULL_PRODUCTION', payload: { scope: 'VOICE', regenerate: ['VOICE_SPEC', 'VOICE_GENERATE'] } })}
+            disabled={busy}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-brand-600 text-white rounded-full disabled:opacity-40"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Regenerate with real voice
+          </button>
+        )}
+      </div>
+    </>
+  );
 
   const musicDetail = (
     <div className="space-y-3">
@@ -600,24 +950,138 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
       </div>
       {musicResult?.versionId ? (
         <div className="space-y-2">
-          <MediaPlayer versionId={musicResult.versionId} kind="audio" />
+          <div className="flex items-center gap-2">
+            <MediaPlayer versionId={musicResult.versionId} kind="audio" />
+            <button
+              onClick={async () => {
+                const res = await api.media.versionFile(musicResult.versionId!);
+                await downloadBlob(res, 'background-music');
+              }}
+              className="flex items-center gap-1 text-xs font-medium text-brand-700 border border-brand-200 rounded-full px-3 py-1.5 hover:bg-brand-50 shrink-0"
+              title="Download music"
+            >
+              <Download className="w-3 h-3" />
+            </button>
+          </div>
           {musicResult.notes && <p className="text-xs text-amber-600">{musicResult.notes}</p>}
         </div>
       ) : <p className="text-xs text-gray-400">Set a mood/genre (or leave blank for AI&rsquo;s pick) and run.</p>}
     </div>
   );
 
-  const videoDetail = videoResult?.videos?.length ? (
-    <div className="space-y-2">
-      {videoResult.videos.map((v, i) => (
-        <div key={v.sceneId} className="flex items-center justify-between gap-3">
-          <p className="text-xs text-gray-600 truncate">Scene {i + 1} · {v.provider}</p>
-          {v.versionId && <MediaPlayer versionId={v.versionId} kind="video" />}
+  const videoDetail = (
+    <div className="space-y-5">
+      {/* Scenes */}
+      <div>
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Scenes</p>
+        {videoResult?.videos?.length ? (
+          <div className="space-y-2">
+            {/* sceneId comes from the LLM scene plan and is not guaranteed unique */}
+            {videoResult.videos.map((v, i) => (
+              <div key={`${v.sceneId}-${i}`} className="flex items-center justify-between gap-3">
+                <p className="text-xs text-gray-600 truncate">Scene {i + 1} · {v.provider}</p>
+                {v.versionId && <MediaPlayer versionId={v.versionId} kind="video" />}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">Run to storyboard the script and generate every scene.</p>
+        )}
+      </div>
+
+      {/* Rendering */}
+      <div className="border-t border-gray-100 pt-4">
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Rendering</p>
+        {runningPipeline ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="flex items-center gap-1.5 text-gray-700">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-600" />
+                {progress ? progress.stage : 'Starting pipeline…'}
+              </span>
+              <span className="flex items-center gap-3 text-gray-500 tabular-nums">
+                <ElapsedBadge since={runningPipeline.startedAt ?? runningPipeline.createdAt} />
+                {progress && progress.etaSecs > 0 && <span>~{formatElapsed(progress.etaSecs)} remaining</span>}
+                {progress && <span>{progress.index}/{progress.count} stages</span>}
+              </span>
+            </div>
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-brand-500 rounded-full transition-all duration-700"
+                style={{ width: `${Math.max(pct, 3)}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() =>
+              enqueue.mutate({
+                type: 'FULL_PRODUCTION',
+                payload: {
+                  scope: 'FULL',
+                  preset,
+                  ...(refreshMedia
+                    ? { regenerate: [...FULL_MEDIA_REGENERATE] }
+                    : renderDone
+                      ? { regenerate: ['RENDER'] }
+                      : {}),
+                },
+              })
+            }
+            disabled={busy || !scriptDone}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-colors disabled:opacity-40 ${
+              renderDone
+                ? 'border border-brand-300 text-brand-700 hover:bg-brand-50'
+                : 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm'
+            }`}
+          >
+            {renderDone ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+            {renderDone ? 'Re-render' : 'Render final video'}
+          </button>
+        )}
+      </div>
+
+      {/* Final video */}
+      {renderResult?.versionId && (
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Final video</p>
+          <MediaPlayer versionId={renderResult.versionId} kind="video" />
+          {(renderResult.preset ?? renderResult.durationSecs) && (
+            <p className="text-[11px] text-gray-400 mt-1">
+              {renderResult.preset}{renderResult.durationSecs ? ` · ${Math.round(renderResult.durationSecs)}s` : ''}
+            </p>
+          )}
         </div>
-      ))}
-      <p className="text-xs text-gray-400 pt-1">Use the studio card above for the final render + upload-ready package.</p>
+      )}
+
+      {/* Downloads · Upload package */}
+      <div className="border-t border-gray-100 pt-4">
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Downloads · Upload package</p>
+        {exportFiles.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {exportFiles.map((f) => (
+              <button
+                key={f.name}
+                onClick={() => void api.media.downloadExport(projectId, f.name).then((res) => downloadBlob(res, f.name))}
+                className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-left text-sm text-gray-800 transition-colors"
+              >
+                {fileIcon(f.name)}
+                <span className="flex-1 truncate text-xs">{f.name}</span>
+                <span className="text-[11px] text-gray-400 shrink-0">{formatSize(f.sizeBytes)}</span>
+                <Download className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">Render the final video to generate the upload-ready package.</p>
+        )}
+        <p className="text-[11px] text-gray-400 mt-2 flex items-center gap-1">
+          <ShieldCheck className="w-3 h-3 shrink-0" />
+          Publishing to YouTube requires your approval in Approvals.
+        </p>
+      </div>
     </div>
-  ) : <p className="text-sm text-gray-400">Run to storyboard the script and generate every scene.</p>;
+  );
 
   // Detail panel icon + title map (mirrors card header look)
   const agentMeta: Record<string, { icon: React.ReactNode; title: string }> = {
@@ -644,22 +1108,11 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
   return (
     <div className="mb-6">
       {/* Content Pipeline header (design ref: 1.png) */}
-      <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+      <div className="flex items-center gap-4 flex-wrap mb-4">
         <div>
           <h2 className="text-lg font-bold text-gray-900">Content Pipeline</h2>
           <p className="text-xs text-gray-500">Create content step-by-step with AI</p>
         </div>
-        <label className="flex items-center gap-2 text-xs text-gray-500">
-          Platform
-          <select
-            value={platform}
-            onChange={(e) => choosePlatform(e.target.value as (typeof PLATFORMS)[number])}
-            className="border border-gray-200 bg-white rounded-full px-3 py-1.5 text-xs font-medium text-gray-700"
-            aria-label="Target platform"
-          >
-            {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </label>
       </div>
 
       {/* Channel strip (image.png: channel first) */}
@@ -823,7 +1276,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
           <Tile
             icon={<Clapperboard className="w-5 h-5" />}
             title="Video"
-            subtitle={videoResult?.videos?.length ? `${videoResult.videos.length} scene(s) ready` : 'Storyboard, scenes, subtitles & thumbnail'}
+            subtitle={videoResult?.videos?.length ? `${videoResult.videos.length} scene(s) · scenes, rendering & final delivery` : 'Scenes, rendering & final delivery'}
             status={videoResult ? 'done' : scriptDone ? 'ready' : 'locked'}
             running={isRunning(jobs, 'VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE', 'SUBTITLE_GENERATE', 'THUMBNAIL')}
             failed={latestFailure(jobs, 'VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE', 'SUBTITLE_GENERATE', 'THUMBNAIL')}
@@ -870,7 +1323,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
       )}
 
       <p className="text-xs text-gray-400 text-center mt-4">
-        💡 Complete each step in order for the best results.
+        Complete each step in order for the best results.
       </p>
     </div>
   );
