@@ -425,40 +425,52 @@ function SettingsContent() {
                 )}
               </div>
 
-              {/* Self-service access management — the creator sees exactly what
-                  the app may do and can change it any time (re-consent via Google) */}
-              {!ch.readOnly && (
-                <div className="mt-3 pt-3 border-t border-gray-100 flex items-start justify-between gap-4 flex-wrap">
-                  <ul className="space-y-0.5">
-                    {ACCESS_META[(ch.accessLevel && ch.accessLevel !== 'NONE' ? ch.accessLevel : 'PUBLISH') as AccessLevel].permissions.map((p) => (
+              {/* Self-service access management — every connected channel shows
+                  exactly what the app may do; changing (or upgrading a URL-
+                  connected channel) always goes through Google's consent screen */}
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-start justify-between gap-4 flex-wrap">
+                <ul className="space-y-0.5">
+                  {ch.readOnly ? (
+                    <>
+                      <li className="text-xs text-gray-500 flex items-center gap-1.5">
+                        <CheckCircle className="w-3 h-3 text-green-500 shrink-0" />
+                        Read public channel data only (connected by URL, no Google sign-in)
+                      </li>
+                      <li className="text-xs text-gray-400 flex items-center gap-1.5">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        Choose a level and sign in with Google to unlock analysis, uploads or full management
+                      </li>
+                    </>
+                  ) : (
+                    ACCESS_META[(ch.accessLevel && ch.accessLevel !== 'NONE' ? ch.accessLevel : 'PUBLISH') as AccessLevel].permissions.map((p) => (
                       <li key={p} className="text-xs text-gray-500 flex items-center gap-1.5">
                         <CheckCircle className="w-3 h-3 text-green-500 shrink-0" />
                         {p}
                       </li>
-                    ))}
-                  </ul>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={accessDrafts[ch.id] ?? (ch.accessLevel && ch.accessLevel !== 'NONE' ? ch.accessLevel : 'PUBLISH')}
-                      onChange={(e) => setAccessDrafts((prev) => ({ ...prev, [ch.id]: e.target.value as AccessLevel }))}
-                      className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-700"
-                      aria-label="Channel access level"
-                    >
-                      <option value="READ_ONLY">Read-only</option>
-                      <option value="PUBLISH">Publish</option>
-                      <option value="FULL">Full Access</option>
-                    </select>
-                    <button
-                      onClick={() => changeAccessMutation.mutate(accessDrafts[ch.id] ?? 'PUBLISH')}
-                      disabled={channelBusy || !accessDrafts[ch.id] || accessDrafts[ch.id] === ch.accessLevel}
-                      title="Re-authorize with the selected access level via Google"
-                      className="px-3 py-1.5 text-xs font-medium border border-brand-300 text-brand-700 rounded-lg hover:bg-brand-50 disabled:opacity-40 transition-colors"
-                    >
-                      {changeAccessMutation.isPending ? 'Redirecting…' : 'Change access'}
-                    </button>
-                  </div>
+                    ))
+                  )}
+                </ul>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={accessDrafts[ch.id] ?? (!ch.readOnly && ch.accessLevel && ch.accessLevel !== 'NONE' ? ch.accessLevel : 'PUBLISH')}
+                    onChange={(e) => setAccessDrafts((prev) => ({ ...prev, [ch.id]: e.target.value as AccessLevel }))}
+                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-700"
+                    aria-label="Channel access level"
+                  >
+                    <option value="READ_ONLY">Read-only</option>
+                    <option value="PUBLISH">Publish</option>
+                    <option value="FULL">Full Access</option>
+                  </select>
+                  <button
+                    onClick={() => changeAccessMutation.mutate(accessDrafts[ch.id] ?? 'PUBLISH')}
+                    disabled={channelBusy || (!ch.readOnly && (!accessDrafts[ch.id] || accessDrafts[ch.id] === ch.accessLevel))}
+                    title={ch.readOnly ? 'Sign in with Google to grant the selected access level' : 'Re-authorize with the selected access level via Google'}
+                    className="px-3 py-1.5 text-xs font-medium border border-brand-300 text-brand-700 rounded-lg hover:bg-brand-50 disabled:opacity-40 transition-colors"
+                  >
+                    {changeAccessMutation.isPending ? 'Redirecting…' : ch.readOnly ? 'Upgrade access' : 'Change access'}
+                  </button>
                 </div>
-              )}
+              </div>
               </div>
             ))}
 

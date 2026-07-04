@@ -313,6 +313,9 @@ export class ChannelsService implements OnModuleInit {
         encryptedTokens,
         tokenExpiresAt: new Date(tokens.expiry_date ?? Date.now() + 3600_000),
         active: true,
+        // A URL-connected (read-only) channel that completes OAuth becomes a
+        // fully connected channel — access is now governed by granted scopes.
+        readOnly: false,
         title: ch.snippet?.title ?? 'Unknown',
         thumbnailUrl: ch.snippet?.thumbnails?.default?.url,
         customUrl: ch.snippet?.customUrl ?? null,

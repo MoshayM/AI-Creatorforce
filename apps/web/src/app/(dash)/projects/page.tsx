@@ -2,8 +2,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { FolderOpen, Plus, Loader2, Youtube, Video, Music, Zap } from 'lucide-react';
+import { FolderOpen, Plus, Loader2, Youtube, Video, Music, Zap, PlayCircle } from 'lucide-react';
 import { api } from '@/lib/api';
+import { StatCard } from '@/components/stat-card';
 
 type ContentType = 'VIDEO' | 'MUSIC' | 'SHORT';
 
@@ -81,6 +82,16 @@ export default function ProjectsPage() {
           New Project
         </button>
       </div>
+
+      {/* Pastel stat overview (design ref: analyse.jpg) */}
+      {projects.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <StatCard tone="lilac" icon={<FolderOpen className="w-5 h-5" />} label="Projects" value={projects.length} />
+          <StatCard tone="pink" icon={<PlayCircle className="w-5 h-5" />} label="Active" value={projects.filter((p) => p.status === 'ACTIVE').length} sub="in production" subClassName="text-gray-400" />
+          <StatCard tone="cream" icon={<Zap className="w-5 h-5" />} label="Agent Jobs" value={projects.reduce((s, p) => s + p._count.jobs, 0)} sub="across all projects" subClassName="text-gray-400" />
+          <StatCard tone="periwinkle" icon={<Video className="w-5 h-5" />} label="Videos" value={projects.reduce((s, p) => s + p._count.videos, 0)} />
+        </div>
+      )}
 
       {showCreate && (
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
@@ -170,7 +181,7 @@ export default function ProjectsPage() {
             const ct = getContentType(p.id);
             return (
               <Link key={p.id} href={`/projects/${p.id}`}
-                className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow"
+                className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow"
               >
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="font-semibold text-gray-900">{p.title}</h3>

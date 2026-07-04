@@ -1,8 +1,9 @@
 'use client';
 import { useState } from 'react';
-import { BarChart2, TrendingUp, TrendingDown, Minus, Lightbulb, RefreshCw, ChevronRight } from 'lucide-react';
+import { BarChart2, TrendingUp, TrendingDown, Minus, Lightbulb, RefreshCw, ChevronRight, Gauge, Video, AlertTriangle, MousePointerClick } from 'lucide-react';
 import { ResultActions } from '@/components/result-actions';
 import { AiWorkingCard, formatDuration } from '@/components/ai-activity';
+import { StatCard, PastelBars, PastelDonut } from '@/components/stat-card';
 
 interface Insight {
   metric: string;
@@ -180,41 +181,93 @@ export default function AnalyticsPage() {
             />
           </div>
 
-          {/* Score card */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-sm text-gray-500 mb-1">Overall Score</p>
-              <div className="flex items-end gap-2">
-                <span className={`text-4xl font-bold ${analytics.overallScore >= 70 ? 'text-green-600' : analytics.overallScore >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
-                  {analytics.overallScore}
-                </span>
-                <span className="text-gray-400 text-sm mb-1">/100</span>
-              </div>
+          {/* Pastel KPI stat cards (design ref: analyse.jpg) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              tone="lilac"
+              icon={<Gauge className="w-5 h-5" />}
+              label="Overall Score"
+              value={<>{analytics.overallScore}<span className="text-base text-gray-400 font-medium">/100</span></>}
+              sub={analytics.overallScore >= 70 ? 'Healthy channel' : analytics.overallScore >= 40 ? 'Room to grow' : 'Needs attention'}
+              subClassName={analytics.overallScore >= 70 ? 'text-green-600' : analytics.overallScore >= 40 ? 'text-amber-500' : 'text-red-500'}
+            />
+            <StatCard
+              tone="pink"
+              icon={<Video className="w-5 h-5" />}
+              label="Videos Analysed"
+              value={analytics.topPerformers.length}
+              sub={analytics.period}
+              subClassName="text-gray-400"
+            />
+            <StatCard
+              tone="cream"
+              icon={<AlertTriangle className="w-5 h-5" />}
+              label="Retention Issues"
+              value={analytics.retentionIssues.length}
+              sub="drop-off points detected"
+              subClassName={analytics.retentionIssues.length > 0 ? 'text-amber-600' : 'text-green-600'}
+            />
+            <StatCard
+              tone="periwinkle"
+              icon={<MousePointerClick className="w-5 h-5" />}
+              label="Avg CTR"
+              value={(() => {
+                const ctrs = analytics.topPerformers.map((v) => v.ctr).filter((c) => Number.isFinite(c));
+                return ctrs.length ? `${((ctrs.reduce((s, c) => s + c, 0) / ctrs.length) * 100).toFixed(1)}%` : '—';
+              })()}
+              sub="across top performers"
+              subClassName="text-gray-400"
+            />
+          </div>
+
+          {/* Charts row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h2 className="font-semibold text-gray-900 mb-2">Performance Overview</h2>
+              <p className="text-xs text-gray-400 mb-2">Click-through rate per top video</p>
+              {analytics.topPerformers.some((v) => Number.isFinite(v.ctr) && v.ctr > 0) ? (
+                <PastelBars
+                  data={analytics.topPerformers.map((v, i) => ({
+                    label: `V${i + 1}`,
+                    value: Number.isFinite(v.ctr) ? v.ctr * 100 : 0,
+                    title: `${v.title} — CTR ${Number.isFinite(v.ctr) ? (v.ctr * 100).toFixed(1) : '?'}%`,
+                  }))}
+                  formatValue={(v) => `${v.toFixed(1)}%`}
+                />
+              ) : (
+                <p className="text-sm text-gray-400 py-8 text-center">No CTR data available for this channel yet</p>
+              )}
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-sm text-gray-500 mb-1">Period</p>
-              <p className="text-lg font-semibold text-gray-900">{analytics.period}</p>
-              <p className="text-xs text-gray-400 mt-1">{analytics.topPerformers.length} video(s) analysed</p>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col justify-between">
-              <p className="text-sm text-gray-500 mb-1">Retention Issues</p>
-              <p className="text-3xl font-bold text-gray-900">{analytics.retentionIssues.length}</p>
-              <p className="text-xs text-gray-400">drop-off point(s) detected</p>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h2 className="font-semibold text-gray-900 mb-2">Insight Breakdown</h2>
+              <p className="text-xs text-gray-400 mb-4">Impact of the findings across your channel</p>
+              <PastelDonut
+                segments={[
+                  { label: 'Positive', value: analytics.insights.filter((i) => i.impact === 'positive').length, color: '#9fd8a5' },
+                  { label: 'Negative', value: analytics.insights.filter((i) => i.impact === 'negative').length, color: '#f2a3c6' },
+                  { label: 'Neutral', value: analytics.insights.filter((i) => i.impact === 'neutral').length, color: '#c9d2e3' },
+                ]}
+              />
             </div>
           </div>
 
           {/* Summary */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <h2 className="font-semibold text-gray-900 mb-2">Summary</h2>
             <p className="text-sm text-gray-600">{analytics.summary}</p>
           </div>
 
           {/* Insights */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <h2 className="font-semibold text-gray-900 mb-4">Key Insights</h2>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {analytics.insights.map((insight, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
+                <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-[#f7f4fd]">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 mt-0.5 ${
+                    insight.impact === 'positive' ? 'bg-[#9fd8a5]' : insight.impact === 'negative' ? 'bg-[#f2a3c6]' : 'bg-[#c9d2e3]'
+                  }`}>
+                    {insight.impact === 'positive' ? <TrendingUp className="w-4 h-4" /> : insight.impact === 'negative' ? <TrendingDown className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
+                  </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{insight.metric}</span>
@@ -230,11 +283,11 @@ export default function AnalyticsPage() {
 
           {/* Top performers */}
           {analytics.topPerformers.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <h2 className="font-semibold text-gray-900 mb-4">Top Performers</h2>
               <div className="space-y-2">
                 {analytics.topPerformers.map((v, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg border border-gray-100">
+                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-[#f7f4fd]">
                     <p className="text-sm font-medium text-gray-800 flex-1 truncate">{v.title}</p>
                     <div className="flex gap-4 text-xs text-gray-500 ml-4 shrink-0">
                       <span>CTR {(v.ctr * 100).toFixed(1)}%</span>
