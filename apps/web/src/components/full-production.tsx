@@ -40,9 +40,16 @@ interface Props {
   progress: PipelineProgress | null;
 }
 
+const PRESETS = [
+  { value: 'LANDSCAPE', label: 'Landscape 16:9' },
+  { value: 'VERTICAL',  label: 'Vertical 9:16' },
+  { value: 'SQUARE',    label: 'Square 1:1' },
+] as const;
+
 export function FullProductionCard({ projectId, runningJob, progress }: Props) {
   const qc = useQueryClient();
   const [scope, setScope] = useState<(typeof SCOPES)[number]['value']>('FULL');
+  const [preset, setPreset] = useState<(typeof PRESETS)[number]['value']>('LANDSCAPE');
   const [refreshMedia, setRefreshMedia] = useState(false);
   const [error, setError] = useState('');
 
@@ -55,6 +62,7 @@ export function FullProductionCard({ projectId, runningJob, progress }: Props) {
   const generate = useMutation({
     mutationFn: () => api.jobs.enqueue(projectId, 'FULL_PRODUCTION', {
       scope,
+      preset,
       // Re-run media + render stages with the currently configured providers
       // (e.g. after adding a real voice key in Settings), keeping the script
       // pipeline cached
@@ -103,6 +111,13 @@ export function FullProductionCard({ projectId, runningJob, progress }: Props) {
               className="bg-white/15 border border-white/25 rounded-full px-3 py-2 text-sm text-white [&>option]:text-gray-800"
             >
               {SCOPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            <select
+              value={preset}
+              onChange={(e) => setPreset(e.target.value as typeof preset)}
+              className="bg-white/15 border border-white/25 rounded-full px-3 py-2 text-sm text-white [&>option]:text-gray-800"
+            >
+              {PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
             <button
               onClick={() => generate.mutate()}

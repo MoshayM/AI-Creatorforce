@@ -20,7 +20,9 @@ import { AssetsService } from '../modules/assets/assets.service';
 import { MediaService } from '../modules/media/media.service';
 import { StorageService } from '../modules/media/storage.service';
 import { ExportsService } from '../modules/media/exports.service';
-import { composeVideo, ffmpegPath, type ComposeScene } from '../modules/media/adapters/ffmpeg.util';
+import { composeVideo, ffmpegPath, runFfmpegCapture, type ComposeScene } from '../modules/media/adapters/ffmpeg.util';
+import { encodeWhooshWav } from '../modules/media/adapters/codec.util';
+import { checkDurations, analyzeLoudness } from '../modules/media/quality.util';
 import { buildSrt, buildVtt } from '../modules/media/subtitle.util';
 import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, type PipelineScope, type PipelineStage } from './pipeline-plan';
 import { EventsGateway } from '../gateway/events.gateway';
@@ -675,7 +677,21 @@ export class SupervisorWorker extends WorkerHost {
         if (!ffmpegPath()) {
           throw new Error('Renderer unavailable — ffmpeg binary not found. Install ffmpeg or the ffmpeg-static package.');
         }
-        this.log(jobId, projectId, 'Collecting assets for final render…');
+
+        // ── Feature 1: Render preset ────────────────────────────────────────
+        type RenderPreset = 'LANDSCAPE' | 'VERTICAL' | 'SQUARE';
+        const PRESET_DIMS: Record<RenderPreset, { width: number; height: number }> = {
+          LANDSCAPE: { width: 1280, height: 720 },
+          VERTICAL:  { width: 720,  height: 1280 },
+          SQUARE:    { width: 720,  height: 720 },
+        };
+        const rawPreset = (payload['preset'] as string | undefined)?.toUpperCase();
+        const preset: RenderPreset = (rawPreset && rawPreset in PRESET_DIMS)
+          ? (rawPreset as RenderPreset)
+          : 'LANDSCAPE';
+        const { width, height } = PRESET_DIMS[preset];
+
+        this.log(jobId, projectId, 'Collecting assets for final render…', `Preset: ${preset} (${width}×${height})`);
 
         const script = await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
         const plan = await this.lastResult<VideoScenePlanOutput>(projectId, 'VIDEO_SCENE_PLAN');
@@ -708,6 +724,28 @@ export class SupervisorWorker extends WorkerHost {
           if (videoPath) scenes.push({ videoPath, durationSecs: sceneDurations[i]! });
           else if (imagePath) scenes.push({ imagePath, durationSecs: sceneDurations[i]! });
         }
+
+        // ── Feature 3: Auto B-roll fill ──────────────────────────────────────
+        // If the script has more sections than covered scenes, generate still
+        // images for the uncovered sections and append them as B-roll.
+        const scriptSections = script?.sections ?? [];
+        if (scriptSections.length > scenes.length) {
+          const uncoveredSections = scriptSections.slice(scenes.length);
+          for (let i = 0; i < uncoveredSections.length; i++) {
+            const section = uncoveredSections[i]!;
+            const sectionIdx = scenes.length + i + 1;
+            const prompt = `${section.heading}: ${section.content.slice(0, 160)}`;
+            const stored = await this.media.generateImage(projectId, `B-roll · section ${sectionIdx}`, {
+              prompt,
+              width,
+              height,
+            });
+            const clampedDuration = Math.min(Math.max(section.durationEstimateSecs ?? 20, 5), 60);
+            scenes.push({ imagePath: stored.absPath, durationSecs: clampedDuration });
+          }
+          this.log(jobId, projectId, `Auto B-roll: filled ${uncoveredSections.length} uncovered section(s)`);
+        }
+
         if (scenes.length === 0) throw new Error('No scene videos or images available — run Scene Images / Scene Videos first.');
 
         const voicePath = resolveKey(voiceAssets[voiceAssets.length - 1]);
@@ -722,13 +760,65 @@ export class SupervisorWorker extends WorkerHost {
           await fsp.writeFile(subtitlePath, srtContent, 'utf8');
         }
 
+        // ── Feature 2: SFX — write whoosh WAV + compute transition timestamps ─
+        let sfxPath: string | undefined;
+        const sfxTimestamps: number[] = [];
+        {
+          // Scene boundaries: cumulative durations, excluding t=0 and the final end
+          let cumulative = 0;
+          for (let i = 0; i < scenes.length - 1; i++) {
+            cumulative += scenes[i]!.durationSecs;
+            sfxTimestamps.push(cumulative);
+          }
+          if (sfxTimestamps.length > 0) {
+            if (!tmpDir) {
+              tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cf-render-'));
+            }
+            sfxPath = path.join(tmpDir, 'whoosh.wav');
+            await fsp.writeFile(sfxPath, encodeWhooshWav(22050));
+            this.log(jobId, projectId, `SFX: ${sfxTimestamps.length} transition whoosh(es) aligned`);
+          }
+        }
+
+        // ── Feature 4: Quality analysis ──────────────────────────────────────
+        const totalSecsBeforeQuality = scenes.reduce((s, sc) => s + sc.durationSecs, 0);
+        const voiceAsset = voiceAssets[voiceAssets.length - 1];
+        const voiceDurationMs = voiceAsset?.versions[0]?.durationMs ?? undefined;
+        const lastCueEndMs = subtitles?.cues?.length
+          ? subtitles.cues[subtitles.cues.length - 1]?.endMs
+          : undefined;
+
+        const durationFindings = checkDurations({
+          totalSceneSecs: totalSecsBeforeQuality,
+          voiceDurationMs: voiceDurationMs ?? undefined,
+          scriptEstimateMins: script?.estimatedDurationMins,
+          lastCueEndMs: lastCueEndMs ?? undefined,
+        });
+        for (const f of durationFindings) {
+          if (f.level !== 'ok') this.log(jobId, projectId, `Quality: ${f.message}`);
+        }
+
+        // Use runFfmpegCapture for volumedetect (writes results to stderr)
+        const ffmpegRunForLoudness = (args: string[]) => runFfmpegCapture(['-hide_banner', ...args]);
+        const { findings: loudnessFindings, musicVolumeAdjust } = await analyzeLoudness(
+          ffmpegRunForLoudness,
+          voicePath,
+          musicPath,
+        );
+        for (const f of loudnessFindings) {
+          this.log(jobId, projectId, `Quality: ${f.message}`);
+        }
+
+        const allQualityFindings = [...durationFindings, ...loudnessFindings];
+        const effectiveMusicVolume = musicVolumeAdjust ?? 0.22;
+
         const t0 = Date.now();
         const totalSecs = scenes.reduce((s, sc) => s + sc.durationSecs, 0);
         this.log(jobId, projectId, 'Rendering final video…',
-          `${scenes.length} scene(s) · ~${Math.round(totalSecs)}s · voice: ${voicePath ? 'yes' : 'no'} · music: ${musicPath ? 'yes' : 'no'} · captions: ${subtitlePath ? 'burned' : 'none'}`);
+          `${scenes.length} scene(s) · ~${Math.round(totalSecs)}s · voice: ${voicePath ? 'yes' : 'no'} · music: ${musicPath ? 'yes' : 'no'} · captions: ${subtitlePath ? 'burned' : 'none'} · preset: ${preset}`);
         this.events.emitJobUpdate(jobId, { step: 'RENDER', status: 'RUNNING', scenes: scenes.length }, projectId);
 
-        const renderKey = `renders/${projectId}/final-1080p.mp4`;
+        const renderKey = `renders/${projectId}/final-${preset.toLowerCase()}.mp4`;
         const outPath = this.storage.resolve(renderKey);
         try {
           await composeVideo({
@@ -737,10 +827,11 @@ export class SupervisorWorker extends WorkerHost {
             musicPath,
             subtitlePath,
             outPath,
-            width: 1280,
-            height: 720,
+            width,
+            height,
             fps: 30,
-            musicVolume: 0.22,
+            musicVolume: effectiveMusicVolume,
+            ...(sfxPath && sfxTimestamps.length > 0 ? { sfx: { path: sfxPath, atSecs: sfxTimestamps } } : {}),
           });
         } finally {
           if (tmpDir) await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
@@ -748,7 +839,12 @@ export class SupervisorWorker extends WorkerHost {
 
         const stat = await fsp.stat(outPath);
         const renderAsset = await this.prisma.asset.create({
-          data: { projectId, kind: 'RENDER_SOURCE', label: 'Final render (1080p-ready, 1280×720)', status: 'READY' },
+          data: {
+            projectId,
+            kind: 'RENDER_SOURCE',
+            label: `Final render (${preset} ${width}×${height})`,
+            status: 'READY',
+          },
         });
         const renderVersion = await this.prisma.assetVersion.create({
           data: {
@@ -759,7 +855,14 @@ export class SupervisorWorker extends WorkerHost {
             model: 'libx264',
             provenance: {
               provider: 'ffmpeg', model: 'libx264', generatedAt: new Date().toISOString(),
-              inputs: { scenes: scenes.length, voice: !!voicePath, music: !!musicPath, subtitles: !!subtitlePath },
+              preset,
+              inputs: {
+                scenes: scenes.length,
+                voice: !!voicePath,
+                music: !!musicPath,
+                subtitles: !!subtitlePath,
+                sfxWhooshes: sfxTimestamps.length,
+              },
             } as never,
             sizeBytes: BigInt(stat.size),
             durationMs: Math.round(totalSecs * 1000),
@@ -768,10 +871,18 @@ export class SupervisorWorker extends WorkerHost {
         await this.prisma.asset.update({ where: { id: renderAsset.id }, data: { currentVersionId: renderVersion.id } });
 
         this.log(jobId, projectId, 'Final video rendered ✓',
-          `${(stat.size / 1024 / 1024).toFixed(1)} MB · ${Math.round(totalSecs)}s · ${Math.round((Date.now() - t0) / 1000)}s render time`);
-        await this.jobs.logStep(jobId, 'RenderWorker', 'compose', { scenes: scenes.length }, { renderKey, sizeBytes: stat.size }, 0, 0, Date.now() - t0);
+          `${(stat.size / 1024 / 1024).toFixed(1)} MB · ${Math.round(totalSecs)}s · ${Math.round((Date.now() - t0) / 1000)}s render time · preset ${preset}`);
+        await this.jobs.logStep(jobId, 'RenderWorker', 'compose', { scenes: scenes.length, preset }, { renderKey, sizeBytes: stat.size }, 0, 0, Date.now() - t0);
         this.events.emitJobUpdate(jobId, { step: 'RENDER', status: 'COMPLETED' }, projectId);
-        return { assetId: renderAsset.id, versionId: renderVersion.id, key: renderKey, sizeBytes: stat.size, durationSecs: Math.round(totalSecs) };
+        return {
+          assetId: renderAsset.id,
+          versionId: renderVersion.id,
+          key: renderKey,
+          sizeBytes: stat.size,
+          durationSecs: Math.round(totalSecs),
+          preset,
+          qualityReport: allQualityFindings,
+        };
       }
 
       case 'FULL_PRODUCTION': {
@@ -838,6 +949,7 @@ export class SupervisorWorker extends WorkerHost {
               if (payload['mood']) stagePayload['mood'] = payload['mood'];
               if (payload['genre']) stagePayload['genre'] = payload['genre'];
             }
+            if (stage.type === 'RENDER' && payload['preset']) stagePayload['preset'] = payload['preset'];
             const result = await this.dispatch(stage.type, projectId, child.id, stagePayload);
             await this.prisma.agentJob.update({
               where: { id: child.id },

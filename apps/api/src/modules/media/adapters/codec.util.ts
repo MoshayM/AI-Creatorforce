@@ -91,6 +91,58 @@ export function encodeGradientPng(
   ]);
 }
 
+// ── SFX synthesis ─────────────────────────────────────────────────────────────
+
+/**
+ * Generate a ~0.7s whoosh transition sound: white noise shaped by a decaying
+ * sine-swept amplitude envelope (frequency sensation falls from ~1200 Hz feel
+ * to ~200 Hz). Pure JS — no native deps.
+ */
+export function encodeWhooshWav(sampleRate = 22050): Buffer {
+  // 0.7 s of samples
+  const totalSamples = Math.round(sampleRate * 0.7);
+  const samples = new Float32Array(totalSamples);
+
+  // Simple LCG for deterministic pseudo-random noise (seed = 0xdeadbeef).
+  // Using Math.random() would produce non-deterministic output across runs;
+  // the LCG keeps the audio reproducible so asset caching works correctly.
+  let rng = 0xdeadbeef;
+  const nextRand = (): number => {
+    rng = Math.imul(rng ^ (rng >>> 13), 0x9e3779b9);
+    rng ^= rng >>> 17;
+    // Result in [-1, 1]
+    return ((rng >>> 0) / 0x80000000) - 1;
+  };
+
+  const attackSamples = Math.round(sampleRate * 0.1); // 0.1 s attack
+
+  for (let i = 0; i < totalSamples; i++) {
+    // Amplitude envelope: linear attack for 0.1 s then exponential decay to 0
+    const t = i / sampleRate; // time in seconds
+    let env: number;
+    if (i < attackSamples) {
+      env = i / attackSamples;
+    } else {
+      // Decay: falls from 1 to ~0 over remaining 0.6 s
+      const decayT = (i - attackSamples) / (totalSamples - attackSamples);
+      env = 1 - decayT;
+    }
+
+    // Bandpass-like sweep: multiply noise by a cosine at a sweeping frequency
+    // so the spectral character shifts from high to low (whoosh feel).
+    // freqHz linearly interpolates 1200 → 200 Hz over the clip.
+    const freqHz = 1200 - 1000 * (i / (totalSamples - 1));
+    // Integrate to get phase: cumulative sum ≈ freqHz * t
+    const phase = 2 * Math.PI * freqHz * t;
+    const shaped = nextRand() * Math.cos(phase);
+
+    // Peak gain 0.5 to keep headroom below 0 dBFS
+    samples[i] = shaped * env * 0.5;
+  }
+
+  return encodeWav(samples, sampleRate);
+}
+
 /** Deterministic color pair from a string seed — scene N always gets the same gradient. */
 export function seededGradient(seed: string): { top: [number, number, number]; bottom: [number, number, number] } {
   let h = 2166136261;

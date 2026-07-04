@@ -27,6 +27,23 @@ export function runFfmpeg(args: string[], timeoutMs = 600_000): Promise<void> {
   });
 }
 
+/**
+ * Like runFfmpeg but resolves with the combined stderr + stdout text even on
+ * exit code 0. volumedetect writes its results to stderr, so we must capture
+ * it. Still rejects on nonzero exit code.
+ */
+export function runFfmpegCapture(args: string[], timeoutMs = 120_000): Promise<string> {
+  const bin = ffmpegPath();
+  if (!bin) return Promise.reject(new Error('ffmpeg binary not available'));
+  return new Promise((resolve, reject) => {
+    execFile(bin, ['-y', '-hide_banner', ...args], { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const combined = `${stdout ?? ''}\n${stderr ?? ''}`;
+      if (err) reject(new Error(`ffmpeg failed: ${(stderr || err.message).slice(0, 500)}`));
+      else resolve(combined);
+    });
+  });
+}
+
 /** Escape a path for use inside an ffmpeg filter argument (subtitles=...). */
 export function escapeFilterPath(p: string): string {
   return p.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
@@ -37,6 +54,19 @@ export interface ComposeScene {
   videoPath?: string;
   imagePath?: string;
   durationSecs: number;
+}
+
+export interface SfxOptions {
+  /** Absolute path to the SFX audio file (mono WAV recommended). */
+  path: string;
+  /**
+   * Timestamps (in seconds from the start of the composed video) at which
+   * the SFX should play. Each occurrence becomes a separate ffmpeg input so
+   * that adelay can shift it to the right position without using asplit.
+   */
+  atSecs: number[];
+  /** Volume multiplier applied to every occurrence. Default 0.4. */
+  volume?: number;
 }
 
 export interface ComposeOptions {
@@ -51,6 +81,8 @@ export interface ComposeOptions {
   fps: number;
   /** Music level under narration (simple constant ducking). */
   musicVolume?: number;
+  /** Optional SFX track: one file played at multiple timestamps. */
+  sfx?: SfxOptions;
 }
 
 /**
@@ -94,6 +126,25 @@ export async function composeVideo(opts: ComposeOptions): Promise<void> {
     audioIdx++;
   }
 
+  // SFX: add one input per timestamp occurrence (simpler than asplit + delay
+  // chain), delay each to the correct position with adelay (takes ms, all=1
+  // for mono), apply volume, then mix everything together in the final amix.
+  const sfxLabels: string[] = [];
+  if (opts.sfx && opts.sfx.atSecs.length > 0) {
+    const sfxVol = opts.sfx.volume ?? 0.4;
+    opts.sfx.atSecs.forEach((atSec, i) => {
+      // One copy of the file per occurrence — no asplit needed
+      args.push('-i', opts.sfx!.path);
+      const delayMs = Math.round(atSec * 1000);
+      const label = `[sfx${i}]`;
+      // adelay=<ms>|<ms> (pipe-separated per-channel values) + all=1 is the
+      // correct syntax for mono files; all=1 avoids specifying channel count.
+      filters.push(`[${audioIdx}:a]volume=${sfxVol},adelay=${delayMs}|${delayMs}[sfx${i}]`);
+      sfxLabels.push(label);
+      audioIdx++;
+    });
+  }
+
   const concatIn = scenes.map((_, i) => `[v${i}]`).join('');
   const videoOut = subtitlePath ? '[vc]' : '[vout]';
   filters.push(`${concatIn}concat=n=${scenes.length}:v=1:a=0${videoOut}`);
@@ -101,12 +152,18 @@ export async function composeVideo(opts: ComposeOptions): Promise<void> {
     filters.push(`[vc]subtitles='${escapeFilterPath(subtitlePath)}'[vout]`);
   }
 
+  // Merge SFX labels into the audio input list before deciding mix strategy
+  const allAudioInputs = [...audioInputs, ...sfxLabels];
+
   let audioMap: string[] = [];
-  if (audioInputs.length === 2) {
-    filters.push(`${audioInputs.join('')}amix=inputs=2:duration=first:dropout_transition=2[aout]`);
+  if (allAudioInputs.length > 1) {
+    filters.push(`${allAudioInputs.join('')}amix=inputs=${allAudioInputs.length}:duration=first:dropout_transition=2[aout]`);
     audioMap = ['-map', '[aout]'];
-  } else if (audioInputs.length === 1) {
-    audioMap = ['-map', audioInputs[0]!.replace(/[[\]]/g, '').includes(':') ? audioInputs[0]!.slice(1, -1) : audioInputs[0]!];
+  } else if (allAudioInputs.length === 1) {
+    const only = allAudioInputs[0]!;
+    const inner = only.slice(1, -1);
+    // Stream specifiers ("3:a") map bare; filter labels ("[bgm]") keep brackets
+    audioMap = ['-map', inner.includes(':') ? inner : only];
   }
 
   await fs.mkdir(path.dirname(outPath), { recursive: true });
@@ -116,7 +173,7 @@ export async function composeVideo(opts: ComposeOptions): Promise<void> {
     '-map', '[vout]',
     ...audioMap,
     '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p',
-    ...(audioInputs.length ? ['-c:a', 'aac', '-b:a', '160k'] : []),
+    ...(allAudioInputs.length ? ['-c:a', 'aac', '-b:a', '160k'] : []),
     '-shortest',
     '-movflags', '+faststart',
     outPath,
