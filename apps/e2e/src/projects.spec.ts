@@ -86,7 +86,8 @@ test.describe('Project Detail', () => {
   test('shows AI production studio card with one-click generate', async ({ page }) => {
     await expect(page.getByText('AI Video Production Studio')).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('button', { name: /^generate$/i })).toBeVisible();
-    await expect(page.getByRole('combobox')).toBeVisible();
+    await expect(page.getByRole('combobox').first()).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Target platform' })).toBeVisible();
     await expect(page.getByText(/compliance-gated/i)).toBeVisible();
   });
 

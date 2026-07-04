@@ -158,7 +158,13 @@ export class SupervisorWorker extends WorkerHost {
       }
 
       case 'RESEARCH': {
-        const topic = payload['topic'] as string ?? project.title;
+        // Target platform shapes the research angle (short-form hooks for
+        // TikTok, professional tone for LinkedIn, audio-first for Podcast…)
+        const platform = payload['platform'] as string | undefined;
+        const baseTopic = payload['topic'] as string ?? project.title;
+        const topic = platform && platform !== 'YouTube'
+          ? `${baseTopic} — content formatted for ${platform}`
+          : baseTopic;
         const t0 = Date.now();
         this.log(jobId, projectId, 'Starting research…', `"${topic.slice(0, 70)}"`);
         const result = await this.content.research(topic, project.niche ?? undefined, project.targetLang);
@@ -827,6 +833,7 @@ export class SupervisorWorker extends WorkerHost {
             // Whitelisted user inputs flow to the stages that consume them
             const stagePayload: Record<string, unknown> = { pipelineMode: true };
             if (stage.type === 'RESEARCH' && payload['topic']) stagePayload['topic'] = payload['topic'];
+            if (stage.type === 'RESEARCH' && payload['platform']) stagePayload['platform'] = payload['platform'];
             if (stage.type === 'MUSIC_BRIEF') {
               if (payload['mood']) stagePayload['mood'] = payload['mood'];
               if (payload['genre']) stagePayload['genre'] = payload['genre'];

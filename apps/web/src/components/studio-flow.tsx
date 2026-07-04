@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Youtube, BarChart2, Lightbulb, FileText, Mic, Music, Clapperboard,
-  Play, RefreshCw, Loader2, CheckCircle, ChevronDown, ChevronUp, Save, Pencil,
+  Play, RefreshCw, Loader2, CheckCircle, ChevronDown, ChevronUp, Save, Pencil, AlertTriangle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { ElapsedBadge } from '@/components/ai-activity';
@@ -26,6 +26,7 @@ interface Job {
   startedAt?: string | null;
   completedAt?: string | null;
   result?: unknown;
+  error?: string | null;
 }
 
 interface ScriptResult {
@@ -47,6 +48,9 @@ interface Props {
 
 const RUNNING_STATES = ['PENDING', 'QUEUED', 'RUNNING'];
 
+// Target distribution platform — shapes research/script tone and format
+const PLATFORMS = ['YouTube', 'Facebook', 'Instagram', 'TikTok', 'LinkedIn', 'Podcast', 'Custom'] as const;
+
 function latest(jobs: Job[], type: string): Job | undefined {
   return jobs
     .filter((j) => j.type === type)
@@ -61,6 +65,49 @@ function isRunning(jobs: Job[], ...types: string[]): Job | undefined {
   return jobs
     .filter((j) => types.includes(j.type) && RUNNING_STATES.includes(j.status))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+}
+
+/** Latest FAILED job of the given types, unless a newer success/run supersedes it. */
+function latestFailure(jobs: Job[], ...types: string[]): Job | undefined {
+  const relevant = jobs
+    .filter((j) => types.includes(j.type))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return relevant[0]?.status === 'FAILED' ? relevant[0] : undefined;
+}
+
+function completedAt(jobs: Job[], type: string): string | undefined {
+  const j = latest(jobs, type);
+  return j?.status === 'COMPLETED' ? (j.completedAt ?? undefined) : undefined;
+}
+
+function StatusBadge({ state, updatedAt }: { state: 'done' | 'running' | 'failed' | 'notStarted'; updatedAt?: string }) {
+  if (state === 'running') {
+    return (
+      <span className="flex items-center gap-1 text-[11px] font-medium text-brand-700">
+        <Loader2 className="w-3 h-3 animate-spin" /> In progress
+      </span>
+    );
+  }
+  if (state === 'failed') {
+    return (
+      <span className="flex items-center gap-1 text-[11px] font-medium text-red-600">
+        <AlertTriangle className="w-3 h-3" /> Failed
+      </span>
+    );
+  }
+  if (state === 'done') {
+    return (
+      <span className="flex items-center gap-1 text-[11px] font-medium text-green-600" title={updatedAt ? `Last updated ${new Date(updatedAt).toLocaleString()}` : undefined}>
+        <CheckCircle className="w-3 h-3" />
+        Completed{updatedAt ? ` · ${new Date(updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 text-[11px] font-medium text-gray-400">
+      <span className="w-2 h-2 rounded-full bg-gray-300" /> Not started
+    </span>
+  );
 }
 
 // ── Small blob-backed media player (auth header needed, so no direct <audio src>) ──
@@ -99,20 +146,27 @@ function MediaPlayer({ versionId, kind }: { versionId: string; kind: 'audio' | '
 // ── Tile shell ────────────────────────────────────────────────────────────────
 
 function Tile({
-  icon, title, subtitle, status, running, expanded, onToggle, children, action,
+  icon, title, subtitle, status, running, failed, updatedAt, expanded, onToggle, children, action,
 }: {
   icon: React.ReactNode;
   title: string;
   subtitle: string;
   status: 'done' | 'ready' | 'locked';
   running?: Job;
+  failed?: Job;
+  updatedAt?: string;
   expanded: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
   action?: React.ReactNode;
 }) {
+  const badgeState = running ? 'running' : failed ? 'failed' : status === 'done' ? 'done' : 'notStarted';
   return (
-    <div className={`rounded-3xl p-5 transition-shadow ${status === 'locked' ? 'bg-[#f3effb] opacity-70' : 'bg-[#efe8fb] shadow-sm hover:shadow-md'}`}>
+    <div className={`rounded-3xl p-5 transition-all duration-200 ${
+      status === 'locked'
+        ? 'bg-[#f3effb] opacity-70'
+        : 'bg-[#efe8fb] shadow-sm hover:shadow-lg hover:-translate-y-0.5'
+    }`}>
       <div className="flex items-start gap-3">
         <div className="w-11 h-11 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-600 shrink-0">
           {icon}
@@ -120,26 +174,25 @@ function Tile({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p className="font-semibold text-gray-900">{title}</p>
-            {running ? (
-              <span className="flex items-center gap-1.5 text-xs text-brand-700">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <ElapsedBadge since={running.startedAt ?? running.createdAt} />
-              </span>
-            ) : status === 'done' ? (
-              <CheckCircle className="w-4 h-4 text-green-500" />
-            ) : null}
+            {running && <ElapsedBadge since={running.startedAt ?? running.createdAt} />}
           </div>
           <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {action}
-          {children && status !== 'locked' && (
-            <button onClick={onToggle} className="text-gray-400 hover:text-gray-600 p-1" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${title}`}>
-              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-          )}
-        </div>
+        {children && status !== 'locked' && (
+          <button onClick={onToggle} className="text-gray-400 hover:text-gray-600 p-1 shrink-0" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${title}`}>
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        )}
       </div>
+      <div className="flex items-center justify-between gap-2 mt-3.5">
+        <StatusBadge state={badgeState} updatedAt={updatedAt} />
+        {action}
+      </div>
+      {failed && !running && (
+        <p className="text-[11px] text-red-500 mt-2 line-clamp-2" title={(failed as { error?: string }).error ?? ''}>
+          {(failed as { error?: string }).error ?? 'The last run failed — try again.'}
+        </p>
+      )}
       {expanded && children && <div className="mt-4 bg-white rounded-2xl p-4 shadow-inner">{children}</div>}
     </div>
   );
@@ -168,6 +221,8 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
   const [error, setError] = useState('');
   const [topic, setTopic] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem(`cf_topic_${projectId}`) ?? '' : '');
+  const [platform, setPlatform] = useState<(typeof PLATFORMS)[number]>(() =>
+    (typeof window !== 'undefined' ? localStorage.getItem(`cf_platform_${projectId}`) : null) as (typeof PLATFORMS)[number] | null ?? 'YouTube');
   const [customTopic, setCustomTopic] = useState('');
   const [mood, setMood] = useState('');
   const [genre, setGenre] = useState('');
@@ -208,6 +263,11 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
     localStorage.setItem(`cf_topic_${projectId}`, t);
   }
 
+  function choosePlatform(p: (typeof PLATFORMS)[number]) {
+    setPlatform(p);
+    localStorage.setItem(`cf_platform_${projectId}`, p);
+  }
+
   const busy = enqueue.isPending || anyPipelineRunning;
 
   // Stage state
@@ -232,7 +292,26 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
 
   return (
     <div className="mb-6">
-      {/* Channel header (image.png: channel first) */}
+      {/* Content Pipeline header (design ref: 1.png) */}
+      <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Content Pipeline</h2>
+          <p className="text-xs text-gray-500">Create content step-by-step with AI</p>
+        </div>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          Platform
+          <select
+            value={platform}
+            onChange={(e) => choosePlatform(e.target.value as (typeof PLATFORMS)[number])}
+            className="border border-gray-200 bg-white rounded-full px-3 py-1.5 text-xs font-medium text-gray-700"
+            aria-label="Target platform"
+          >
+            {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </label>
+      </div>
+
+      {/* Channel strip (image.png: channel first) */}
       <div className="bg-[#e6dcf8] rounded-3xl px-6 py-4 mb-4 flex items-center gap-4 flex-wrap shadow-sm">
         <div className="w-11 h-11 rounded-2xl bg-white shadow-sm flex items-center justify-center shrink-0">
           <Youtube className="w-5 h-5 text-red-500" />
@@ -256,7 +335,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
 
       {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2 mb-3">{error}</p>}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {/* 1 · Analyse */}
         <Tile
           icon={<BarChart2 className="w-5 h-5" />}
@@ -264,6 +343,8 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
           subtitle="Find what's trending for this channel"
           status={analyseDone ? 'done' : 'ready'}
           running={isRunning(jobs, 'TREND_ANALYSIS')}
+          failed={latestFailure(jobs, 'TREND_ANALYSIS')}
+          updatedAt={completedAt(jobs, 'TREND_ANALYSIS')}
           expanded={expanded === 'analyse'}
           onToggle={() => toggle('analyse')}
           action={<RunButton label={analyseDone ? 'Re-run' : 'Run'} rerun={analyseDone} disabled={busy} onClick={() => enqueue.mutate({ type: 'TREND_ANALYSIS' })} />}
@@ -330,6 +411,8 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
           subtitle={script ? `"${script.title.slice(0, 40)}…"` : 'Research the topic and write the script'}
           status={scriptDone ? 'done' : effectiveTopic ? 'ready' : 'locked'}
           running={runningFoundation}
+          failed={latestFailure(jobs, 'RESEARCH', 'SCRIPT', 'FACT_CHECK', 'COMPLIANCE', 'FULL_PRODUCTION')}
+          updatedAt={completedAt(jobs, 'SCRIPT')}
           expanded={expanded === 'script'}
           onToggle={() => toggle('script')}
           action={
@@ -339,7 +422,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
               disabled={busy || !effectiveTopic}
               onClick={() => enqueue.mutate({
                 type: 'FULL_PRODUCTION',
-                payload: { scope: 'SCRIPT', topic: effectiveTopic, ...(scriptDone ? { regenerate: ['RESEARCH', 'SCRIPT', 'FACT_CHECK', 'COMPLIANCE'] } : {}) },
+                payload: { scope: 'SCRIPT', topic: effectiveTopic, platform, ...(scriptDone ? { regenerate: ['RESEARCH', 'SCRIPT', 'FACT_CHECK', 'COMPLIANCE'] } : {}) },
               })}
             />
           }
@@ -430,6 +513,8 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
           subtitle={voiceResult ? `${voiceResult.provider} · ${Math.round((voiceResult.durationMs ?? 0) / 1000)}s` : 'Narrate the script'}
           status={voiceResult ? 'done' : scriptDone ? 'ready' : 'locked'}
           running={isRunning(jobs, 'VOICE_SPEC', 'VOICE_GENERATE')}
+          failed={latestFailure(jobs, 'VOICE_SPEC', 'VOICE_GENERATE')}
+          updatedAt={completedAt(jobs, 'VOICE_GENERATE')}
           expanded={expanded === 'voice'}
           onToggle={() => toggle('voice')}
           action={
@@ -459,6 +544,8 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
           subtitle={musicResult ? `${musicResult.provider} · ${Math.round((musicResult.durationMs ?? 0) / 1000)}s` : 'Background music for the video'}
           status={musicResult ? 'done' : scriptDone ? 'ready' : 'locked'}
           running={isRunning(jobs, 'MUSIC_BRIEF', 'MUSIC_GENERATE')}
+          failed={latestFailure(jobs, 'MUSIC_BRIEF', 'MUSIC_GENERATE')}
+          updatedAt={completedAt(jobs, 'MUSIC_GENERATE')}
           expanded={expanded === 'music'}
           onToggle={() => toggle('music')}
           action={
@@ -511,6 +598,8 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
           subtitle={videoResult?.videos?.length ? `${videoResult.videos.length} scene(s) ready` : 'Storyboard, scene images & videos'}
           status={videoResult ? 'done' : scriptDone ? 'ready' : 'locked'}
           running={isRunning(jobs, 'VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE')}
+          failed={latestFailure(jobs, 'VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE')}
+          updatedAt={completedAt(jobs, 'VIDEO_GENERATE')}
           expanded={expanded === 'video'}
           onToggle={() => toggle('video')}
           action={
@@ -538,6 +627,10 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
           ) : <p className="text-sm text-gray-400">Run to storyboard the script and generate every scene.</p>}
         </Tile>
       </div>
+
+      <p className="text-xs text-gray-400 text-center mt-4">
+        💡 Complete each step in order for the best results.
+      </p>
     </div>
   );
 }
