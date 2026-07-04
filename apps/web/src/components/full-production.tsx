@@ -43,6 +43,7 @@ interface Props {
 export function FullProductionCard({ projectId, runningJob, progress }: Props) {
   const qc = useQueryClient();
   const [scope, setScope] = useState<(typeof SCOPES)[number]['value']>('FULL');
+  const [refreshMedia, setRefreshMedia] = useState(false);
   const [error, setError] = useState('');
 
   const { data: exportFiles = [] } = useQuery({
@@ -52,7 +53,13 @@ export function FullProductionCard({ projectId, runningJob, progress }: Props) {
   });
 
   const generate = useMutation({
-    mutationFn: () => api.jobs.enqueue(projectId, 'FULL_PRODUCTION', { scope }),
+    mutationFn: () => api.jobs.enqueue(projectId, 'FULL_PRODUCTION', {
+      scope,
+      // Re-run media + render stages with the currently configured providers
+      // (e.g. after adding a real voice key in Settings), keeping the script
+      // pipeline cached
+      ...(refreshMedia ? { regenerate: ['VOICE_GENERATE', 'IMAGE_GENERATE', 'MUSIC_GENERATE', 'VIDEO_GENERATE', 'EDIT_PLAN', 'RENDER'] } : {}),
+    }),
     onMutate: () => setError(''),
     onError: (err: unknown) => setError(getErrorMessage(err) || 'Failed to start production'),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['project', projectId] }),
@@ -108,6 +115,18 @@ export function FullProductionCard({ projectId, runningJob, progress }: Props) {
           </div>
         )}
       </div>
+
+      {!runningJob && (
+        <label className="mt-3 flex items-center gap-2 text-xs text-gray-400 cursor-pointer w-fit">
+          <input
+            type="checkbox"
+            checked={refreshMedia}
+            onChange={(e) => setRefreshMedia(e.target.checked)}
+            className="rounded border-gray-600 bg-gray-800"
+          />
+          Regenerate media with current providers (ignores cached voice/music/images and re-renders)
+        </label>
+      )}
 
       {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
 

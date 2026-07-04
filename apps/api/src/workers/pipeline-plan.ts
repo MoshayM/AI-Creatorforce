@@ -78,12 +78,14 @@ export function partitionResume(
   stages: PipelineStage[],
   completedTypes: ReadonlySet<string>,
   force: boolean,
+  forceTypes: ReadonlySet<string> = new Set(),
 ): { run: PipelineStage[]; skipped: PipelineStage[] } {
   if (force) return { run: [...stages], skipped: [] };
   const run: PipelineStage[] = [];
   const skipped: PipelineStage[] = [];
   for (const stage of stages) {
-    if (stage.type !== 'PACKAGE' && completedTypes.has(stage.type)) skipped.push(stage);
+    const cached = stage.type !== 'PACKAGE' && completedTypes.has(stage.type);
+    if (cached && !forceTypes.has(stage.type)) skipped.push(stage);
     else run.push(stage);
   }
   return { run, skipped };

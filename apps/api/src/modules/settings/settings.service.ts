@@ -6,6 +6,7 @@ const MANAGED_KEYS = [
   'OPENAI_API_KEY',
   'GEMINI_API_KEY',
   'YOUTUBE_API_KEY',
+  'ELEVENLABS_API_KEY',
 ] as const;
 
 type ManagedKey = (typeof MANAGED_KEYS)[number];
@@ -22,6 +23,7 @@ const LABELS: Record<ManagedKey, string> = {
   OPENAI_API_KEY: 'OpenAI API Key',
   GEMINI_API_KEY: 'Gemini API Key',
   YOUTUBE_API_KEY: 'YouTube Data API Key',
+  ELEVENLABS_API_KEY: 'ElevenLabs API Key (real voice narration)',
 };
 
 function mask(value: string): string {

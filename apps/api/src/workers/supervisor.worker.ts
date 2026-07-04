@@ -771,13 +771,16 @@ export class SupervisorWorker extends WorkerHost {
       case 'FULL_PRODUCTION': {
         const scope = (payload['scope'] as PipelineScope | undefined) ?? 'FULL';
         const force = !!payload['force'];
+        // Selective refresh (e.g. after the admin adds a real voice provider
+        // key): listed stages re-run even though they completed before.
+        const regenerate = new Set(Array.isArray(payload['regenerate']) ? (payload['regenerate'] as string[]) : []);
         const stages = planPipeline(scope);
 
         const completedJobs = await this.prisma.agentJob.findMany({
           where: { projectId, status: 'COMPLETED' },
           select: { type: true },
         });
-        const { run, skipped } = partitionResume(stages, new Set(completedJobs.map((j) => j.type as string)), force);
+        const { run, skipped } = partitionResume(stages, new Set(completedJobs.map((j) => j.type as string)), force, regenerate);
 
         // Resumed pipelines still honor the compliance gate: a previously
         // failed audit blocks media generation (claude.md golden rule 1).

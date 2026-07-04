@@ -52,6 +52,13 @@ describe('partitionResume', () => {
     expect(run.map((s) => s.type)).toEqual(['PACKAGE']);
   });
 
+  it('forceTypes re-runs listed stages even when previously completed', () => {
+    const stages = planPipeline('FULL');
+    const all = new Set(stages.map((s) => s.type as string));
+    const { run } = partitionResume(stages, all, false, new Set(['VOICE_GENERATE', 'RENDER']));
+    expect(run.map((s) => s.type)).toEqual(['VOICE_GENERATE', 'RENDER', 'PACKAGE']);
+  });
+
   it('force re-runs everything', () => {
     const stages = planPipeline('MUSIC');
     const { run, skipped } = partitionResume(stages, new Set(stages.map((s) => s.type as string)), true);

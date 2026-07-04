@@ -7,6 +7,7 @@ import type {
   GeneratedMedia, VoiceAdapter, ImageAdapter, MusicAdapter, VideoAdapter,
   VoiceRequest, ImageRequest, MusicRequest, SceneVideoRequest,
 } from './media.types';
+import { ElevenLabsVoiceAdapter } from './adapters/voice-elevenlabs.adapter';
 import { OpenAiVoiceAdapter } from './adapters/voice-openai.adapter';
 import { OfflineVoiceAdapter } from './adapters/voice-offline.adapter';
 import { OpenAiImageAdapter } from './adapters/image-openai.adapter';
@@ -42,7 +43,7 @@ export class MediaService {
 
   private readonly voice: AdapterChain<VoiceAdapter> = {
     configured: process.env['VOICE_PROVIDER'],
-    adapters: [new OpenAiVoiceAdapter(), new OfflineVoiceAdapter()],
+    adapters: [new ElevenLabsVoiceAdapter(), new OpenAiVoiceAdapter(), new OfflineVoiceAdapter()],
   };
   private readonly image: AdapterChain<ImageAdapter> = {
     configured: process.env['IMAGE_PROVIDER'],
@@ -97,8 +98,12 @@ export class MediaService {
     if (adapters.length === 0) throw new Error(`No available ${kind} provider adapters`);
 
     // Token optimization: never regenerate completed assets — identical
-    // request (kind+label+params) returns the cached version.
-    const requestHash = createHash('sha256').update(`${kind}:${label}:${JSON.stringify(req)}`).digest('hex');
+    // request (kind+label+params) returns the cached version. The preferred
+    // adapter is part of the hash so upgrading providers (e.g. admin adds an
+    // ElevenLabs key) naturally invalidates placeholder-era caches.
+    const requestHash = createHash('sha256')
+      .update(`${kind}:${label}:${adapters[0]!.name}:${JSON.stringify(req)}`)
+      .digest('hex');
     const cachedVersion = await this.prisma.assetVersion.findFirst({
       where: {
         params: { path: ['requestHash'], equals: requestHash },
