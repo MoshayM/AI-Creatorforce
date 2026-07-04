@@ -167,6 +167,9 @@ export async function composeVideo(opts: ComposeOptions): Promise<void> {
   }
 
   await fs.mkdir(path.dirname(outPath), { recursive: true });
+  // -shortest is unreliable with filter_complex outputs (audio can outlive the
+  // video track); cap the container to the scenes' total explicitly.
+  const totalSecs = scenes.reduce((s, sc) => s + sc.durationSecs, 0);
   await runFfmpeg([
     ...args,
     '-filter_complex', filters.join(';'),
@@ -174,6 +177,7 @@ export async function composeVideo(opts: ComposeOptions): Promise<void> {
     ...audioMap,
     '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p',
     ...(allAudioInputs.length ? ['-c:a', 'aac', '-b:a', '160k'] : []),
+    '-t', String(totalSecs),
     '-shortest',
     '-movflags', '+faststart',
     outPath,

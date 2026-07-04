@@ -157,12 +157,16 @@ function StatusBadge({ state, updatedAt }: { state: 'done' | 'running' | 'failed
 function MediaPlayer({ versionId, kind }: { versionId: string; kind: 'audio' | 'video' }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   async function load() {
     setLoading(true);
+    setLoadError(false);
     try {
       const res = await api.media.versionFile(versionId);
       setUrl(URL.createObjectURL(res.data as Blob));
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -170,14 +174,17 @@ function MediaPlayer({ versionId, kind }: { versionId: string; kind: 'audio' | '
 
   if (!url) {
     return (
-      <button
-        onClick={() => void load()}
-        disabled={loading}
-        className="flex items-center gap-1.5 text-xs font-medium text-brand-700 border border-brand-200 rounded-full px-3 py-1.5 hover:bg-brand-50 disabled:opacity-50"
-      >
-        {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-        {loading ? 'Loading…' : kind === 'audio' ? 'Play audio' : 'Play video'}
-      </button>
+      <span className="flex items-center gap-2">
+        <button
+          onClick={() => void load()}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs font-medium text-brand-700 border border-brand-200 rounded-full px-3 py-1.5 hover:bg-brand-50 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+          {loading ? 'Loading…' : loadError ? 'Retry' : kind === 'audio' ? 'Play audio' : 'Play video'}
+        </button>
+        {loadError && <span className="text-[11px] text-red-500">Couldn&rsquo;t load media</span>}
+      </span>
     );
   }
   return kind === 'audio'

@@ -1,13 +1,9 @@
-import { Controller, Get, Param, Req, UseGuards, StreamableFile, NotFoundException } from '@nestjs/common';
-import type { Request } from 'express';
+import { Controller, Get, Param, UseGuards, StreamableFile, NotFoundException } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from './storage.service';
 import { ExportsService } from './exports.service';
-
-interface AuthReq extends Request {
-  user: { id: string; email: string };
-}
 
 const MIME_BY_EXT: Record<string, string> = {
   mp4: 'video/mp4', mp3: 'audio/mpeg', wav: 'audio/wav', png: 'image/png',
@@ -29,12 +25,13 @@ export class MediaController {
   ) {}
 
   @Get('versions/:versionId/file')
-  async versionFile(@Param('versionId') versionId: string, @Req() req: AuthReq): Promise<StreamableFile> {
+  async versionFile(@Param('versionId') versionId: string, @CurrentUser() user: JwtPayload): Promise<StreamableFile> {
     const version = await this.prisma.assetVersion.findUnique({
       where: { id: versionId },
       include: { asset: { include: { project: { select: { userId: true } } } } },
     });
-    if (!version?.r2Key || version.asset.project.userId !== req.user.id || !this.storage.exists(version.r2Key)) {
+    // The JWT payload carries the user id in `sub` (there is no `id` field)
+    if (!version?.r2Key || version.asset.project.userId !== user.sub || !this.storage.exists(version.r2Key)) {
       throw new NotFoundException('Asset file not found');
     }
     const name = version.r2Key.split('/').pop() ?? 'file';
@@ -45,8 +42,8 @@ export class MediaController {
   }
 
   @Get('exports/:projectId')
-  async listExports(@Param('projectId') projectId: string, @Req() req: AuthReq) {
-    await this.assertOwner(projectId, req.user.id);
+  async listExports(@Param('projectId') projectId: string, @CurrentUser() user: JwtPayload) {
+    await this.assertOwner(projectId, user.sub);
     return this.exportsSvc.list(projectId);
   }
 
@@ -54,9 +51,9 @@ export class MediaController {
   async exportFile(
     @Param('projectId') projectId: string,
     @Param('fileName') fileName: string,
-    @Req() req: AuthReq,
+    @CurrentUser() user: JwtPayload,
   ): Promise<StreamableFile> {
-    await this.assertOwner(projectId, req.user.id);
+    await this.assertOwner(projectId, user.sub);
     return new StreamableFile(this.exportsSvc.fileStream(projectId, fileName), {
       type: mimeFor(fileName),
       disposition: `attachment; filename="${fileName}"`,
@@ -64,6 +61,7 @@ export class MediaController {
   }
 
   private async assertOwner(projectId: string, userId: string): Promise<void> {
+    if (!userId) throw new NotFoundException('Project not found');
     const project = await this.prisma.project.findFirst({ where: { id: projectId, userId }, select: { id: true } });
     if (!project) throw new NotFoundException('Project not found');
   }

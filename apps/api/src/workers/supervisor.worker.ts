@@ -472,8 +472,10 @@ export class SupervisorWorker extends WorkerHost {
           ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
         if (!script) throw new Error('Script not found — complete the Write Script step first.');
 
+        // Renders and uploads are pipeline outputs, not timeline inputs —
+        // feeding them to the edit-plan model makes it invent invalid clip kinds
         const projectAssets = await this.prisma.asset.findMany({
-          where: { projectId, deletedAt: null, status: { in: ['READY', 'ACCEPTED'] } },
+          where: { projectId, deletedAt: null, status: { in: ['READY', 'ACCEPTED'] }, kind: { notIn: ['RENDER_SOURCE', 'UPLOAD'] } },
           include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
         });
 
