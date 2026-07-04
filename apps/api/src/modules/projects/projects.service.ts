@@ -53,7 +53,18 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('Project not found');
-    return project;
+
+    // The pipeline tiles derive stage state from the latest COMPLETED job of
+    // each type; those can age out of the recent-10 window above, so merge in
+    // one latest-per-type row (distinct picks the first per type in desc order).
+    const latestPerType = await this.prisma.agentJob.findMany({
+      where: { projectId, status: 'COMPLETED' },
+      orderBy: { createdAt: 'desc' },
+      distinct: ['type'],
+    });
+    const seen = new Set(project.jobs.map((j) => j.id));
+    const merged = [...project.jobs, ...latestPerType.filter((j) => !seen.has(j.id))];
+    return { ...project, jobs: merged };
   }
 
   async update(userId: string, projectId: string, data: Partial<CreateProjectDto> & { status?: string }) {

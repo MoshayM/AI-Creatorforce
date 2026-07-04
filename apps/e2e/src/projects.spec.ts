@@ -91,10 +91,13 @@ test.describe('Project Detail', () => {
     await expect(page.getByText(/compliance-gated/i)).toBeVisible();
   });
 
-  test('shows run agent buttons', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /analyze trends/i })).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByRole('button', { name: /analyze audience/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /research topic/i })).toBeVisible();
+  test('analyse tile runs trend analysis', async ({ page }) => {
+    // Mock data has a completed TREND_ANALYSIS, so the Analyse tile offers Re-run;
+    // assert the click enqueues the right job type
+    const jobPost = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('/api/v1/jobs'));
+    await page.getByRole('button', { name: /re-run/i }).first().click();
+    const posted = (await jobPost).postDataJSON() as { type?: string };
+    expect(posted.type).toBe('TREND_ANALYSIS');
   });
 
   test('shows recent jobs list', async ({ page }) => {
@@ -110,8 +113,4 @@ test.describe('Project Detail', () => {
     await expect(page.getByText('WAITING_APPROVAL')).toBeVisible();
   });
 
-  test('clicking run agent enqueues job', async ({ page }) => {
-    await page.getByRole('button', { name: /analyze trends/i }).click();
-    await expect(page.getByRole('button', { name: /analyze trends/i })).toBeVisible({ timeout: 5_000 });
-  });
 });

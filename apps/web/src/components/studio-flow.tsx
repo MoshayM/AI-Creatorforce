@@ -161,13 +161,17 @@ function Tile({
   action?: React.ReactNode;
 }) {
   const badgeState = running ? 'running' : failed ? 'failed' : status === 'done' ? 'done' : 'notStarted';
+  const expandable = !!children && status !== 'locked';
   return (
     <div className={`rounded-3xl p-5 transition-all duration-200 ${
       status === 'locked'
         ? 'bg-[#f3effb] opacity-70'
         : 'bg-[#efe8fb] shadow-sm hover:shadow-lg hover:-translate-y-0.5'
     }`}>
-      <div className="flex items-start gap-3">
+      <div
+        className={`flex items-start gap-3 ${expandable ? 'cursor-pointer' : ''}`}
+        onClick={expandable ? onToggle : undefined}
+      >
         <div className="w-11 h-11 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-600 shrink-0">
           {icon}
         </div>
@@ -178,8 +182,8 @@ function Tile({
           </div>
           <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
         </div>
-        {children && status !== 'locked' && (
-          <button onClick={onToggle} className="text-gray-400 hover:text-gray-600 p-1 shrink-0" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${title}`}>
+        {expandable && (
+          <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className="text-gray-400 hover:text-gray-600 p-1 shrink-0" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${title}`}>
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
         )}
@@ -340,7 +344,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
         <Tile
           icon={<BarChart2 className="w-5 h-5" />}
           title="Analyse"
-          subtitle="Find what's trending for this channel"
+          subtitle="Trends, audience & channel intelligence"
           status={analyseDone ? 'done' : 'ready'}
           running={isRunning(jobs, 'TREND_ANALYSIS')}
           failed={latestFailure(jobs, 'TREND_ANALYSIS')}
@@ -349,16 +353,118 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
           onToggle={() => toggle('analyse')}
           action={<RunButton label={analyseDone ? 'Re-run' : 'Run'} rerun={analyseDone} disabled={busy} onClick={() => enqueue.mutate({ type: 'TREND_ANALYSIS' })} />}
         >
-          {trends.length ? (
-            <ul className="space-y-1.5">
-              {trends.map((t, i) => (
-                <li key={i} className="flex items-center justify-between text-sm text-gray-700">
-                  <span className="truncate">{t.topic}</span>
-                  <span className="text-xs font-bold text-brand-600 shrink-0 ml-2">{t.score}</span>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="text-sm text-gray-400">Run the analysis to see trending topics.</p>}
+          <>
+            {trends.length ? (
+              <ul className="space-y-1.5">
+                {trends.map((t, i) => (
+                  <li key={i} className="flex items-center justify-between text-sm text-gray-700">
+                    <span className="truncate">{t.topic}</span>
+                    <span className="text-xs font-bold text-brand-600 shrink-0 ml-2">{t.score}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-sm text-gray-400">Run the analysis to see trending topics.</p>}
+
+            {/* Channel intelligence rows */}
+            <div className="mt-4 border-t border-gray-100 pt-3 space-y-2">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Channel intelligence</p>
+
+              {/* Audience row */}
+              {(() => {
+                const audienceJob = latest(jobs, 'AUDIENCE_ANALYSIS');
+                const audienceDone = isDone(jobs, 'AUDIENCE_ANALYSIS');
+                const audienceRunning = isRunning(jobs, 'AUDIENCE_ANALYSIS');
+                const audienceResult = audienceDone
+                  ? (audienceJob?.result as { primaryDemographic?: string; summary?: string } | undefined)
+                  : undefined;
+                const audienceSummary = audienceResult?.primaryDemographic ?? audienceResult?.summary ?? '';
+                return (
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-medium text-gray-700 shrink-0">Audience</span>
+                    <span className="flex-1 text-gray-500 truncate text-right mr-2">
+                      {audienceRunning
+                        ? <span className="flex items-center justify-end gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Running…</span>
+                        : audienceSummary
+                          ? audienceSummary.slice(0, 60) + (audienceSummary.length > 60 ? '…' : '')
+                          : null}
+                    </span>
+                    <button
+                      onClick={() => enqueue.mutate({ type: 'AUDIENCE_ANALYSIS' })}
+                      disabled={busy}
+                      className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold border border-brand-200 text-brand-700 hover:bg-brand-50 disabled:opacity-40"
+                    >
+                      {audienceDone ? <RefreshCw className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                      {audienceDone ? 'Re-run' : 'Run'}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Channel report row */}
+              {(() => {
+                const analyticsJob = latest(jobs, 'ANALYTICS');
+                const analyticsDone = isDone(jobs, 'ANALYTICS');
+                const analyticsRunning = isRunning(jobs, 'ANALYTICS');
+                const analyticsResult = analyticsDone
+                  ? (analyticsJob?.result as { overallScore?: number; summary?: string; insights?: string[] } | undefined)
+                  : undefined;
+                const firstInsight = analyticsResult?.insights?.[0] ?? analyticsResult?.summary ?? '';
+                return (
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-medium text-gray-700 shrink-0">Channel report</span>
+                    <span className="flex-1 text-gray-500 truncate text-right mr-2">
+                      {analyticsRunning
+                        ? <span className="flex items-center justify-end gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Running…</span>
+                        : analyticsDone && analyticsResult
+                          ? `Score ${analyticsResult.overallScore ?? '?'}/100${firstInsight ? ` · ${firstInsight.slice(0, 40)}${firstInsight.length > 40 ? '…' : ''}` : ''}`
+                          : null}
+                    </span>
+                    <button
+                      onClick={() => enqueue.mutate({ type: 'ANALYTICS' })}
+                      disabled={busy}
+                      className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold border border-brand-200 text-brand-700 hover:bg-brand-50 disabled:opacity-40"
+                    >
+                      {analyticsDone ? <RefreshCw className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                      {analyticsDone ? 'Re-run' : 'Run'}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Growth ideas row */}
+              {(() => {
+                const growthJob = latest(jobs, 'GROWTH_REPORT');
+                const growthDone = isDone(jobs, 'GROWTH_REPORT');
+                const growthRunning = isRunning(jobs, 'GROWTH_REPORT');
+                const analyticsDone = isDone(jobs, 'ANALYTICS');
+                const growthResult = growthDone
+                  ? (growthJob?.result as { nextTopics?: Array<{ topic: string; rationale?: string; opportunityScore?: number }> } | undefined)
+                  : undefined;
+                const firstGrowthTopic = growthResult?.nextTopics?.[0]?.topic ?? '';
+                return (
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-medium text-gray-700 shrink-0">Growth ideas</span>
+                    <span className="flex-1 text-gray-500 truncate text-right mr-2">
+                      {growthRunning
+                        ? <span className="flex items-center justify-end gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Running…</span>
+                        : firstGrowthTopic
+                          ? firstGrowthTopic.slice(0, 50) + (firstGrowthTopic.length > 50 ? '…' : '')
+                          : null}
+                    </span>
+                    <button
+                      onClick={() => enqueue.mutate({ type: 'GROWTH_REPORT' })}
+                      disabled={busy || !analyticsDone}
+                      title={!analyticsDone ? 'Run Channel report first' : 'Run Growth ideas'}
+                      className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold border border-brand-200 text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {growthDone ? <RefreshCw className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                      {growthDone ? 'Re-run' : 'Run'}
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+          </>
         </Tile>
 
         {/* 2 · Suggestion */}
@@ -370,45 +476,71 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
           expanded={expanded === 'suggestion'}
           onToggle={() => toggle('suggestion')}
         >
-          <div className="space-y-3">
-            {trends.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {trends.map((t, i) => (
+          {(() => {
+            const growthJob = latest(jobs, 'GROWTH_REPORT');
+            const growthTopics = (growthJob?.status === 'COMPLETED'
+              ? (growthJob.result as { nextTopics?: Array<{ topic: string }> } | undefined)?.nextTopics
+              : undefined) ?? [];
+            return (
+              <div className="space-y-3">
+                {trends.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {trends.map((t, i) => (
+                      <button
+                        key={i}
+                        onClick={() => chooseTopic(t.topic)}
+                        className={`text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
+                          topic === t.topic ? 'bg-brand-600 text-white border-brand-600' : 'border-brand-200 text-brand-700 hover:bg-brand-50'
+                        }`}
+                      >
+                        {t.topic}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {growthTopics.length > 0 && (
+                  <>
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">From growth analysis</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {growthTopics.map((g, i) => (
+                        <button
+                          key={i}
+                          onClick={() => chooseTopic(g.topic)}
+                          className={`text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
+                            topic === g.topic ? 'bg-brand-600 text-white border-brand-600' : 'border-indigo-200 text-indigo-700 hover:bg-indigo-50'
+                          }`}
+                        >
+                          {g.topic}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    value={customTopic}
+                    onChange={(e) => setCustomTopic(e.target.value)}
+                    placeholder="…or write your own topic"
+                    className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400"
+                  />
                   <button
-                    key={i}
-                    onClick={() => chooseTopic(t.topic)}
-                    className={`text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
-                      topic === t.topic ? 'bg-brand-600 text-white border-brand-600' : 'border-brand-200 text-brand-700 hover:bg-brand-50'
-                    }`}
+                    onClick={() => customTopic.trim() && chooseTopic(customTopic.trim())}
+                    disabled={!customTopic.trim()}
+                    className="px-3 py-2 text-xs font-semibold bg-brand-600 text-white rounded-xl disabled:opacity-40"
                   >
-                    {t.topic}
+                    Use
                   </button>
-                ))}
+                </div>
               </div>
-            )}
-            <div className="flex gap-2">
-              <input
-                value={customTopic}
-                onChange={(e) => setCustomTopic(e.target.value)}
-                placeholder="…or write your own topic"
-                className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400"
-              />
-              <button
-                onClick={() => customTopic.trim() && chooseTopic(customTopic.trim())}
-                disabled={!customTopic.trim()}
-                className="px-3 py-2 text-xs font-semibold bg-brand-600 text-white rounded-xl disabled:opacity-40"
-              >
-                Use
-              </button>
-            </div>
-          </div>
+            );
+          })()}
         </Tile>
 
         {/* 3 · Script */}
         <Tile
           icon={<FileText className="w-5 h-5" />}
           title="Script"
-          subtitle={script ? `"${script.title.slice(0, 40)}…"` : 'Research the topic and write the script'}
+          subtitle={script ? `"${script.title.slice(0, 40)}…"` : effectiveTopic ? `Topic: ${effectiveTopic.slice(0, 40)}${effectiveTopic.length > 40 ? '…' : ''}` : 'Research the topic and write the script'}
           status={scriptDone ? 'done' : effectiveTopic ? 'ready' : 'locked'}
           running={runningFoundation}
           failed={latestFailure(jobs, 'RESEARCH', 'SCRIPT', 'FACT_CHECK', 'COMPLIANCE', 'FULL_PRODUCTION')}
@@ -427,83 +559,97 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
             />
           }
         >
-          {script ? (
-            scriptDraft ? (
-              <div className="space-y-3">
-                <input
-                  value={scriptDraft.title}
-                  onChange={(e) => setScriptDraft({ ...scriptDraft, title: e.target.value })}
-                  aria-label="Script title"
-                  className="w-full text-sm font-semibold px-3 py-2 border border-gray-200 rounded-xl"
-                />
-                <textarea
-                  value={scriptDraft.hook}
-                  onChange={(e) => setScriptDraft({ ...scriptDraft, hook: e.target.value })}
-                  aria-label="Hook"
-                  rows={2}
-                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl"
-                />
-                {scriptDraft.sections.map((s, i) => (
-                  <div key={i}>
-                    <input
-                      value={s.heading}
-                      onChange={(e) => setScriptDraft({ ...scriptDraft, sections: scriptDraft.sections.map((x, j) => j === i ? { ...x, heading: e.target.value } : x) })}
-                      aria-label={`Section ${i + 1} heading`}
-                      className="w-full text-xs font-semibold px-3 py-1.5 border border-gray-200 rounded-t-xl"
-                    />
-                    <textarea
-                      value={s.content}
-                      onChange={(e) => setScriptDraft({ ...scriptDraft, sections: scriptDraft.sections.map((x, j) => j === i ? { ...x, content: e.target.value } : x) })}
-                      aria-label={`Section ${i + 1} content`}
-                      rows={4}
-                      className="w-full text-sm px-3 py-2 border border-t-0 border-gray-200 rounded-b-xl"
-                    />
-                  </div>
-                ))}
-                <textarea
-                  value={scriptDraft.callToAction}
-                  onChange={(e) => setScriptDraft({ ...scriptDraft, callToAction: e.target.value })}
-                  aria-label="Call to action"
-                  rows={2}
-                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl"
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => saveScript.mutate(scriptDraft)}
-                    disabled={saveScript.isPending}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-xs font-semibold rounded-full disabled:opacity-50"
-                  >
-                    {saveScript.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                    Save edits
-                  </button>
-                  <button onClick={() => setScriptDraft(null)} className="px-4 py-2 text-xs text-gray-500">Cancel</button>
-                </div>
-                <p className="text-xs text-gray-400">Saved edits flow into voice, subtitles, and video automatically.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-gray-400">{script.totalWordCount ?? '?'} words · {script.sections.length} sections</p>
-                  <button
-                    onClick={() => setScriptDraft(JSON.parse(JSON.stringify(script)) as ScriptResult)}
-                    className="flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
-                  >
-                    <Pencil className="w-3 h-3" /> Edit script
-                  </button>
-                </div>
-                <p className="text-sm font-semibold text-gray-800">{script.title}</p>
-                <p className="text-sm text-gray-600 italic">&ldquo;{script.hook}&rdquo;</p>
-                <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
-                  {script.sections.map((s, i) => (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Script topic</label>
+              <input
+                value={effectiveTopic}
+                onChange={(e) => chooseTopic(e.target.value)}
+                placeholder="Pick a topic in Suggestion or type one here"
+                aria-label="Script topic"
+                className="mt-1 w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">Selected suggestions appear here automatically — edit freely before running.</p>
+            </div>
+            {script ? (
+              scriptDraft ? (
+                <div className="space-y-3">
+                  <input
+                    value={scriptDraft.title}
+                    onChange={(e) => setScriptDraft({ ...scriptDraft, title: e.target.value })}
+                    aria-label="Script title"
+                    className="w-full text-sm font-semibold px-3 py-2 border border-gray-200 rounded-xl"
+                  />
+                  <textarea
+                    value={scriptDraft.hook}
+                    onChange={(e) => setScriptDraft({ ...scriptDraft, hook: e.target.value })}
+                    aria-label="Hook"
+                    rows={2}
+                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl"
+                  />
+                  {scriptDraft.sections.map((s, i) => (
                     <div key={i}>
-                      <p className="text-xs font-semibold text-gray-500 uppercase">{s.heading}</p>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{s.content}</p>
+                      <input
+                        value={s.heading}
+                        onChange={(e) => setScriptDraft({ ...scriptDraft, sections: scriptDraft.sections.map((x, j) => j === i ? { ...x, heading: e.target.value } : x) })}
+                        aria-label={`Section ${i + 1} heading`}
+                        className="w-full text-xs font-semibold px-3 py-1.5 border border-gray-200 rounded-t-xl"
+                      />
+                      <textarea
+                        value={s.content}
+                        onChange={(e) => setScriptDraft({ ...scriptDraft, sections: scriptDraft.sections.map((x, j) => j === i ? { ...x, content: e.target.value } : x) })}
+                        aria-label={`Section ${i + 1} content`}
+                        rows={4}
+                        className="w-full text-sm px-3 py-2 border border-t-0 border-gray-200 rounded-b-xl"
+                      />
                     </div>
                   ))}
+                  <textarea
+                    value={scriptDraft.callToAction}
+                    onChange={(e) => setScriptDraft({ ...scriptDraft, callToAction: e.target.value })}
+                    aria-label="Call to action"
+                    rows={2}
+                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveScript.mutate(scriptDraft)}
+                      disabled={saveScript.isPending}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-xs font-semibold rounded-full disabled:opacity-50"
+                    >
+                      {saveScript.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                      Save edits
+                    </button>
+                    <button onClick={() => setScriptDraft(null)} className="px-4 py-2 text-xs text-gray-500">Cancel</button>
+                  </div>
+                  <p className="text-xs text-gray-400">Saved edits flow into voice, subtitles, and video automatically.</p>
                 </div>
-              </div>
-            )
-          ) : <p className="text-sm text-gray-400">Pick a topic, then run — includes fact-check and the compliance gate.</p>}
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-400">{script.totalWordCount ?? '?'} words · {script.sections.length} sections</p>
+                    <button
+                      onClick={() => setScriptDraft(JSON.parse(JSON.stringify(script)) as ScriptResult)}
+                      className="flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+                    >
+                      <Pencil className="w-3 h-3" /> Edit script
+                    </button>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-800">{script.title}</p>
+                  <p className="text-sm text-gray-600 italic">&ldquo;{script.hook}&rdquo;</p>
+                  <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+                    {script.sections.map((s, i) => (
+                      <div key={i}>
+                        <p className="text-xs font-semibold text-gray-500 uppercase">{s.heading}</p>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{s.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            ) : <p className="text-sm text-gray-400">Pick a topic, then run — includes fact-check and the compliance gate.</p>}
+
+          </div>
         </Tile>
 
         {/* 4 · Voice over */}
@@ -595,10 +741,10 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
         <Tile
           icon={<Clapperboard className="w-5 h-5" />}
           title="Video"
-          subtitle={videoResult?.videos?.length ? `${videoResult.videos.length} scene(s) ready` : 'Storyboard, scene images & videos'}
+          subtitle={videoResult?.videos?.length ? `${videoResult.videos.length} scene(s) ready` : 'Storyboard, scenes, subtitles & thumbnail'}
           status={videoResult ? 'done' : scriptDone ? 'ready' : 'locked'}
-          running={isRunning(jobs, 'VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE')}
-          failed={latestFailure(jobs, 'VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE')}
+          running={isRunning(jobs, 'VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE', 'SUBTITLE_GENERATE', 'THUMBNAIL')}
+          failed={latestFailure(jobs, 'VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE', 'SUBTITLE_GENERATE', 'THUMBNAIL')}
           updatedAt={completedAt(jobs, 'VIDEO_GENERATE')}
           expanded={expanded === 'video'}
           onToggle={() => toggle('video')}
@@ -609,7 +755,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Pro
               disabled={busy || !scriptDone}
               onClick={() => enqueue.mutate({
                 type: 'FULL_PRODUCTION',
-                payload: { scope: 'VIDEO', ...(videoResult ? { regenerate: ['VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE'] } : {}) },
+                payload: { scope: 'VIDEO', ...(videoResult ? { regenerate: ['VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE', 'SUBTITLE_GENERATE', 'THUMBNAIL'] } : {}) },
               })}
             />
           }
