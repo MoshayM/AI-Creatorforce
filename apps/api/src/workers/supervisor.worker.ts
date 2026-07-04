@@ -637,7 +637,7 @@ export class SupervisorWorker extends WorkerHost {
         const maxScenes = Math.min(plan.scenes.length, Number(payload['maxScenes'] ?? 8));
         const t0 = Date.now();
         this.log(jobId, projectId, `Generating ${maxScenes} scene video(s)…`);
-        const videos: Array<{ sceneId: string; assetId: string; provider: string; cached: boolean }> = [];
+        const videos: Array<{ sceneId: string; assetId: string; versionId: string; provider: string; cached: boolean }> = [];
         for (let i = 0; i < maxScenes; i++) {
           const scene = plan.scenes[i]!;
           let imagePath: string | undefined;
@@ -657,7 +657,7 @@ export class SupervisorWorker extends WorkerHost {
             width: 1280,
             height: 720,
           });
-          videos.push({ sceneId: scene.id, assetId: stored.assetId, provider: stored.provider, cached: stored.cached });
+          videos.push({ sceneId: scene.id, assetId: stored.assetId, versionId: stored.versionId, provider: stored.provider, cached: stored.cached });
           this.log(jobId, projectId, `Scene video ${i + 1}/${maxScenes} ${stored.cached ? 'reused ✓' : 'rendered ✓'}`, stored.provider);
         }
         await this.jobs.logStep(jobId, 'VideoAgent', 'generate', { scenes: maxScenes }, { videos }, 0, 0, Date.now() - t0);
@@ -765,7 +765,7 @@ export class SupervisorWorker extends WorkerHost {
           `${(stat.size / 1024 / 1024).toFixed(1)} MB · ${Math.round(totalSecs)}s · ${Math.round((Date.now() - t0) / 1000)}s render time`);
         await this.jobs.logStep(jobId, 'RenderWorker', 'compose', { scenes: scenes.length }, { renderKey, sizeBytes: stat.size }, 0, 0, Date.now() - t0);
         this.events.emitJobUpdate(jobId, { step: 'RENDER', status: 'COMPLETED' }, projectId);
-        return { assetId: renderAsset.id, key: renderKey, sizeBytes: stat.size, durationSecs: Math.round(totalSecs) };
+        return { assetId: renderAsset.id, versionId: renderVersion.id, key: renderKey, sizeBytes: stat.size, durationSecs: Math.round(totalSecs) };
       }
 
       case 'FULL_PRODUCTION': {
@@ -824,7 +824,14 @@ export class SupervisorWorker extends WorkerHost {
           });
           this.events.emitJobUpdate(child.id, { status: 'RUNNING', type: stage.type }, projectId);
           try {
-            const result = await this.dispatch(stage.type, projectId, child.id, { pipelineMode: true, ...(stage.type === 'RESEARCH' && payload['topic'] ? { topic: payload['topic'] } : {}) });
+            // Whitelisted user inputs flow to the stages that consume them
+            const stagePayload: Record<string, unknown> = { pipelineMode: true };
+            if (stage.type === 'RESEARCH' && payload['topic']) stagePayload['topic'] = payload['topic'];
+            if (stage.type === 'MUSIC_BRIEF') {
+              if (payload['mood']) stagePayload['mood'] = payload['mood'];
+              if (payload['genre']) stagePayload['genre'] = payload['genre'];
+            }
+            const result = await this.dispatch(stage.type, projectId, child.id, stagePayload);
             await this.prisma.agentJob.update({
               where: { id: child.id },
               data: { status: 'COMPLETED', result: result as never, completedAt: new Date() },

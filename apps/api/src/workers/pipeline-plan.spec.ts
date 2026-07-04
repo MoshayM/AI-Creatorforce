@@ -12,8 +12,13 @@ describe('planPipeline', () => {
     expect(types[types.length - 1]).toBe('PACKAGE');
   });
 
+  it('SCRIPT scope runs only the content foundation ending at the compliance gate', () => {
+    const types = planPipeline('SCRIPT').map((s) => s.type);
+    expect(types).toEqual(['RESEARCH', 'SCRIPT', 'FACT_CHECK', 'COMPLIANCE']);
+  });
+
   it('every scope passes through the compliance gate before any media generation', () => {
-    for (const scope of ['FULL', 'VOICE', 'MUSIC', 'IMAGES', 'VIDEO'] as const) {
+    for (const scope of ['FULL', 'SCRIPT', 'VOICE', 'MUSIC', 'IMAGES', 'VIDEO'] as const) {
       const stages = planPipeline(scope);
       const gateIdx = stages.findIndex((s) => s.type === 'COMPLIANCE');
       expect(gateIdx).toBeGreaterThanOrEqual(0);
@@ -24,7 +29,7 @@ describe('planPipeline', () => {
   });
 
   it('no scope includes PUBLISH — publishing stays human-approved', () => {
-    for (const scope of ['FULL', 'VOICE', 'MUSIC', 'IMAGES', 'VIDEO'] as const) {
+    for (const scope of ['FULL', 'SCRIPT', 'VOICE', 'MUSIC', 'IMAGES', 'VIDEO'] as const) {
       expect(planPipeline(scope).map((s) => s.type)).not.toContain('PUBLISH');
     }
   });

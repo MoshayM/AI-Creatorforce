@@ -58,6 +58,29 @@ export class JobsService {
     });
   }
 
+  /**
+   * Persist a user-edited stage result as a new COMPLETED job. Downstream
+   * stages read via lastResult() (latest completedAt wins), so edits flow
+   * into every later stage; write-once history is preserved — prior AI
+   * results are never mutated.
+   */
+  async overrideResult(projectId: string, type: JobType, result: unknown) {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+    if (!project) throw new NotFoundException('Project not found');
+    const now = new Date();
+    return this.prisma.agentJob.create({
+      data: {
+        projectId,
+        type,
+        status: 'COMPLETED',
+        payload: { editedByUser: true } as never,
+        result: result as never,
+        startedAt: now,
+        completedAt: now,
+      },
+    });
+  }
+
   async cancel(jobId: string) {
     const bJob = await this.queue.getJob(jobId);
     if (bJob) await bJob.remove();

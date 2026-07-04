@@ -26,8 +26,8 @@ test.describe('Projects', () => {
   });
 
   test('projects show status badge', async ({ page }) => {
-    await expect(page.getByText('ACTIVE')).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByText('DRAFT')).toBeVisible();
+    await expect(page.getByText('ACTIVE', { exact: true })).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText('DRAFT', { exact: true })).toBeVisible();
   });
 
   test('projects show job and video counts', async ({ page }) => {
@@ -73,7 +73,14 @@ test.describe('Project Detail', () => {
 
   test('shows project title and channel', async ({ page }) => {
     await expect(page.getByText('AI Tools Deep Dive')).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByText(/TechReview Pro/)).toBeVisible();
+    await expect(page.getByText(/TechReview Pro/).first()).toBeVisible();
+  });
+
+  test('shows guided studio flow with channel header and stage tiles', async ({ page }) => {
+    await expect(page.getByText('Producing for channel')).toBeVisible({ timeout: 8_000 });
+    for (const tile of ['Analyse', 'Suggestion', 'Script', 'Voice over', 'Music', 'Video']) {
+      await expect(page.getByText(tile, { exact: true })).toBeVisible();
+    }
   });
 
   test('shows AI production studio card with one-click generate', async ({ page }) => {

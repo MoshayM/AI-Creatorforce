@@ -1,0 +1,543 @@
+'use client';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Youtube, BarChart2, Lightbulb, FileText, Mic, Music, Clapperboard,
+  Play, RefreshCw, Loader2, CheckCircle, ChevronDown, ChevronUp, Save, Pencil,
+} from 'lucide-react';
+import { api } from '@/lib/api';
+import { ElapsedBadge } from '@/components/ai-activity';
+import { getErrorMessage } from '@/lib/getErrorMessage';
+
+/**
+ * Guided in-project production flow (design refs: image.png layout —
+ * channel → Analyse / Suggestion / Script / Voice over / Music / Video —
+ * with project.PNG's soft lavender clay tiles). Every tile wraps the
+ * compliance-gated pipeline with resume, and every stage result is editable:
+ * edits persist via the stage-override endpoint so downstream stages use
+ * the edited version.
+ */
+
+interface Job {
+  id: string;
+  type: string;
+  status: string;
+  createdAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  result?: unknown;
+}
+
+interface ScriptResult {
+  title: string;
+  hook: string;
+  sections: Array<{ heading: string; content: string; durationEstimateSecs?: number }>;
+  callToAction: string;
+  totalWordCount?: number;
+  estimatedDurationMins?: number;
+  sources?: string[];
+}
+
+interface Props {
+  projectId: string;
+  channel: { title: string; youtubeChannelId: string };
+  jobs: Job[];
+  anyPipelineRunning: boolean;
+}
+
+const RUNNING_STATES = ['PENDING', 'QUEUED', 'RUNNING'];
+
+function latest(jobs: Job[], type: string): Job | undefined {
+  return jobs
+    .filter((j) => j.type === type)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+}
+
+function isDone(jobs: Job[], type: string): boolean {
+  return latest(jobs, type)?.status === 'COMPLETED';
+}
+
+function isRunning(jobs: Job[], ...types: string[]): Job | undefined {
+  return jobs
+    .filter((j) => types.includes(j.type) && RUNNING_STATES.includes(j.status))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+}
+
+// ── Small blob-backed media player (auth header needed, so no direct <audio src>) ──
+
+function MediaPlayer({ versionId, kind }: { versionId: string; kind: 'audio' | 'video' }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await api.media.versionFile(versionId);
+      setUrl(URL.createObjectURL(res.data as Blob));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!url) {
+    return (
+      <button
+        onClick={() => void load()}
+        disabled={loading}
+        className="flex items-center gap-1.5 text-xs font-medium text-brand-700 border border-brand-200 rounded-full px-3 py-1.5 hover:bg-brand-50 disabled:opacity-50"
+      >
+        {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+        {loading ? 'Loading…' : kind === 'audio' ? 'Play audio' : 'Play video'}
+      </button>
+    );
+  }
+  return kind === 'audio'
+    ? <audio controls src={url} className="w-full h-9" />
+    : <video controls src={url} className="w-full rounded-xl max-h-56 bg-black" />;
+}
+
+// ── Tile shell ────────────────────────────────────────────────────────────────
+
+function Tile({
+  icon, title, subtitle, status, running, expanded, onToggle, children, action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  status: 'done' | 'ready' | 'locked';
+  running?: Job;
+  expanded: boolean;
+  onToggle: () => void;
+  children?: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-3xl p-5 transition-shadow ${status === 'locked' ? 'bg-[#f3effb] opacity-70' : 'bg-[#efe8fb] shadow-sm hover:shadow-md'}`}>
+      <div className="flex items-start gap-3">
+        <div className="w-11 h-11 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-600 shrink-0">
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-gray-900">{title}</p>
+            {running ? (
+              <span className="flex items-center gap-1.5 text-xs text-brand-700">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <ElapsedBadge since={running.startedAt ?? running.createdAt} />
+              </span>
+            ) : status === 'done' ? (
+              <CheckCircle className="w-4 h-4 text-green-500" />
+            ) : null}
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {action}
+          {children && status !== 'locked' && (
+            <button onClick={onToggle} className="text-gray-400 hover:text-gray-600 p-1" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${title}`}>
+              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
+      </div>
+      {expanded && children && <div className="mt-4 bg-white rounded-2xl p-4 shadow-inner">{children}</div>}
+    </div>
+  );
+}
+
+function RunButton({ label, onClick, disabled, rerun }: { label: string; onClick: () => void; disabled: boolean; rerun: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors disabled:opacity-40 ${
+        rerun ? 'border border-brand-300 text-brand-700 hover:bg-brand-50' : 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm'
+      }`}
+    >
+      {rerun ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+      {label}
+    </button>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning }: Props) {
+  const qc = useQueryClient();
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [topic, setTopic] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem(`cf_topic_${projectId}`) ?? '' : '');
+  const [customTopic, setCustomTopic] = useState('');
+  const [mood, setMood] = useState('');
+  const [genre, setGenre] = useState('');
+  const [scriptDraft, setScriptDraft] = useState<ScriptResult | null>(null);
+
+  const { data: channels = [] } = useQuery({
+    queryKey: ['channels'],
+    queryFn: () => api.channels.list().then((r) => r.data as Array<{ id: string; title: string; youtubeChannelId: string }>),
+  });
+
+  const invalidate = () => void qc.invalidateQueries({ queryKey: ['project', projectId] });
+
+  const enqueue = useMutation({
+    mutationFn: ({ type, payload }: { type: string; payload?: Record<string, unknown> }) =>
+      api.jobs.enqueue(projectId, type, payload),
+    onMutate: () => setError(''),
+    onError: (err: unknown) => setError(getErrorMessage(err) || 'Failed to start'),
+    onSettled: invalidate,
+  });
+
+  const switchChannel = useMutation({
+    mutationFn: (channelId: string) => api.projects.update(projectId, { channelId }),
+    onSettled: invalidate,
+  });
+
+  const saveScript = useMutation({
+    mutationFn: (result: ScriptResult) => {
+      const words = [result.hook, ...result.sections.map((s) => s.content), result.callToAction]
+        .join(' ').trim().split(/\s+/).length;
+      return api.jobs.overrideResult(projectId, 'SCRIPT', { ...result, totalWordCount: words });
+    },
+    onSuccess: () => { setScriptDraft(null); invalidate(); },
+    onError: (err: unknown) => setError(getErrorMessage(err) || 'Failed to save script'),
+  });
+
+  function chooseTopic(t: string) {
+    setTopic(t);
+    localStorage.setItem(`cf_topic_${projectId}`, t);
+  }
+
+  const busy = enqueue.isPending || anyPipelineRunning;
+
+  // Stage state
+  const analyseJob = latest(jobs, 'TREND_ANALYSIS');
+  const analyseDone = isDone(jobs, 'TREND_ANALYSIS');
+  const trends = (analyseJob?.result as { trending?: Array<{ topic: string; score: number }> } | undefined)?.trending ?? [];
+  const scriptJob = latest(jobs, 'SCRIPT');
+  const scriptDone = isDone(jobs, 'SCRIPT');
+  const script = scriptJob?.status === 'COMPLETED' ? (scriptJob.result as ScriptResult) : null;
+  const voiceJob = latest(jobs, 'VOICE_GENERATE');
+  const voiceResult = voiceJob?.status === 'COMPLETED' ? (voiceJob.result as { versionId?: string; provider?: string; durationMs?: number; notes?: string }) : null;
+  const musicJob = latest(jobs, 'MUSIC_GENERATE');
+  const musicResult = musicJob?.status === 'COMPLETED' ? (musicJob.result as { versionId?: string; provider?: string; durationMs?: number; notes?: string }) : null;
+  const musicBrief = latest(jobs, 'MUSIC_BRIEF')?.result as { mood?: string; genre?: string } | undefined;
+  const videoJob = latest(jobs, 'VIDEO_GENERATE');
+  const videoResult = videoJob?.status === 'COMPLETED' ? (videoJob.result as { videos?: Array<{ sceneId: string; versionId?: string; provider: string }> }) : null;
+
+  const runningFoundation = isRunning(jobs, 'RESEARCH', 'SCRIPT', 'FACT_CHECK', 'COMPLIANCE', 'FULL_PRODUCTION');
+  const effectiveTopic = topic || customTopic;
+
+  const toggle = (key: string) => setExpanded((e) => (e === key ? null : key));
+
+  return (
+    <div className="mb-6">
+      {/* Channel header (image.png: channel first) */}
+      <div className="bg-[#e6dcf8] rounded-3xl px-6 py-4 mb-4 flex items-center gap-4 flex-wrap shadow-sm">
+        <div className="w-11 h-11 rounded-2xl bg-white shadow-sm flex items-center justify-center shrink-0">
+          <Youtube className="w-5 h-5 text-red-500" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-gray-500">Producing for channel</p>
+          <p className="font-bold text-gray-900 truncate">{channel.title}</p>
+        </div>
+        {channels.length > 1 && (
+          <select
+            value={channels.find((c) => c.youtubeChannelId === channel.youtubeChannelId)?.id ?? ''}
+            onChange={(e) => switchChannel.mutate(e.target.value)}
+            disabled={switchChannel.isPending || busy}
+            aria-label="Switch channel"
+            className="border border-white bg-white/70 rounded-full px-3 py-1.5 text-xs text-gray-700"
+          >
+            {channels.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select>
+        )}
+      </div>
+
+      {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2 mb-3">{error}</p>}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* 1 · Analyse */}
+        <Tile
+          icon={<BarChart2 className="w-5 h-5" />}
+          title="Analyse"
+          subtitle="Find what's trending for this channel"
+          status={analyseDone ? 'done' : 'ready'}
+          running={isRunning(jobs, 'TREND_ANALYSIS')}
+          expanded={expanded === 'analyse'}
+          onToggle={() => toggle('analyse')}
+          action={<RunButton label={analyseDone ? 'Re-run' : 'Run'} rerun={analyseDone} disabled={busy} onClick={() => enqueue.mutate({ type: 'TREND_ANALYSIS' })} />}
+        >
+          {trends.length ? (
+            <ul className="space-y-1.5">
+              {trends.map((t, i) => (
+                <li key={i} className="flex items-center justify-between text-sm text-gray-700">
+                  <span className="truncate">{t.topic}</span>
+                  <span className="text-xs font-bold text-brand-600 shrink-0 ml-2">{t.score}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="text-sm text-gray-400">Run the analysis to see trending topics.</p>}
+        </Tile>
+
+        {/* 2 · Suggestion */}
+        <Tile
+          icon={<Lightbulb className="w-5 h-5" />}
+          title="Suggestion"
+          subtitle={effectiveTopic ? `Topic: ${effectiveTopic.slice(0, 40)}${effectiveTopic.length > 40 ? '…' : ''}` : 'Pick or write your video topic'}
+          status={effectiveTopic ? 'done' : analyseDone ? 'ready' : 'locked'}
+          expanded={expanded === 'suggestion'}
+          onToggle={() => toggle('suggestion')}
+        >
+          <div className="space-y-3">
+            {trends.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {trends.map((t, i) => (
+                  <button
+                    key={i}
+                    onClick={() => chooseTopic(t.topic)}
+                    className={`text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
+                      topic === t.topic ? 'bg-brand-600 text-white border-brand-600' : 'border-brand-200 text-brand-700 hover:bg-brand-50'
+                    }`}
+                  >
+                    {t.topic}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                value={customTopic}
+                onChange={(e) => setCustomTopic(e.target.value)}
+                placeholder="…or write your own topic"
+                className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400"
+              />
+              <button
+                onClick={() => customTopic.trim() && chooseTopic(customTopic.trim())}
+                disabled={!customTopic.trim()}
+                className="px-3 py-2 text-xs font-semibold bg-brand-600 text-white rounded-xl disabled:opacity-40"
+              >
+                Use
+              </button>
+            </div>
+          </div>
+        </Tile>
+
+        {/* 3 · Script */}
+        <Tile
+          icon={<FileText className="w-5 h-5" />}
+          title="Script"
+          subtitle={script ? `"${script.title.slice(0, 40)}…"` : 'Research the topic and write the script'}
+          status={scriptDone ? 'done' : effectiveTopic ? 'ready' : 'locked'}
+          running={runningFoundation}
+          expanded={expanded === 'script'}
+          onToggle={() => toggle('script')}
+          action={
+            <RunButton
+              label={scriptDone ? 'Re-run' : 'Run'}
+              rerun={scriptDone}
+              disabled={busy || !effectiveTopic}
+              onClick={() => enqueue.mutate({
+                type: 'FULL_PRODUCTION',
+                payload: { scope: 'SCRIPT', topic: effectiveTopic, ...(scriptDone ? { regenerate: ['RESEARCH', 'SCRIPT', 'FACT_CHECK', 'COMPLIANCE'] } : {}) },
+              })}
+            />
+          }
+        >
+          {script ? (
+            scriptDraft ? (
+              <div className="space-y-3">
+                <input
+                  value={scriptDraft.title}
+                  onChange={(e) => setScriptDraft({ ...scriptDraft, title: e.target.value })}
+                  aria-label="Script title"
+                  className="w-full text-sm font-semibold px-3 py-2 border border-gray-200 rounded-xl"
+                />
+                <textarea
+                  value={scriptDraft.hook}
+                  onChange={(e) => setScriptDraft({ ...scriptDraft, hook: e.target.value })}
+                  aria-label="Hook"
+                  rows={2}
+                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl"
+                />
+                {scriptDraft.sections.map((s, i) => (
+                  <div key={i}>
+                    <input
+                      value={s.heading}
+                      onChange={(e) => setScriptDraft({ ...scriptDraft, sections: scriptDraft.sections.map((x, j) => j === i ? { ...x, heading: e.target.value } : x) })}
+                      aria-label={`Section ${i + 1} heading`}
+                      className="w-full text-xs font-semibold px-3 py-1.5 border border-gray-200 rounded-t-xl"
+                    />
+                    <textarea
+                      value={s.content}
+                      onChange={(e) => setScriptDraft({ ...scriptDraft, sections: scriptDraft.sections.map((x, j) => j === i ? { ...x, content: e.target.value } : x) })}
+                      aria-label={`Section ${i + 1} content`}
+                      rows={4}
+                      className="w-full text-sm px-3 py-2 border border-t-0 border-gray-200 rounded-b-xl"
+                    />
+                  </div>
+                ))}
+                <textarea
+                  value={scriptDraft.callToAction}
+                  onChange={(e) => setScriptDraft({ ...scriptDraft, callToAction: e.target.value })}
+                  aria-label="Call to action"
+                  rows={2}
+                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => saveScript.mutate(scriptDraft)}
+                    disabled={saveScript.isPending}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-xs font-semibold rounded-full disabled:opacity-50"
+                  >
+                    {saveScript.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    Save edits
+                  </button>
+                  <button onClick={() => setScriptDraft(null)} className="px-4 py-2 text-xs text-gray-500">Cancel</button>
+                </div>
+                <p className="text-xs text-gray-400">Saved edits flow into voice, subtitles, and video automatically.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-400">{script.totalWordCount ?? '?'} words · {script.sections.length} sections</p>
+                  <button
+                    onClick={() => setScriptDraft(JSON.parse(JSON.stringify(script)) as ScriptResult)}
+                    className="flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+                  >
+                    <Pencil className="w-3 h-3" /> Edit script
+                  </button>
+                </div>
+                <p className="text-sm font-semibold text-gray-800">{script.title}</p>
+                <p className="text-sm text-gray-600 italic">&ldquo;{script.hook}&rdquo;</p>
+                <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+                  {script.sections.map((s, i) => (
+                    <div key={i}>
+                      <p className="text-xs font-semibold text-gray-500 uppercase">{s.heading}</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{s.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          ) : <p className="text-sm text-gray-400">Pick a topic, then run — includes fact-check and the compliance gate.</p>}
+        </Tile>
+
+        {/* 4 · Voice over */}
+        <Tile
+          icon={<Mic className="w-5 h-5" />}
+          title="Voice over"
+          subtitle={voiceResult ? `${voiceResult.provider} · ${Math.round((voiceResult.durationMs ?? 0) / 1000)}s` : 'Narrate the script'}
+          status={voiceResult ? 'done' : scriptDone ? 'ready' : 'locked'}
+          running={isRunning(jobs, 'VOICE_SPEC', 'VOICE_GENERATE')}
+          expanded={expanded === 'voice'}
+          onToggle={() => toggle('voice')}
+          action={
+            <RunButton
+              label={voiceResult ? 'Regenerate' : 'Run'}
+              rerun={!!voiceResult}
+              disabled={busy || !scriptDone}
+              onClick={() => enqueue.mutate({
+                type: 'FULL_PRODUCTION',
+                payload: { scope: 'VOICE', ...(voiceResult ? { regenerate: ['VOICE_SPEC', 'VOICE_GENERATE'] } : {}) },
+              })}
+            />
+          }
+        >
+          {voiceResult?.versionId ? (
+            <div className="space-y-2">
+              <MediaPlayer versionId={voiceResult.versionId} kind="audio" />
+              {voiceResult.notes && <p className="text-xs text-amber-600">{voiceResult.notes}</p>}
+            </div>
+          ) : <p className="text-sm text-gray-400">Run to generate the narration from your (edited) script.</p>}
+        </Tile>
+
+        {/* 5 · Music */}
+        <Tile
+          icon={<Music className="w-5 h-5" />}
+          title="Music"
+          subtitle={musicResult ? `${musicResult.provider} · ${Math.round((musicResult.durationMs ?? 0) / 1000)}s` : 'Background music for the video'}
+          status={musicResult ? 'done' : scriptDone ? 'ready' : 'locked'}
+          running={isRunning(jobs, 'MUSIC_BRIEF', 'MUSIC_GENERATE')}
+          expanded={expanded === 'music'}
+          onToggle={() => toggle('music')}
+          action={
+            <RunButton
+              label={musicResult ? 'Regenerate' : 'Run'}
+              rerun={!!musicResult}
+              disabled={busy || !scriptDone}
+              onClick={() => enqueue.mutate({
+                type: 'FULL_PRODUCTION',
+                payload: {
+                  scope: 'MUSIC',
+                  ...(mood.trim() ? { mood: mood.trim() } : {}),
+                  ...(genre.trim() ? { genre: genre.trim() } : {}),
+                  ...(musicResult ? { regenerate: ['MUSIC_BRIEF', 'MUSIC_GENERATE'] } : {}),
+                },
+              })}
+            />
+          }
+        >
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={mood}
+                onChange={(e) => setMood(e.target.value)}
+                placeholder={`Mood${musicBrief?.mood ? ` (current: ${musicBrief.mood})` : ' — e.g. uplifting'}`}
+                aria-label="Music mood"
+                className="text-xs px-3 py-2 border border-gray-200 rounded-xl"
+              />
+              <input
+                value={genre}
+                onChange={(e) => setGenre(e.target.value)}
+                placeholder={`Genre${musicBrief?.genre ? ` (current: ${musicBrief.genre})` : ' — e.g. cinematic'}`}
+                aria-label="Music genre"
+                className="text-xs px-3 py-2 border border-gray-200 rounded-xl"
+              />
+            </div>
+            {musicResult?.versionId ? (
+              <div className="space-y-2">
+                <MediaPlayer versionId={musicResult.versionId} kind="audio" />
+                {musicResult.notes && <p className="text-xs text-amber-600">{musicResult.notes}</p>}
+              </div>
+            ) : <p className="text-xs text-gray-400">Set a mood/genre (or leave blank for AI&rsquo;s pick) and run.</p>}
+          </div>
+        </Tile>
+
+        {/* 6 · Video */}
+        <Tile
+          icon={<Clapperboard className="w-5 h-5" />}
+          title="Video"
+          subtitle={videoResult?.videos?.length ? `${videoResult.videos.length} scene(s) ready` : 'Storyboard, scene images & videos'}
+          status={videoResult ? 'done' : scriptDone ? 'ready' : 'locked'}
+          running={isRunning(jobs, 'VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE')}
+          expanded={expanded === 'video'}
+          onToggle={() => toggle('video')}
+          action={
+            <RunButton
+              label={videoResult ? 'Regenerate' : 'Run'}
+              rerun={!!videoResult}
+              disabled={busy || !scriptDone}
+              onClick={() => enqueue.mutate({
+                type: 'FULL_PRODUCTION',
+                payload: { scope: 'VIDEO', ...(videoResult ? { regenerate: ['VIDEO_SCENE_PLAN', 'IMAGE_BRIEF', 'IMAGE_GENERATE', 'VIDEO_GENERATE'] } : {}) },
+              })}
+            />
+          }
+        >
+          {videoResult?.videos?.length ? (
+            <div className="space-y-2">
+              {videoResult.videos.map((v, i) => (
+                <div key={v.sceneId} className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-gray-600 truncate">Scene {i + 1} · {v.provider}</p>
+                  {v.versionId && <MediaPlayer versionId={v.versionId} kind="video" />}
+                </div>
+              ))}
+              <p className="text-xs text-gray-400 pt-1">Use the studio card above for the final render + upload-ready package.</p>
+            </div>
+          ) : <p className="text-sm text-gray-400">Run to storyboard the script and generate every scene.</p>}
+        </Tile>
+      </div>
+    </div>
+  );
+}

@@ -61,6 +61,8 @@ export const api = {
     get: (id: string) => apiClient.get(`/jobs/${id}`),
     listByProject: (projectId: string) => apiClient.get(`/jobs/project/${projectId}`),
     cancel: (id: string) => apiClient.delete(`/jobs/${id}`),
+    overrideResult: (projectId: string, type: string, result: Record<string, unknown>) =>
+      apiClient.patch(`/jobs/project/${projectId}/override/${type}`, { result }),
   },
   approvals: {
     listPending: () => apiClient.get('/approvals/pending'),
@@ -84,6 +86,8 @@ export const api = {
       apiClient.get<Array<{ name: string; sizeBytes: number }>>(`/media/exports/${projectId}`),
     downloadExport: (projectId: string, fileName: string) =>
       apiClient.get(`/media/exports/${projectId}/${encodeURIComponent(fileName)}`, { responseType: 'blob' }),
+    versionFile: (versionId: string) =>
+      apiClient.get(`/media/versions/${versionId}/file`, { responseType: 'blob' }),
   },
   settings: {
     getApiKeys: () =>
