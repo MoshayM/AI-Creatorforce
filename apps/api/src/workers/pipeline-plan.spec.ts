@@ -40,6 +40,23 @@ describe('planPipeline', () => {
     expect(voice).not.toContain('IMAGE_GENERATE');
     expect(voice).not.toContain('RENDER');
   });
+
+  it('VIDEO scope includes SUBTITLE_GENERATE and THUMBNAIL before PACKAGE', () => {
+    const video = planPipeline('VIDEO').map((s) => s.type);
+    expect(video).toContain('SUBTITLE_GENERATE');
+    expect(video).toContain('THUMBNAIL');
+    const subtitleIdx = video.indexOf('SUBTITLE_GENERATE');
+    const thumbnailIdx = video.indexOf('THUMBNAIL');
+    const packageIdx = video.indexOf('PACKAGE');
+    const videoGenIdx = video.indexOf('VIDEO_GENERATE');
+    // SUBTITLE_GENERATE and THUMBNAIL appear after VIDEO_GENERATE, before PACKAGE
+    expect(subtitleIdx).toBeGreaterThan(videoGenIdx);
+    expect(thumbnailIdx).toBeGreaterThan(videoGenIdx);
+    expect(subtitleIdx).toBeLessThan(packageIdx);
+    expect(thumbnailIdx).toBeLessThan(packageIdx);
+    // Final order: ...VIDEO_GENERATE, SUBTITLE_GENERATE, THUMBNAIL, PACKAGE
+    expect(video[video.length - 1]).toBe('PACKAGE');
+  });
 });
 
 describe('partitionResume', () => {

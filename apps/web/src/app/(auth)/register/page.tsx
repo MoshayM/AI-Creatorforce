@@ -30,14 +30,14 @@ export default function RegisterPage() {
         return;
       }
       localStorage.setItem('cf_token', MOCK_TOKEN);
-      router.push('/discover');
+      router.push('/projects');
       return;
     }
 
     try {
       const { data } = await api.auth.register(form.email, form.password, form.name);
       localStorage.setItem('cf_token', data.accessToken);
-      router.push('/discover');
+      router.push('/projects');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 409) {

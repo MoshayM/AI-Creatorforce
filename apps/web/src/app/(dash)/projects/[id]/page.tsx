@@ -1,17 +1,15 @@
 'use client';
 import { useState, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { getErrorMessage } from '@/lib/getErrorMessage';
 import { api } from '@/lib/api';
 import { useProjectJobEvents } from '@/hooks/use-job-events';
 import {
   Loader2, Play, CheckCircle, XCircle, Clock, AlertCircle,
-  ChevronDown, ChevronUp, ArrowLeft, TrendingUp, BookOpen,
-  FileText, ShieldCheck, Tag, ImageIcon, Upload, Users, Search,
-  Music, Sparkles, Zap, RefreshCw, Copy, Download, Check,
-  RotateCcw, ArrowRightLeft, Timer, Mic,
+  ChevronDown, ChevronUp, ArrowLeft,
+  Check, Copy, Download,
+  RotateCcw, ArrowRightLeft, Timer,
 } from 'lucide-react';
 import { ElapsedBadge, formatDuration } from '@/components/ai-activity';
 import { FullProductionCard, type PipelineProgress } from '@/components/full-production';
@@ -40,147 +38,6 @@ interface ProjectDetail {
 }
 
 type ContentType = 'VIDEO' | 'MUSIC' | 'SHORT';
-
-interface StageJob {
-  type: string;
-  label: string;
-  icon: React.ReactNode;
-  description: string;
-  requiresInput?: { key: string; placeholder: string };
-  requiresPrevious?: string;
-}
-
-interface Stage {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-  jobs: StageJob[];
-}
-
-// ─── Pipeline Definitions ─────────────────────────────────────────────────────
-
-const VIDEO_PIPELINE: Stage[] = [
-  {
-    id: 'discover', label: 'Discover', icon: <TrendingUp className="w-4 h-4" />,
-    jobs: [
-      { type: 'TREND_ANALYSIS', label: 'Analyze Trends', icon: <TrendingUp className="w-4 h-4" />, description: 'Identify top trending topics in your niche with virality scores and peak timing' },
-      { type: 'AUDIENCE_ANALYSIS', label: 'Analyze Audience', icon: <Users className="w-4 h-4" />, description: 'Map your target demographic — age, interests, watch behaviour, and engagement signals' },
-    ],
-  },
-  {
-    id: 'research', label: 'Research', icon: <BookOpen className="w-4 h-4" />,
-    jobs: [
-      { type: 'RESEARCH', label: 'Research Topic', icon: <BookOpen className="w-4 h-4" />, description: 'Deep-dive into your chosen topic with authoritative sources, key angles, and audience interest signals', requiresInput: { key: 'topic', placeholder: 'e.g. Best AI tools for YouTube creators in 2026' } },
-    ],
-  },
-  {
-    id: 'create', label: 'Create', icon: <FileText className="w-4 h-4" />,
-    jobs: [
-      { type: 'SCRIPT', label: 'Write Script', icon: <FileText className="w-4 h-4" />, description: 'Generate a full video script — hook, structured sections, and a strong call-to-action', requiresPrevious: 'RESEARCH' },
-      { type: 'FACT_CHECK', label: 'Fact Check', icon: <ShieldCheck className="w-4 h-4" />, description: 'Verify every claim in your script against source material before publishing', requiresPrevious: 'SCRIPT' },
-    ],
-  },
-  {
-    id: 'optimize', label: 'Optimize', icon: <Search className="w-4 h-4" />,
-    jobs: [
-      { type: 'COMPLIANCE', label: 'Compliance Audit', icon: <ShieldCheck className="w-4 h-4" />, description: 'Audit for copyright, advertiser-friendliness, hate speech, misinformation, and platform policy', requiresPrevious: 'SCRIPT' },
-      { type: 'METADATA', label: 'Generate Metadata', icon: <Tag className="w-4 h-4" />, description: 'SEO-optimized title (100 chars), description (5 000 chars), and tags for maximum organic reach', requiresPrevious: 'COMPLIANCE' },
-      { type: 'SEO_OPTIMIZATION', label: 'SEO Optimization', icon: <Search className="w-4 h-4" />, description: 'Keyword research, search volume analysis, and ranking strategy for YouTube discovery', requiresPrevious: 'METADATA' },
-    ],
-  },
-  {
-    id: 'assets', label: 'Assets (Beta)', icon: <Sparkles className="w-4 h-4" />,
-    jobs: [
-      { type: 'VOICE_SPEC', label: 'Voice Narration Spec', icon: <Mic className="w-4 h-4" />, description: 'Generate per-section TTS specifications with SSML markup, pacing, and pronunciation guides', requiresPrevious: 'SCRIPT' },
-      { type: 'IMAGE_BRIEF', label: 'Image Briefs', icon: <ImageIcon className="w-4 h-4" />, description: 'Create per-scene b-roll and still image generation prompts matched to your brand style', requiresPrevious: 'SCRIPT' },
-      { type: 'MUSIC_BRIEF', label: 'Music Brief', icon: <Music className="w-4 h-4" />, description: 'Generate mood, BPM, and instrument brief for AI music generation tools (Suno/Udio)', requiresPrevious: 'SCRIPT' },
-      { type: 'VIDEO_SCENE_PLAN', label: 'Video Scene Plan', icon: <Zap className="w-4 h-4" />, description: 'Create a shot list and per-scene video generation prompts for AI video tools (Runway/Pika)', requiresPrevious: 'SCRIPT' },
-      { type: 'SUBTITLE_GENERATE', label: 'Generate Subtitles', icon: <FileText className="w-4 h-4" />, description: 'Auto-generate timed subtitle cues (SRT/VTT) from script sections with brand styling', requiresPrevious: 'SCRIPT' },
-    ],
-  },
-  {
-    id: 'publish', label: 'Publish', icon: <Upload className="w-4 h-4" />,
-    jobs: [
-      { type: 'THUMBNAIL', label: 'Thumbnail Brief', icon: <ImageIcon className="w-4 h-4" />, description: 'AI-crafted visual concept — colour palette, text overlay, subject positioning, and emotional hook', requiresPrevious: 'METADATA' },
-      { type: 'PUBLISH', label: 'Publish to YouTube', icon: <Upload className="w-4 h-4" />, description: 'Push your approved content live to your connected YouTube channel', requiresPrevious: 'METADATA' },
-    ],
-  },
-];
-
-const MUSIC_PIPELINE: Stage[] = [
-  {
-    id: 'discover', label: 'Discover', icon: <TrendingUp className="w-4 h-4" />,
-    jobs: [
-      { type: 'TREND_ANALYSIS', label: 'Trending Sounds', icon: <TrendingUp className="w-4 h-4" />, description: 'Identify trending music genres, moods, lyric themes, and styles gaining momentum' },
-      { type: 'AUDIENCE_ANALYSIS', label: 'Listener Profile', icon: <Users className="w-4 h-4" />, description: 'Understand your listeners — genre preferences, playlist habits, and streaming behaviour' },
-    ],
-  },
-  {
-    id: 'concept', label: 'Concept', icon: <Sparkles className="w-4 h-4" />,
-    jobs: [
-      { type: 'RESEARCH', label: 'Develop Concept', icon: <Sparkles className="w-4 h-4" />, description: 'Build your song concept — theme, mood board, lyric direction, structure, and emotional arc', requiresInput: { key: 'topic', placeholder: 'e.g. Motivational gospel track for young adults facing doubt' } },
-    ],
-  },
-  {
-    id: 'create', label: 'Create', icon: <Music className="w-4 h-4" />,
-    jobs: [
-      { type: 'SCRIPT', label: 'Write Lyrics', icon: <Music className="w-4 h-4" />, description: 'Generate full lyrics — verse, pre-chorus, chorus, bridge — with hooks and singable phrasing', requiresPrevious: 'RESEARCH' },
-      { type: 'FACT_CHECK', label: 'Content Review', icon: <ShieldCheck className="w-4 h-4" />, description: 'Check lyric originality, cultural sensitivity, and theological accuracy (if applicable)', requiresPrevious: 'SCRIPT' },
-    ],
-  },
-  {
-    id: 'optimize', label: 'Optimize', icon: <Tag className="w-4 h-4" />,
-    jobs: [
-      { type: 'COMPLIANCE', label: 'Rights Audit', icon: <ShieldCheck className="w-4 h-4" />, description: 'Copyright clearance check, sampling advisory, and licensing compliance for music release', requiresPrevious: 'SCRIPT' },
-      { type: 'METADATA', label: 'Music Metadata', icon: <Tag className="w-4 h-4" />, description: 'Genre tags, mood descriptors, BPM estimate, album art brief, and streaming platform description', requiresPrevious: 'COMPLIANCE' },
-      { type: 'SEO_OPTIMIZATION', label: 'Discoverability', icon: <Search className="w-4 h-4" />, description: 'YouTube Music and streaming platform keyword strategy for organic discovery', requiresPrevious: 'METADATA' },
-    ],
-  },
-  {
-    id: 'release', label: 'Release', icon: <Upload className="w-4 h-4" />,
-    jobs: [
-      { type: 'THUMBNAIL', label: 'Album Art Brief', icon: <ImageIcon className="w-4 h-4" />, description: 'Visual concept for your single or EP artwork — style, colour story, and text treatment', requiresPrevious: 'METADATA' },
-      { type: 'PUBLISH', label: 'Release to YouTube', icon: <Upload className="w-4 h-4" />, description: 'Publish your music video or audio visualizer to your YouTube Music channel', requiresPrevious: 'METADATA' },
-    ],
-  },
-];
-
-const SHORT_PIPELINE: Stage[] = [
-  {
-    id: 'discover', label: 'Discover', icon: <TrendingUp className="w-4 h-4" />,
-    jobs: [
-      { type: 'TREND_ANALYSIS', label: 'Viral Trends', icon: <TrendingUp className="w-4 h-4" />, description: 'Find the trending Short formats, hook styles, and audio tracks dominating this week' },
-    ],
-  },
-  {
-    id: 'angle', label: 'Angle', icon: <Zap className="w-4 h-4" />,
-    jobs: [
-      { type: 'RESEARCH', label: 'Find the Angle', icon: <Zap className="w-4 h-4" />, description: 'Identify the perfect 30–60 second hook, narrative format, and delivery style for maximum retention', requiresInput: { key: 'topic', placeholder: 'e.g. One AI trick that saves 1 hour every day' } },
-    ],
-  },
-  {
-    id: 'create', label: 'Script', icon: <FileText className="w-4 h-4" />,
-    jobs: [
-      { type: 'SCRIPT', label: 'Write Short Script', icon: <FileText className="w-4 h-4" />, description: 'Punchy 45-second script engineered for instant retention — hook in 2 seconds, viral CTA at the end', requiresPrevious: 'RESEARCH' },
-    ],
-  },
-  {
-    id: 'optimize', label: 'Optimize', icon: <Tag className="w-4 h-4" />,
-    jobs: [
-      { type: 'COMPLIANCE', label: 'Compliance Check', icon: <ShieldCheck className="w-4 h-4" />, description: 'Policy compliance for YouTube Shorts monetization and ad-friendly status', requiresPrevious: 'SCRIPT' },
-      { type: 'METADATA', label: 'Shorts Metadata', icon: <Tag className="w-4 h-4" />, description: 'Title, hashtags, and description tuned for the Shorts algorithm and search discovery', requiresPrevious: 'COMPLIANCE' },
-    ],
-  },
-  {
-    id: 'publish', label: 'Publish', icon: <Upload className="w-4 h-4" />,
-    jobs: [
-      { type: 'THUMBNAIL', label: 'Cover Frame', icon: <ImageIcon className="w-4 h-4" />, description: 'Vertical thumbnail concept optimised for maximum CTR in the Shorts shelf', requiresPrevious: 'METADATA' },
-      { type: 'PUBLISH', label: 'Publish as Short', icon: <Upload className="w-4 h-4" />, description: 'Push your Short live to your YouTube Shorts feed with full metadata applied', requiresPrevious: 'METADATA' },
-    ],
-  },
-];
-
-const PIPELINES: Record<ContentType, Stage[]> = { VIDEO: VIDEO_PIPELINE, MUSIC: MUSIC_PIPELINE, SHORT: SHORT_PIPELINE };
 
 // ─── Status styling ───────────────────────────────────────────────────────────
 
@@ -603,13 +460,8 @@ function ResultPreview({ job }: { job: Job }) {
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const qc = useQueryClient();
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [inputs, setInputs] = useState<Record<string, string>>({});
-  const [enqueuingType, setEnqueuingType] = useState<string | null>(null);
-  const [runError, setRunError] = useState<string | null>(null);
-  const [lastRan, setLastRan] = useState<string | null>(null);
   // Live transient status per jobId (RETRYING, RATE_LIMITED, etc.)
   const [liveStatus, setLiveStatus] = useState<Record<string, { status: string; detail?: string }>>({});
   // Per-job activity log: messages streamed in real-time via WebSocket
@@ -660,59 +512,6 @@ export default function ProjectDetailPage() {
     refetchInterval: 10_000,
   });
 
-  const enqueueMutation = useMutation({
-    mutationFn: ({ type, payload }: { type: string; payload?: Record<string, unknown> }) =>
-      api.jobs.enqueue(id, type, payload),
-    onMutate: ({ type }) => {
-      setEnqueuingType(type);
-      setRunError(null);
-      setLastRan(null);
-    },
-    onSuccess: (_, { type }) => {
-      setLastRan(type);
-    },
-    onError: (err: unknown) => {
-      setRunError(getErrorMessage(err) || 'Failed to start agent');
-    },
-    onSettled: () => {
-      setEnqueuingType(null);
-      void qc.invalidateQueries({ queryKey: ['project', id] });
-    },
-  });
-
-  const pipeline = PIPELINES[contentType];
-
-  function latestJob(type: string): Job | undefined {
-    return project?.jobs
-      .filter((j) => j.type === type)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-  }
-
-  function stageStatus(stage: Stage): 'done' | 'running' | 'partial' | 'pending' {
-    const statuses = stage.jobs.map((sj) => latestJob(sj.type)?.status);
-    if (statuses.every((s) => s === 'COMPLETED')) return 'done';
-    if (statuses.some((s) => s === 'RUNNING' || s === 'QUEUED')) return 'running';
-    if (statuses.some((s) => s === 'COMPLETED' || s === 'WAITING_APPROVAL' || s === 'FAILED')) return 'partial';
-    return 'pending';
-  }
-
-  function canRun(sj: StageJob): boolean {
-    if (!sj.requiresPrevious) return true;
-    return latestJob(sj.requiresPrevious)?.status === 'COMPLETED';
-  }
-
-  function nextRecommendation(): { sj: StageJob; stage: Stage } | null {
-    for (const stage of pipeline) {
-      for (const sj of stage.jobs) {
-        const job = latestJob(sj.type);
-        if (!job || job.status === 'FAILED' || job.status === 'CANCELLED') {
-          if (canRun(sj)) return { sj, stage };
-        }
-      }
-    }
-    return null;
-  }
-
   function toggle(key: string) {
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -721,20 +520,10 @@ export default function ProjectDetailPage() {
     });
   }
 
-  function handleRun(sj: StageJob) {
-    const payload: Record<string, unknown> = {};
-    if (sj.requiresInput && inputs[sj.type]) {
-      payload[sj.requiresInput.key] = inputs[sj.type];
-    }
-    enqueueMutation.mutate({ type: sj.type, payload: Object.keys(payload).length ? payload : undefined });
-  }
-
   if (isLoading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-600" /></div>;
   }
   if (!project) return null;
-
-  const next = nextRecommendation();
 
   const CT_META: Record<ContentType, { label: string; color: string }> = {
     VIDEO: { label: 'YouTube Video', color: 'bg-red-100 text-red-700' },
@@ -785,302 +574,6 @@ export default function ProjectDetailPage() {
         anyPipelineRunning={project.jobs.some((j) => j.type === 'FULL_PRODUCTION' && ['RUNNING', 'QUEUED', 'PENDING'].includes(j.status))}
       />
 
-      {/* Pipeline Progress Bar */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Content Pipeline</h2>
-        <div className="flex items-center gap-0 overflow-x-auto">
-          {pipeline.map((stage, i) => {
-            const status = stageStatus(stage);
-            return (
-              <div key={stage.id} className="flex items-center flex-shrink-0">
-                <div className="flex flex-col items-center gap-1">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-                    status === 'done'    ? 'bg-green-500 text-white' :
-                    status === 'running' ? 'bg-blue-500 text-white' :
-                    status === 'partial' ? 'bg-brand-500 text-white' :
-                    'bg-gray-100 text-gray-400'
-                  }`}>
-                    {status === 'done' ? <CheckCircle className="w-5 h-5" /> :
-                     status === 'running' ? <Loader2 className="w-5 h-5 animate-spin" /> :
-                     stage.icon}
-                  </div>
-                  <span className={`text-xs font-medium ${
-                    status === 'done'    ? 'text-green-700' :
-                    status === 'running' ? 'text-blue-700' :
-                    status === 'partial' ? 'text-brand-700' :
-                    'text-gray-400'
-                  }`}>{stage.label}</span>
-                </div>
-                {i < pipeline.length - 1 && (
-                  <div className={`w-10 h-0.5 mx-1 mb-4 ${status === 'done' ? 'bg-green-400' : status === 'running' ? 'bg-blue-300' : 'bg-gray-200'}`} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Next Recommended Action */}
-      {next && (
-        <div className="bg-gradient-to-r from-brand-50 to-indigo-50 border border-brand-200 rounded-xl p-5 mb-5">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center text-white flex-shrink-0">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-brand-600 uppercase tracking-wide">Recommended Next Step</p>
-                <p className="text-gray-900 font-semibold mt-0.5">{next.sj.label}</p>
-                <p className="text-sm text-gray-600 mt-0.5">{next.sj.description}</p>
-              </div>
-            </div>
-            {!next.sj.requiresInput && (
-              <button
-                onClick={() => handleRun(next.sj)}
-                disabled={enqueueMutation.isPending}
-                className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-50 font-medium text-sm flex-shrink-0"
-              >
-                {enqueuingType === next.sj.type
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : <Play className="w-4 h-4" />}
-                Run Now
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Run feedback banners */}
-      {runError && (
-        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
-          <XCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-red-700">Agent failed to start</p>
-            <p className="text-xs text-red-600 mt-0.5">{runError}</p>
-          </div>
-          <button onClick={() => setRunError(null)} className="text-red-400 hover:text-red-600 text-xs flex-shrink-0">✕</button>
-        </div>
-      )}
-      {lastRan && !runError && (
-        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4">
-          <Loader2 className="w-4 h-4 text-blue-600 flex-shrink-0 animate-spin" />
-          <p className="text-sm text-blue-700 flex-1">
-            <span className="font-semibold">{lastRan.replace(/_/g, ' ')}</span> agent started — follow its live progress below.
-          </p>
-          <button onClick={() => setLastRan(null)} className="text-blue-400 hover:text-blue-600 text-xs flex-shrink-0">✕</button>
-        </div>
-      )}
-
-      {/* Pipeline Stages */}
-      <div className="space-y-4 mb-6">
-        {pipeline.map((stage) => (
-          <div key={stage.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            {/* Stage header */}
-            <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-              <span className="text-brand-600">{stage.icon}</span>
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">{stage.label}</h3>
-              <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
-                stageStatus(stage) === 'done'    ? 'bg-green-100 text-green-700' :
-                stageStatus(stage) === 'running' ? 'bg-blue-100 text-blue-700' :
-                stageStatus(stage) === 'partial' ? 'bg-amber-100 text-amber-700' :
-                'bg-gray-100 text-gray-500'
-              }`}>
-                {stageStatus(stage) === 'done'    ? '✓ Complete' :
-                 stageStatus(stage) === 'running' ? '⟳ Running' :
-                 stageStatus(stage) === 'partial' ? 'Partial' : 'Not started'}
-              </span>
-            </div>
-
-            {/* Stage jobs */}
-            <div className="divide-y divide-gray-50">
-              {stage.jobs.map((sj) => {
-                const job = latestJob(sj.type);
-                const runnable = canRun(sj);
-                const isEnqueuing = enqueuingType === sj.type;
-                const expandKey = `stage-${sj.type}`;
-                const isExpanded = expandedIds.has(expandKey);
-                const hasResult = job?.status === 'COMPLETED' && job.result != null;
-                // Use transient live status (RETRYING, RATE_LIMITED, etc.) if job is RUNNING
-                const live = job?.status === 'RUNNING' ? liveStatus[job.id] : undefined;
-                const displayStatus = live?.status ?? job?.status;
-
-                return (
-                  <div key={sj.type} className="px-6 py-4">
-                    <div className="flex items-start gap-4">
-                      {/* Job type icon */}
-                      <div className={`mt-0.5 w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        job?.status === 'COMPLETED'       ? 'bg-green-100 text-green-600' :
-                        job?.status === 'RUNNING'         ? 'bg-blue-100 text-blue-600' :
-                        job?.status === 'FAILED'          ? 'bg-red-100 text-red-600' :
-                        job?.status === 'WAITING_APPROVAL'? 'bg-orange-100 text-orange-600' :
-                        job?.status === 'QUEUED'          ? 'bg-gray-100 text-gray-400' :
-                        'bg-gray-50 text-gray-300'
-                      }`}>
-                        {job?.status === 'RUNNING'
-                          ? <Loader2 className="w-4 h-4 animate-spin" />
-                          : sj.icon}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        {/* Job header row */}
-                        <div className="flex items-start gap-3 flex-wrap">
-                          <div className="flex-1">
-                            <p className="font-semibold text-gray-900 text-sm">{sj.label}</p>
-                            <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{sj.description}</p>
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {job && displayStatus && (
-                              <div className="flex flex-col items-end gap-0.5">
-                                <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_BADGE[displayStatus] ?? 'bg-gray-100 text-gray-600'}`}>
-                                  {STATUS_ICON[displayStatus]}
-                                  {STATUS_LABEL[displayStatus] ?? displayStatus}
-                                </span>
-                                {job.status === 'RUNNING' && (
-                                  <ElapsedBadge since={job.startedAt ?? job.createdAt} className="pr-1" />
-                                )}
-                                {live?.detail && (
-                                  <span className="text-xs text-gray-400 pr-1">{live.detail}</span>
-                                )}
-                              </div>
-                            )}
-                            {hasResult && (
-                              <button
-                                onClick={() => toggle(expandKey)}
-                                className="flex items-center gap-1 text-brand-600 hover:text-brand-700 text-xs font-medium"
-                              >
-                                Results {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleRun(sj)}
-                              disabled={isEnqueuing || enqueueMutation.isPending || !runnable}
-                              aria-label={sj.label}
-                              title={!runnable && sj.requiresPrevious ? `Complete ${sj.requiresPrevious.replace(/_/g, ' ')} first` : sj.label}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                                !runnable
-                                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                  : job?.status === 'COMPLETED'
-                                    ? 'border border-gray-300 text-gray-600 hover:bg-gray-50'
-                                    : 'bg-brand-600 text-white hover:bg-brand-700'
-                              }`}
-                            >
-                              {isEnqueuing
-                                ? <Loader2 className="w-3 h-3 animate-spin" />
-                                : job?.status === 'COMPLETED'
-                                  ? <RefreshCw className="w-3 h-3" />
-                                  : <Play className="w-3 h-3" />}
-                              {job?.status === 'COMPLETED' ? 'Re-run' : 'Run'}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Topic input for research-style jobs */}
-                        {sj.requiresInput && runnable && (!job || job.status === 'FAILED') && (
-                          <div className="mt-3">
-                            <input
-                              value={inputs[sj.type] ?? ''}
-                              onChange={(e) => setInputs((p) => ({ ...p, [sj.type]: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === 'Enter' && inputs[sj.type]) handleRun(sj); }}
-                              placeholder={sj.requiresInput.placeholder}
-                              className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400 placeholder-gray-400"
-                            />
-                            <p className="text-xs text-gray-400 mt-1">Press Enter or click Run</p>
-                          </div>
-                        )}
-
-                        {/* Prerequisite notice */}
-                        {!runnable && sj.requiresPrevious && (
-                          <p className="mt-2 text-xs text-amber-600 flex items-center gap-1.5">
-                            <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                            Complete <strong>{sj.requiresPrevious.replace(/_/g, ' ').toLowerCase()}</strong> first to unlock this step
-                          </p>
-                        )}
-
-                        {/* Waiting approval message */}
-                        {job?.status === 'WAITING_APPROVAL' && (
-                          <p className="mt-2 text-xs text-orange-600 flex items-center gap-1.5">
-                            <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                            Awaiting your review in <Link href="/approvals" className="underline font-medium">Approval Center</Link>
-                          </p>
-                        )}
-
-                        {/* Error display */}
-                        {job?.status === 'FAILED' && job.error && (
-                          <p className="mt-2 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
-                            <span className="font-semibold">Error:</span> {job.error}
-                          </p>
-                        )}
-
-                        {/* Live activity log — shown while RUNNING, collapsible when done */}
-                        {job && (() => {
-                          const logs = jobLogs[job.id];
-                          if (!logs || logs.length === 0) return null;
-                          const isRunning = job.status === 'RUNNING';
-                          const logKey = `log-${job.id}`;
-                          const logOpen = isRunning || expandedIds.has(logKey);
-                          return (
-                            <div className="mt-3">
-                              {!isRunning && (
-                                <button
-                                  onClick={() => toggle(logKey)}
-                                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 mb-1.5"
-                                >
-                                  {logOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                                  Activity log ({logs.length} steps)
-                                </button>
-                              )}
-                              {logOpen && (
-                                <div className="bg-gray-950 rounded-lg px-3.5 py-2.5 font-mono space-y-1 overflow-y-auto max-h-48">
-                                  {isRunning && (
-                                    <p className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5">
-                                      <Loader2 className="w-3 h-3 animate-spin text-green-500" />
-                                      <span className="text-green-500 font-medium">Agent running</span>
-                                      <ElapsedBadge since={job.startedAt ?? job.createdAt} className="!text-gray-500" />
-                                    </p>
-                                  )}
-                                  {logs.map((entry, i) => {
-                                    const isLast = i === logs.length - 1;
-                                    return (
-                                      <div key={i} className="flex items-start gap-2 text-xs leading-relaxed">
-                                        <span className={`flex-shrink-0 mt-0.5 ${isLast && isRunning ? 'text-green-400' : 'text-gray-600'}`}>
-                                          {isLast && isRunning ? '▶' : '·'}
-                                        </span>
-                                        <span className={isLast && isRunning ? 'text-green-300' : 'text-gray-300'}>
-                                          {entry.msg}
-                                          {entry.detail && (
-                                            <span className="text-gray-500 ml-2">— {entry.detail}</span>
-                                          )}
-                                        </span>
-                                        {isLast && isRunning && (
-                                          <span className="text-green-500 animate-pulse ml-0.5 flex-shrink-0">●</span>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Expanded result */}
-                        {isExpanded && job && (
-                          <div className="mt-3 bg-gray-50 border border-gray-100 rounded-xl p-4">
-                            <ResultPreview job={job} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-
       {/* Full Job History */}
       <div className="bg-white border border-gray-200 rounded-xl">
         <div className="px-6 py-4 border-b border-gray-100">
@@ -1097,6 +590,16 @@ export default function ProjectDetailPage() {
             {project.jobs.map((job) => {
               const histKey = `hist-${job.id}`;
               const isExpanded = expandedIds.has(histKey);
+              // Live transient status
+              const live = job.status === 'RUNNING' ? liveStatus[job.id] : undefined;
+              const displayStatus = live?.status ?? job.status;
+              // Activity logs for this job
+              const logs = jobLogs[job.id];
+              const hasLogs = logs && logs.length > 0;
+              const logKey = `log-${job.id}`;
+              const isJobRunning = job.status === 'RUNNING';
+              const logOpen = isJobRunning || expandedIds.has(logKey);
+
               return (
                 <div key={job.id} className="px-6 py-3">
                   <div className="flex items-center justify-between gap-3">
@@ -1113,6 +616,18 @@ export default function ProjectDetailPage() {
                       {job.status === 'RUNNING' && (
                         <ElapsedBadge since={job.startedAt ?? job.createdAt} />
                       )}
+                      {/* Transient live status badge */}
+                      {live && (
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_BADGE[displayStatus] ?? 'bg-gray-100 text-gray-600'}`}>
+                            {STATUS_ICON[displayStatus]}
+                            {STATUS_LABEL[displayStatus] ?? displayStatus}
+                          </span>
+                          {live.detail && (
+                            <span className="text-xs text-gray-400">{live.detail}</span>
+                          )}
+                        </div>
+                      )}
                       <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_BADGE[job.status] ?? 'bg-gray-100 text-gray-600'}`}>
                         {STATUS_ICON[job.status]}
                         {job.status}
@@ -1124,6 +639,52 @@ export default function ProjectDetailPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Live activity log — open while RUNNING, collapsible when done */}
+                  {hasLogs && (
+                    <div className="mt-2">
+                      {!isJobRunning && (
+                        <button
+                          onClick={() => toggle(logKey)}
+                          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 mb-1.5"
+                        >
+                          {logOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          Activity log ({logs.length} steps)
+                        </button>
+                      )}
+                      {logOpen && (
+                        <div className="bg-gray-950 rounded-lg px-3.5 py-2.5 font-mono space-y-1 overflow-y-auto max-h-48">
+                          {isJobRunning && (
+                            <p className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5">
+                              <Loader2 className="w-3 h-3 animate-spin text-green-500" />
+                              <span className="text-green-500 font-medium">Agent running</span>
+                              <ElapsedBadge since={job.startedAt ?? job.createdAt} className="!text-gray-500" />
+                            </p>
+                          )}
+                          {logs.map((entry, i) => {
+                            const isLast = i === logs.length - 1;
+                            return (
+                              <div key={i} className="flex items-start gap-2 text-xs leading-relaxed">
+                                <span className={`flex-shrink-0 mt-0.5 ${isLast && isJobRunning ? 'text-green-400' : 'text-gray-600'}`}>
+                                  {isLast && isJobRunning ? '▶' : '·'}
+                                </span>
+                                <span className={isLast && isJobRunning ? 'text-green-300' : 'text-gray-300'}>
+                                  {entry.msg}
+                                  {entry.detail && (
+                                    <span className="text-gray-500 ml-2">— {entry.detail}</span>
+                                  )}
+                                </span>
+                                {isLast && isJobRunning && (
+                                  <span className="text-green-500 animate-pulse ml-0.5 flex-shrink-0">●</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {isExpanded && !!job.result && (
                     <div className="mt-3 bg-gray-50 border border-gray-100 rounded-xl p-4">
                       <ResultPreview job={job} />

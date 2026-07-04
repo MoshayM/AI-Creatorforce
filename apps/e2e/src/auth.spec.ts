@@ -32,16 +32,16 @@ test.describe('Authentication', () => {
     await page.getByLabel('Email').fill('test@creatorforce.ai');
     await page.getByLabel('Password', { exact: true }).fill('TestPass123!');
     await page.getByRole('button', { name: /^login$/i }).click();
-    // Extended timeout: /discover may need compilation on first hit (~8s)
-    await page.waitForURL(/\/discover/, { timeout: 25_000 });
-    expect(page.url()).toContain('/discover');
+    // Extended timeout: /projects may need compilation on first hit (~8s)
+    await page.waitForURL(/\/projects/, { timeout: 25_000 });
+    expect(page.url()).toContain('/projects');
   });
 
   test('login stores token in localStorage', async ({ page }) => {
     await page.getByLabel('Email').fill('test@creatorforce.ai');
     await page.getByLabel('Password', { exact: true }).fill('TestPass123!');
     await page.getByRole('button', { name: /^login$/i }).click();
-    await page.waitForURL(/\/discover/, { timeout: 25_000 });
+    await page.waitForURL(/\/projects/, { timeout: 25_000 });
     const token = await page.evaluate(() => localStorage.getItem('cf_token'));
     expect(token).toBeTruthy();
     expect(token).toBe('mock-jwt-token-for-testing');
@@ -52,8 +52,8 @@ test.describe('Authentication', () => {
     await page.getByLabel(/email/i).fill('newuser@example.com');
     await page.getByLabel('Password', { exact: true }).fill('NewPass123!');
     await page.getByRole('button', { name: /sign up/i }).click();
-    await page.waitForURL(/\/discover/, { timeout: 25_000 });
-    expect(page.url()).toContain('/discover');
+    await page.waitForURL(/\/projects/, { timeout: 25_000 });
+    expect(page.url()).toContain('/projects');
   });
 
   test('login to register navigation works', async ({ page }) => {
@@ -69,6 +69,7 @@ test.describe('Authentication', () => {
 
   test('unauthenticated user redirected from dashboard', async ({ page }) => {
     // token already removed in beforeEach
+    // /discover still exists and still requires auth — redirect to login
     await page.goto('/discover');
     await page.waitForURL(/\/login/, { timeout: 8_000 });
     expect(page.url()).toContain('/login');
@@ -76,7 +77,7 @@ test.describe('Authentication', () => {
 
   test('logout clears token and redirects to login', async ({ page }) => {
     await page.evaluate(() => localStorage.setItem('cf_token', 'mock-jwt-token-for-testing'));
-    await page.goto('/discover');
+    await page.goto('/projects');
     await page.waitForLoadState('domcontentloaded');
     await page.getByRole('button', { name: /sign out/i }).click();
     await page.waitForURL(/\/login/, { timeout: 8_000 });

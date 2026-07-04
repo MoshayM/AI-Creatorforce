@@ -2,15 +2,12 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Lightbulb, FolderOpen, CheckSquare, Activity, Settings, LogOut, Zap, BarChart2, Layers, Palette } from 'lucide-react';
+import { FolderOpen, CheckSquare, Activity, Settings, LogOut, Zap, Palette } from 'lucide-react';
 
 const NAV = [
-  { href: '/discover', icon: Lightbulb, label: 'Discover' },
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
   { href: '/approvals', icon: CheckSquare, label: 'Approvals' },
   { href: '/jobs', icon: Activity, label: 'Jobs' },
-  { href: '/assets', icon: Layers, label: 'Assets' },
-  { href: '/analytics', icon: BarChart2, label: 'Analytics' },
   { href: '/brand-kit', icon: Palette, label: 'Brand Kit' },
   { href: '/settings', icon: Settings, label: 'Settings' },
 ];

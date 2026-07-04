@@ -26,7 +26,7 @@ export default function LoginPage() {
     if (MOCK_MODE) {
       if (email && password) {
         localStorage.setItem('cf_token', MOCK_TOKEN);
-        router.push('/discover');
+        router.push('/projects');
       } else {
         setError('Invalid email or password');
         setLoading(false);
@@ -37,7 +37,7 @@ export default function LoginPage() {
     try {
       const { data } = await api.auth.login(email, password);
       localStorage.setItem('cf_token', data.accessToken);
-      router.push('/discover');
+      router.push('/projects');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 401) {

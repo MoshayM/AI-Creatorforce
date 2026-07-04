@@ -61,6 +61,8 @@ const SCOPE_STAGES: Record<PipelineScope, PipelineStage[]> = {
     S('IMAGE_BRIEF', 'Image Briefs', 35),
     S('IMAGE_GENERATE', 'Scene Images', 40),
     S('VIDEO_GENERATE', 'Scene Videos', 60),
+    S('SUBTITLE_GENERATE', 'Subtitles', 45),
+    S('THUMBNAIL', 'Thumbnail', 10),
     S('PACKAGE', 'Package', 5),
   ],
 };

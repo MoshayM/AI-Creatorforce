@@ -8,24 +8,28 @@ test.describe('Navigation', () => {
   });
 
   test('sidebar renders all nav links', async ({ page }) => {
-    await page.goto('/discover');
+    await page.goto('/projects');
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('a[href="/discover"]')).toBeVisible();
     await expect(page.locator('a[href="/projects"]')).toBeVisible();
     await expect(page.locator('a[href="/approvals"]')).toBeVisible();
     await expect(page.locator('a[href="/jobs"]')).toBeVisible();
+    await expect(page.locator('a[href="/brand-kit"]')).toBeVisible();
     await expect(page.locator('a[href="/settings"]')).toBeVisible();
+    // Removed links must not appear in the sidebar
+    await expect(page.locator('a[href="/discover"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/analytics"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/assets"]')).toHaveCount(0);
   });
 
   test('sidebar shows brand name', async ({ page }) => {
-    await page.goto('/discover');
+    await page.goto('/projects');
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByText('AI CreatorForce')).toBeVisible();
     await expect(page.getByText('AI Content Platform')).toBeVisible();
   });
 
   test('navigate to Projects page', async ({ page }) => {
-    await page.goto('/discover');
+    await page.goto('/projects');
     await page.waitForLoadState('domcontentloaded');
     await page.locator('a[href="/projects"]').click();
     await page.waitForURL(/\/projects/, { timeout: 50_000 });
@@ -34,7 +38,7 @@ test.describe('Navigation', () => {
   });
 
   test('navigate to Approvals page', async ({ page }) => {
-    await page.goto('/discover');
+    await page.goto('/projects');
     await page.waitForLoadState('domcontentloaded');
     await page.locator('a[href="/approvals"]').click();
     await page.waitForURL(/\/approvals/, { timeout: 50_000 });
@@ -43,7 +47,7 @@ test.describe('Navigation', () => {
   });
 
   test('navigate to Jobs page', async ({ page }) => {
-    await page.goto('/discover');
+    await page.goto('/projects');
     await page.waitForLoadState('domcontentloaded');
     await page.locator('a[href="/jobs"]').click();
     await page.waitForURL(/\/jobs/, { timeout: 50_000 });
@@ -52,7 +56,7 @@ test.describe('Navigation', () => {
   });
 
   test('navigate to Settings page', { timeout: 60_000 }, async ({ page }) => {
-    await page.goto('/discover');
+    await page.goto('/projects');
     await page.waitForLoadState('domcontentloaded');
     await page.locator('a[href="/settings"]').click();
     // Long timeout: settings page may still be compiling in dev mode
@@ -61,11 +65,11 @@ test.describe('Navigation', () => {
     await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible({ timeout: 10_000 });
   });
 
-  test('root path redirects to /discover', async ({ page }) => {
+  test('root path redirects to /projects', async ({ page }) => {
     await page.goto('/');
     // Middleware redirect may take a moment; wait explicitly
-    await page.waitForURL(/\/discover/, { timeout: 15_000 });
-    await expect(page).toHaveURL(/\/discover/);
+    await page.waitForURL(/\/projects/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/projects/);
   });
 
   test('active nav link is highlighted', async ({ page }) => {
