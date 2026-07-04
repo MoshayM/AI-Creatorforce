@@ -51,7 +51,8 @@ export const FactCheckOutputSchema = z.object({
   ),
   issues: z.array(z.string()),
   recommendations: z.array(z.string()),
-  sources: z.array(z.object({ title: z.string(), url: z.string() })),
+  // AI sometimes omits top-level sources when they're already in claims
+  sources: z.array(z.object({ title: z.string(), url: z.string() })).optional().default([]),
 });
 export type FactCheckOutput = z.infer<typeof FactCheckOutputSchema>;
 

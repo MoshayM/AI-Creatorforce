@@ -538,7 +538,8 @@ function parseJson(raw: string): unknown {
 
 export async function callAIStructured<T>(
   messages: AIMessage[],
-  schema: z.ZodSchema<T>,
+  // Input type left open so schemas with .default()/.transform() infer T from output
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   opts: AICallOptions = {},
 ): Promise<T> {
   const t0 = Date.now();
@@ -702,9 +703,39 @@ export async function callAIStructured<T>(
   try {
     return schema.parse(parsed);
   } catch (e) {
-    if (e instanceof z.ZodError) {
-      throw new Error(`AI response schema mismatch: ${e.errors.map((er) => `${er.path.join('.')}: ${er.message}`).join(', ')}`);
+    if (!(e instanceof z.ZodError)) throw e;
+    const problems = e.errors.map((er) => `${er.path.join('.')}: ${er.message}`).join(', ');
+
+    // Valid JSON but wrong shape — retry once, naming the offending fields
+    const fixMsgs: AIMessage[] = [
+      ...messages,
+      { role: 'assistant' as const, content: JSON.stringify(parsed) },
+      { role: 'user' as const, content: `The previous JSON did not match the required schema. Problems: ${problems}. Return the corrected complete JSON object ONLY — include every required field. No markdown, no explanation.` },
+    ];
+    let fixResult: AICallResult | null = null;
+    const release3 = await getSemaphore().acquire();
+    try {
+      for (const p of chain) {
+        if (!isProviderAvailable(p)) continue;
+        try {
+          fixResult = await withRetry(() => callAI(fixMsgs, { ...opts, provider: p, systemPrompt: systemWithJson }), p);
+          onProviderSuccess(p);
+          break;
+        } catch { /* next provider */ }
+      }
+    } finally {
+      release3();
     }
-    throw e;
+    if (!fixResult) throw new Error(`AI response schema mismatch: ${problems}`);
+    console.warn(`[AI:schema-retry] provider=${fixResult.provider} problems="${problems.slice(0, 120)}"`);
+
+    try {
+      return schema.parse(parseJson(fixResult.content));
+    } catch (e2) {
+      const detail = e2 instanceof z.ZodError
+        ? e2.errors.map((er) => `${er.path.join('.')}: ${er.message}`).join(', ')
+        : (e2 as Error).message;
+      throw new Error(`AI response schema mismatch after retry: ${detail}`);
+    }
   }
 }
