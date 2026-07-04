@@ -19,7 +19,36 @@ interface Channel {
   active: boolean;
   readOnly?: boolean;
   lastSyncedAt?: string;
+  scopes?: string[];
+  accessLevel?: 'READ_ONLY' | 'PUBLISH' | 'FULL' | 'NONE';
 }
+
+type AccessLevel = 'READ_ONLY' | 'PUBLISH' | 'FULL';
+
+// What each access level lets the app do — the creator picks (and can change)
+// this themselves; every change goes back through Google's consent screen.
+const ACCESS_META: Record<AccessLevel, { label: string; badge: string; permissions: string[] }> = {
+  READ_ONLY: {
+    label: 'Read-only',
+    badge: 'bg-blue-50 text-blue-700 border-blue-200',
+    permissions: ['Read channel & video data for analysis'],
+  },
+  PUBLISH: {
+    label: 'Publish',
+    badge: 'bg-green-50 text-green-700 border-green-200',
+    permissions: ['Read channel & video data for analysis', 'Upload videos (after your approval)'],
+  },
+  FULL: {
+    label: 'Full Access',
+    badge: 'bg-purple-50 text-purple-700 border-purple-200',
+    permissions: [
+      'Read channel & video data for analysis',
+      'Upload videos (after your approval)',
+      'Manage videos, thumbnails, captions & playlists',
+      'Read YouTube Analytics (retention, revenue signals)',
+    ],
+  },
+};
 
 interface Subscription {
   plan: string;
@@ -117,6 +146,9 @@ function SettingsContent() {
   const [showUrlForm, setShowUrlForm] = useState(false);
   const [apiKeyDrafts, setApiKeyDrafts] = useState<Record<string, string>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  // Access level for new Google connections; per-channel changes use changeAccessMutation
+  const [connectAccess, setConnectAccess] = useState<AccessLevel>('PUBLISH');
+  const [accessDrafts, setAccessDrafts] = useState<Record<string, AccessLevel>>({});
   // Set to true after OAuth callback redirect — we wait for channels to reload before showing success
   const pendingVerification = useRef(false);
 
@@ -174,10 +206,10 @@ function SettingsContent() {
   }, [oauthErrorCode]);
 
   const connectMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (access: AccessLevel) => {
       console.log('[OAuth] Button clicked — requesting auth URL');
       const redirectUri = `${API_URL}/channels/oauth/callback`;
-      const { data } = await api.channels.getAuthUrl(redirectUri) as { data: { url: string } };
+      const { data } = await api.channels.getAuthUrl(redirectUri, access) as { data: { url: string } };
       console.log('[OAuth] Redirecting to Google');
       window.location.href = data.url;
     },
@@ -213,15 +245,28 @@ function SettingsContent() {
   });
 
   const reconnectMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (access: AccessLevel = 'PUBLISH') => {
       console.log('[OAuth] Reconnect clicked — requesting auth URL');
       const redirectUri = `${API_URL}/channels/oauth/callback`;
-      const { data } = await api.channels.getAuthUrl(redirectUri) as { data: { url: string } };
+      const { data } = await api.channels.getAuthUrl(redirectUri, access) as { data: { url: string } };
       console.log('[OAuth] Redirecting to Google for reconnect');
       window.location.href = data.url;
     },
     onError: () => {
       setBanner({ type: 'error', message: 'Could not start reconnection. Please try again.' });
+    },
+  });
+
+  // Changing access = a fresh Google consent round with the chosen scopes;
+  // the callback upserts the channel with whatever the user actually grants.
+  const changeAccessMutation = useMutation({
+    mutationFn: async (access: AccessLevel) => {
+      const redirectUri = `${API_URL}/channels/oauth/callback`;
+      const { data } = await api.channels.getAuthUrl(redirectUri, access) as { data: { url: string } };
+      window.location.href = data.url;
+    },
+    onError: () => {
+      setBanner({ type: 'error', message: 'Could not start the access change. Please try again.' });
     },
   });
 
@@ -302,7 +347,8 @@ function SettingsContent() {
           <div className="space-y-3">
             {/* Active / connected channels */}
             {activeChannels.map((ch) => (
-              <div key={ch.id} className="flex items-center gap-4 bg-white border border-gray-200 rounded-xl p-4">
+              <div key={ch.id} className="bg-white border border-gray-200 rounded-xl p-4">
+              <div className="flex items-center gap-4">
                 {ch.thumbnailUrl ? (
                   <img src={ch.thumbnailUrl} alt={ch.title} className="w-10 h-10 rounded-full object-cover" />
                 ) : (
@@ -328,8 +374,9 @@ function SettingsContent() {
                     <Eye className="w-3 h-3" /> Read-only
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
-                    <CheckCircle className="w-3 h-3" /> Connected
+                  <span className={`flex items-center gap-1 text-xs border rounded-full px-2 py-0.5 ${ACCESS_META[(ch.accessLevel && ch.accessLevel !== 'NONE' ? ch.accessLevel : 'PUBLISH') as AccessLevel].badge}`}>
+                    <CheckCircle className="w-3 h-3" />
+                    {ACCESS_META[(ch.accessLevel && ch.accessLevel !== 'NONE' ? ch.accessLevel : 'PUBLISH') as AccessLevel].label}
                   </span>
                 )}
 
@@ -377,6 +424,42 @@ function SettingsContent() {
                   </div>
                 )}
               </div>
+
+              {/* Self-service access management — the creator sees exactly what
+                  the app may do and can change it any time (re-consent via Google) */}
+              {!ch.readOnly && (
+                <div className="mt-3 pt-3 border-t border-gray-100 flex items-start justify-between gap-4 flex-wrap">
+                  <ul className="space-y-0.5">
+                    {ACCESS_META[(ch.accessLevel && ch.accessLevel !== 'NONE' ? ch.accessLevel : 'PUBLISH') as AccessLevel].permissions.map((p) => (
+                      <li key={p} className="text-xs text-gray-500 flex items-center gap-1.5">
+                        <CheckCircle className="w-3 h-3 text-green-500 shrink-0" />
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={accessDrafts[ch.id] ?? (ch.accessLevel && ch.accessLevel !== 'NONE' ? ch.accessLevel : 'PUBLISH')}
+                      onChange={(e) => setAccessDrafts((prev) => ({ ...prev, [ch.id]: e.target.value as AccessLevel }))}
+                      className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-700"
+                      aria-label="Channel access level"
+                    >
+                      <option value="READ_ONLY">Read-only</option>
+                      <option value="PUBLISH">Publish</option>
+                      <option value="FULL">Full Access</option>
+                    </select>
+                    <button
+                      onClick={() => changeAccessMutation.mutate(accessDrafts[ch.id] ?? 'PUBLISH')}
+                      disabled={channelBusy || !accessDrafts[ch.id] || accessDrafts[ch.id] === ch.accessLevel}
+                      title="Re-authorize with the selected access level via Google"
+                      className="px-3 py-1.5 text-xs font-medium border border-brand-300 text-brand-700 rounded-lg hover:bg-brand-50 disabled:opacity-40 transition-colors"
+                    >
+                      {changeAccessMutation.isPending ? 'Redirecting…' : 'Change access'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              </div>
             ))}
 
             {/* Disconnected / inactive channels */}
@@ -415,7 +498,7 @@ function SettingsContent() {
                 ) : (
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => reconnectMutation.mutate()}
+                      onClick={() => reconnectMutation.mutate(ch.accessLevel === 'FULL' || ch.accessLevel === 'READ_ONLY' ? ch.accessLevel : 'PUBLISH')}
                       disabled={channelBusy}
                       className="flex items-center gap-1.5 px-3 py-1.5 border border-brand-300 text-brand-700 text-sm rounded-lg hover:bg-brand-50 transition-colors disabled:opacity-50"
                     >
@@ -448,15 +531,30 @@ function SettingsContent() {
                   <p className="font-medium text-gray-700">No YouTube channel connected</p>
                   <p className="text-sm text-gray-500 mt-0.5">Connect your channel to start creating content</p>
                 </div>
-                <button
-                  onClick={() => connectMutation.mutate()}
-                  disabled={connectMutation.isPending}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-                >
-                  {connectMutation.isPending
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting to Google…</>
-                    : <><Link className="w-4 h-4" /> Connect with Google</>}
-                </button>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={connectAccess}
+                    onChange={(e) => setConnectAccess(e.target.value as AccessLevel)}
+                    className="border border-gray-300 rounded-lg px-2 py-2.5 text-sm text-gray-700"
+                    aria-label="Access level to request"
+                  >
+                    <option value="READ_ONLY">Read-only</option>
+                    <option value="PUBLISH">Publish</option>
+                    <option value="FULL">Full Access</option>
+                  </select>
+                  <button
+                    onClick={() => connectMutation.mutate(connectAccess)}
+                    disabled={connectMutation.isPending}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {connectMutation.isPending
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting to Google…</>
+                      : <><Link className="w-4 h-4" /> Connect with Google</>}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 max-w-sm text-center">
+                  You choose how much access to grant and can change it anytime. Publishing always requires your approval.
+                </p>
                 <p className="text-xs text-gray-400">— or —</p>
                 <button
                   onClick={() => setShowUrlForm((v) => !v)}
@@ -468,8 +566,18 @@ function SettingsContent() {
             ) : (
               /* Already have channels — offer to add another */
               <div className="flex gap-2">
+                <select
+                  value={connectAccess}
+                  onChange={(e) => setConnectAccess(e.target.value as AccessLevel)}
+                  className="border border-dashed border-gray-300 rounded-xl px-2 py-2.5 text-sm text-gray-600"
+                  aria-label="Access level to request"
+                >
+                  <option value="READ_ONLY">Read-only</option>
+                  <option value="PUBLISH">Publish</option>
+                  <option value="FULL">Full Access</option>
+                </select>
                 <button
-                  onClick={() => connectMutation.mutate()}
+                  onClick={() => connectMutation.mutate(connectAccess)}
                   disabled={connectMutation.isPending}
                   className="flex items-center gap-2 px-4 py-2.5 border border-dashed border-gray-300 rounded-xl text-sm text-gray-600 hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 flex-1 justify-center"
                 >

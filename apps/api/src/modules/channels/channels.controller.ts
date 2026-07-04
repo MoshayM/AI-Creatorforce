@@ -7,7 +7,7 @@ import { IsString } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
-import { ChannelsService } from './channels.service';
+import { ChannelsService, isAccessLevel } from './channels.service';
 
 class ConnectDto {
   @IsString() code!: string;
@@ -40,9 +40,14 @@ export class ChannelsController {
   }
 
   @Get('auth-url')
-  getAuthUrl(@Query('redirectUri') redirectUri: string, @CurrentUser() user: JwtPayload) {
-    this.logger.log(`[OAuth] auth-url requested — userId=${user.sub}`);
-    return { url: this.svc.getAuthUrl(redirectUri, user.sub) };
+  getAuthUrl(
+    @Query('redirectUri') redirectUri: string,
+    @Query('access') access: string | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const level = isAccessLevel(access) ? access : 'PUBLISH';
+    this.logger.log(`[OAuth] auth-url requested — userId=${user.sub} access=${level}`);
+    return { url: this.svc.getAuthUrl(redirectUri, user.sub, level) };
   }
 
   // Public — no JWT; Google redirects here without auth headers.
@@ -65,7 +70,13 @@ export class ChannelsController {
     this.logger.log(`[OAuth] Callback received — exchanging code`);
 
     try {
-      const userId = Buffer.from(state, 'base64url').toString('utf8');
+      // State is JSON {u: userId, a: accessLevel}; legacy states were the bare userId
+      const decoded = Buffer.from(state, 'base64url').toString('utf8');
+      let userId = decoded;
+      try {
+        const parsed = JSON.parse(decoded) as { u?: string };
+        if (parsed.u) userId = parsed.u;
+      } catch { /* legacy plain-userId state */ }
       const redirectUri = `${API_URL}/api/v1/channels/oauth/callback`;
       await this.svc.connectChannel(userId, code, redirectUri);
       this.logger.log(`[OAuth] Connection successful — redirecting to settings`);

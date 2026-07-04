@@ -179,19 +179,37 @@ interface OAuthTokens {
   expiry_date: number;
 }
 
-// Required scopes — openid/profile/email for user identity; YouTube scopes for API access
-const YOUTUBE_SCOPES = [
-  'openid',
-  'email',
-  'profile',
-  'https://www.googleapis.com/auth/youtube.readonly',
-  'https://www.googleapis.com/auth/youtube.upload',
-];
+// ── Channel access levels (user-selectable, self-service) ────────────────────
+// The creator decides how much access to grant and can change it any time in
+// Settings; every change goes back through Google's consent screen.
 
-const REQUIRED_YOUTUBE_SCOPES = [
-  'https://www.googleapis.com/auth/youtube.readonly',
-  'https://www.googleapis.com/auth/youtube.upload',
-];
+export type ChannelAccessLevel = 'READ_ONLY' | 'PUBLISH' | 'FULL';
+
+export const SCOPE_READONLY = 'https://www.googleapis.com/auth/youtube.readonly';
+export const SCOPE_UPLOAD = 'https://www.googleapis.com/auth/youtube.upload';
+export const SCOPE_MANAGE = 'https://www.googleapis.com/auth/youtube.force-ssl';
+export const SCOPE_ANALYTICS = 'https://www.googleapis.com/auth/yt-analytics.readonly';
+
+// openid/profile/email identify the Google account
+const IDENTITY_SCOPES = ['openid', 'email', 'profile'];
+
+export const ACCESS_PRESETS: Record<ChannelAccessLevel, string[]> = {
+  READ_ONLY: [SCOPE_READONLY],
+  PUBLISH: [SCOPE_READONLY, SCOPE_UPLOAD],
+  FULL: [SCOPE_READONLY, SCOPE_UPLOAD, SCOPE_MANAGE, SCOPE_ANALYTICS],
+};
+
+export function isAccessLevel(v: unknown): v is ChannelAccessLevel {
+  return v === 'READ_ONLY' || v === 'PUBLISH' || v === 'FULL';
+}
+
+/** Effective access derived from what the user actually granted on Google's consent screen. */
+export function accessLevelFromScopes(scopes: readonly string[]): ChannelAccessLevel | 'NONE' {
+  if (scopes.includes(SCOPE_MANAGE)) return 'FULL';
+  if (scopes.includes(SCOPE_UPLOAD)) return 'PUBLISH';
+  if (scopes.includes(SCOPE_READONLY)) return 'READ_ONLY';
+  return 'NONE';
+}
 
 @Injectable()
 export class ChannelsService implements OnModuleInit {
@@ -213,14 +231,14 @@ export class ChannelsService implements OnModuleInit {
     }
   }
 
-  getAuthUrl(redirectUri: string, userId: string): string {
-    this.logger.log(`[OAuth] Generating auth URL — userId=${userId} redirectUri=${redirectUri}`);
+  getAuthUrl(redirectUri: string, userId: string, access: ChannelAccessLevel = 'PUBLISH'): string {
+    this.logger.log(`[OAuth] Generating auth URL — userId=${userId} access=${access} redirectUri=${redirectUri}`);
     const oauth2 = this.buildOAuth2Client(redirectUri);
     const url = oauth2.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
-      scope: YOUTUBE_SCOPES,
-      state: Buffer.from(userId).toString('base64url'),
+      scope: [...IDENTITY_SCOPES, ...ACCESS_PRESETS[access]],
+      state: Buffer.from(JSON.stringify({ u: userId, a: access })).toString('base64url'),
     });
     this.logger.log(`[OAuth] Auth URL generated`);
     return url;
@@ -243,13 +261,17 @@ export class ChannelsService implements OnModuleInit {
     }
     this.logger.log(`[OAuth] Tokens received — has_refresh=${!!tokens.refresh_token} expires=${tokens.expiry_date}`);
 
-    // Validate that the user granted all required YouTube scopes
-    const grantedScopes = (tokens.scope ?? '').split(' ');
-    const missingScopes = REQUIRED_YOUTUBE_SCOPES.filter((s) => !grantedScopes.includes(s));
-    if (missingScopes.length > 0) {
-      this.logger.error(`[OAuth] Missing required scopes — ${missingScopes.join(', ')}`);
-      throw new BadRequestException(`Required YouTube permissions were not granted: ${missingScopes.join(', ')}`);
+    // The user controls what they grant on Google's consent screen (they may
+    // untick boxes). We accept whatever was granted as long as the channel is
+    // at least readable, and derive the effective access level from it —
+    // features beyond that level explain what's missing at the point of use.
+    const grantedScopes = (tokens.scope ?? '').split(' ').filter(Boolean);
+    const effectiveAccess = accessLevelFromScopes(grantedScopes);
+    if (effectiveAccess === 'NONE') {
+      this.logger.error(`[OAuth] No YouTube scopes granted — got: ${grantedScopes.join(', ')}`);
+      throw new BadRequestException('YouTube access was not granted. Please allow at least read access to your channel.');
     }
+    this.logger.log(`[OAuth] Granted scopes → effective access: ${effectiveAccess}`);
 
     this.logger.log(`[OAuth] Fetching YouTube channel info`);
     oauth2.setCredentials(tokens);
@@ -430,14 +452,20 @@ export class ChannelsService implements OnModuleInit {
   }
 
   async listChannels(userId: string) {
-    return this.prisma.channel.findMany({
+    const rows = await this.prisma.channel.findMany({
       where: { userId },
       select: {
         id: true, youtubeChannelId: true, title: true, description: true,
         thumbnailUrl: true, customUrl: true, subscriberCount: true, videoCount: true,
-        readOnly: true, active: true, lastSyncedAt: true, createdAt: true,
+        readOnly: true, active: true, lastSyncedAt: true, createdAt: true, scopes: true,
       },
     });
+    // Expose the effective access level so the creator can see and manage
+    // exactly what the app is allowed to do with their channel.
+    return rows.map((ch) => ({
+      ...ch,
+      accessLevel: ch.readOnly ? 'READ_ONLY' : accessLevelFromScopes(ch.scopes ?? []),
+    }));
   }
 
   async getStatus(userId: string) {
