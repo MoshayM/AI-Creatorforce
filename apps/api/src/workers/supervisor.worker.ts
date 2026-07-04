@@ -23,7 +23,7 @@ import { ExportsService } from '../modules/media/exports.service';
 import { composeVideo, ffmpegPath, runFfmpegCapture, type ComposeScene } from '../modules/media/adapters/ffmpeg.util';
 import { encodeWhooshWav } from '../modules/media/adapters/codec.util';
 import { checkDurations, analyzeLoudness } from '../modules/media/quality.util';
-import { buildSrt, buildVtt } from '../modules/media/subtitle.util';
+import { buildSrt, buildVtt, fitCuesToDuration } from '../modules/media/subtitle.util';
 import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, type PipelineScope, type PipelineStage } from './pipeline-plan';
 import { EventsGateway } from '../gateway/events.gateway';
 import { AGENT_QUEUE } from '../modules/jobs/jobs.module';
@@ -751,9 +751,30 @@ export class SupervisorWorker extends WorkerHost {
         const voicePath = resolveKey(voiceAssets[voiceAssets.length - 1]);
         const musicPath = resolveKey(musicAssets[musicAssets.length - 1]);
 
+        // ── Total scene duration (needed for subtitle rescaling and quality) ──
+        const totalSceneSecs = scenes.reduce((s, sc) => s + sc.durationSecs, 0);
+        const totalMs = Math.round(totalSceneSecs * 1000);
+
+        // ── Subtitle rescaling + SRT write ────────────────────────────────────
         let subtitlePath: string | undefined;
         let tmpDir: string | undefined;
-        const srtContent = subtitles?.srt || (subtitles?.cues?.length ? buildSrt(subtitles.cues) : '');
+        const subtitleFindings: import('../modules/media/quality.util').QualityFinding[] = [];
+        let srtContent: string;
+        if (subtitles?.cues?.length) {
+          // Prefer cues over stored string — rescaling requires cue data.
+          const fitted = fitCuesToDuration(subtitles.cues, totalMs);
+          if (fitted.scaled) {
+            this.log(jobId, projectId, 'Quality: subtitle cues rescaled to fit video duration');
+            subtitleFindings.push({
+              level: 'fixed',
+              check: 'subtitle-overrun',
+              message: `Subtitle cues extended past the video end — rescaled to fit ${Math.round(totalMs / 1000)}s.`,
+            });
+          }
+          srtContent = buildSrt(fitted.cues);
+        } else {
+          srtContent = subtitles?.srt ?? '';
+        }
         if (srtContent) {
           tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cf-render-'));
           subtitlePath = path.join(tmpDir, 'captions.srt');
@@ -781,15 +802,15 @@ export class SupervisorWorker extends WorkerHost {
         }
 
         // ── Feature 4: Quality analysis ──────────────────────────────────────
-        const totalSecsBeforeQuality = scenes.reduce((s, sc) => s + sc.durationSecs, 0);
         const voiceAsset = voiceAssets[voiceAssets.length - 1];
         const voiceDurationMs = voiceAsset?.versions[0]?.durationMs ?? undefined;
+        // Pass original lastCueEndMs to detect the problem; subtitleFindings records the fix.
         const lastCueEndMs = subtitles?.cues?.length
           ? subtitles.cues[subtitles.cues.length - 1]?.endMs
           : undefined;
 
         const durationFindings = checkDurations({
-          totalSceneSecs: totalSecsBeforeQuality,
+          totalSceneSecs,
           voiceDurationMs: voiceDurationMs ?? undefined,
           scriptEstimateMins: script?.estimatedDurationMins,
           lastCueEndMs: lastCueEndMs ?? undefined,
@@ -809,13 +830,12 @@ export class SupervisorWorker extends WorkerHost {
           this.log(jobId, projectId, `Quality: ${f.message}`);
         }
 
-        const allQualityFindings = [...durationFindings, ...loudnessFindings];
+        const allQualityFindings = [...durationFindings, ...loudnessFindings, ...subtitleFindings];
         const effectiveMusicVolume = musicVolumeAdjust ?? 0.22;
 
         const t0 = Date.now();
-        const totalSecs = scenes.reduce((s, sc) => s + sc.durationSecs, 0);
         this.log(jobId, projectId, 'Rendering final video…',
-          `${scenes.length} scene(s) · ~${Math.round(totalSecs)}s · voice: ${voicePath ? 'yes' : 'no'} · music: ${musicPath ? 'yes' : 'no'} · captions: ${subtitlePath ? 'burned' : 'none'} · preset: ${preset}`);
+          `${scenes.length} scene(s) · ~${Math.round(totalSceneSecs)}s · voice: ${voicePath ? 'yes' : 'no'} · music: ${musicPath ? 'yes' : 'no'} · captions: ${subtitlePath ? 'burned' : 'none'} · preset: ${preset}`);
         this.events.emitJobUpdate(jobId, { step: 'RENDER', status: 'RUNNING', scenes: scenes.length }, projectId);
 
         const renderKey = `renders/${projectId}/final-${preset.toLowerCase()}.mp4`;
@@ -865,13 +885,13 @@ export class SupervisorWorker extends WorkerHost {
               },
             } as never,
             sizeBytes: BigInt(stat.size),
-            durationMs: Math.round(totalSecs * 1000),
+            durationMs: totalMs,
           },
         });
         await this.prisma.asset.update({ where: { id: renderAsset.id }, data: { currentVersionId: renderVersion.id } });
 
         this.log(jobId, projectId, 'Final video rendered ✓',
-          `${(stat.size / 1024 / 1024).toFixed(1)} MB · ${Math.round(totalSecs)}s · ${Math.round((Date.now() - t0) / 1000)}s render time · preset ${preset}`);
+          `${(stat.size / 1024 / 1024).toFixed(1)} MB · ${Math.round(totalSceneSecs)}s · ${Math.round((Date.now() - t0) / 1000)}s render time · preset ${preset}`);
         await this.jobs.logStep(jobId, 'RenderWorker', 'compose', { scenes: scenes.length, preset }, { renderKey, sizeBytes: stat.size }, 0, 0, Date.now() - t0);
         this.events.emitJobUpdate(jobId, { step: 'RENDER', status: 'COMPLETED' }, projectId);
         return {
@@ -879,7 +899,7 @@ export class SupervisorWorker extends WorkerHost {
           versionId: renderVersion.id,
           key: renderKey,
           sizeBytes: stat.size,
-          durationSecs: Math.round(totalSecs),
+          durationSecs: Math.round(totalSceneSecs),
           preset,
           qualityReport: allQualityFindings,
         };

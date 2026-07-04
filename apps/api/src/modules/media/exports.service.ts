@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from './storage.service';
-import { buildSrt, buildVtt } from './subtitle.util';
+import { buildSrt, buildVtt, fitCuesToDuration } from './subtitle.util';
 
 interface ScriptLike {
   title?: string;
@@ -86,9 +86,22 @@ export class ExportsService {
     await copyAsset('MUSIC', 'music');
     await copyAsset('THUMBNAIL', 'thumbnail');
 
-    // SRT/VTT rebuilt from cues when the stored strings are missing/empty
-    const srt = subtitles?.srt || (subtitles?.cues?.length ? buildSrt(subtitles.cues) : '');
-    const vtt = subtitles?.vtt || (subtitles?.cues?.length ? buildVtt(subtitles.cues) : '');
+    // SRT/VTT rebuilt from cues (preferred — allows timing rescaling to actual
+    // video duration). Falls back to stored strings only when no cues are present.
+    const renderSourceAsset = latestByKind('RENDER_SOURCE');
+    const videoDurationMs = renderSourceAsset?.versions[0]?.durationMs ?? 0;
+    let srt: string;
+    let vtt: string;
+    if (subtitles?.cues?.length) {
+      const cues = videoDurationMs > 0
+        ? fitCuesToDuration(subtitles.cues, videoDurationMs).cues
+        : subtitles.cues;
+      srt = buildSrt(cues);
+      vtt = buildVtt(cues);
+    } else {
+      srt = subtitles?.srt ?? '';
+      vtt = subtitles?.vtt ?? '';
+    }
     if (srt) await putText('captions.srt', srt);
     if (vtt) await putText('captions.vtt', vtt);
 

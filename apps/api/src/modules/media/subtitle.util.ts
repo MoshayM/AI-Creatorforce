@@ -5,6 +5,30 @@ export interface CueLike {
   text: string;
 }
 
+/**
+ * Linearly rescale cue timings so the last cue ends within targetMs.
+ * No-op (returns the input array) when cues already fit within targetMs + graceMs.
+ */
+export function fitCuesToDuration<T extends CueLike>(
+  cues: T[],
+  targetMs: number,
+  graceMs = 5000,
+): { cues: T[]; scaled: boolean } {
+  if (cues.length === 0 || targetMs <= 0) return { cues, scaled: false };
+
+  const lastEnd = Math.max(...cues.map((c) => c.endMs));
+  if (lastEnd <= 0 || lastEnd <= targetMs + graceMs) return { cues, scaled: false };
+
+  const factor = targetMs / lastEnd;
+  const mapped = cues.map((c) => {
+    const newStart = Math.round(c.startMs * factor);
+    const newEnd = Math.max(Math.round(c.endMs * factor), newStart + 300);
+    return { ...c, startMs: newStart, endMs: newEnd };
+  }) as T[];
+
+  return { cues: mapped, scaled: true };
+}
+
 function timestamp(ms: number, msSeparator: ',' | '.'): string {
   const h = String(Math.floor(ms / 3_600_000)).padStart(2, '0');
   const m = String(Math.floor((ms % 3_600_000) / 60_000)).padStart(2, '0');
