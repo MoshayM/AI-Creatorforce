@@ -65,6 +65,12 @@ export class JobsController {
     return this.svc.get(id);
   }
 
+  // Permanent history deletion (cancel() above only stops an active job)
+  @Delete(':id/record')
+  remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.svc.remove(id, user.sub);
+  }
+
   @Delete(':id')
   cancel(@Param('id') id: string) {
     return this.svc.cancel(id);

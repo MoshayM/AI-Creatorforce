@@ -113,4 +113,13 @@ test.describe('Project Detail', () => {
     await expect(page.getByText('WAITING_APPROVAL')).toBeVisible();
   });
 
+  test('history entries are deletable', async ({ page }) => {
+    await expect(page.getByText('Recent Jobs')).toBeVisible({ timeout: 8_000 });
+    const deleteButtons = page.getByRole('button', { name: /^Delete .* run$/ });
+    expect(await deleteButtons.count()).toBeGreaterThan(0);
+    // Confirm flow appears on click
+    await deleteButtons.first().click();
+    await expect(page.getByRole('button', { name: /^delete$/i })).toBeVisible();
+  });
+
 });

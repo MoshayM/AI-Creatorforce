@@ -1,6 +1,6 @@
 'use client';
 import { useState, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -9,7 +9,7 @@ import {
   Loader2, Play, CheckCircle, XCircle, Clock, AlertCircle,
   ChevronDown, ChevronUp, ArrowLeft,
   Check, Copy, Download,
-  RotateCcw, ArrowRightLeft, Timer,
+  RotateCcw, ArrowRightLeft, Timer, Trash2,
 } from 'lucide-react';
 import { ElapsedBadge, formatDuration } from '@/components/ai-activity';
 import { StudioFlow, type PipelineProgress } from '@/components/studio-flow';
@@ -467,6 +467,13 @@ export default function ProjectDetailPage() {
   const [jobLogs, setJobLogs] = useState<Record<string, Array<{ msg: string; detail?: string }>>>({});
   // FULL_PRODUCTION pipeline progress (stage n/m + ETA) streamed via job events
   const [pipelineProgress, setPipelineProgress] = useState<PipelineProgress | null>(null);
+  const [confirmDeleteJob, setConfirmDeleteJob] = useState<string | null>(null);
+
+  const qc = useQueryClient();
+  const deleteJobMutation = useMutation({
+    mutationFn: (jobId: string) => api.jobs.remove(jobId),
+    onSuccess: () => { setConfirmDeleteJob(null); void qc.invalidateQueries({ queryKey: ['project', id] }); },
+  });
 
   const handleJobEvent = useCallback((event: Record<string, unknown>) => {
     if (event['pipelineStage'] !== undefined) {
@@ -630,6 +637,23 @@ export default function ProjectDetailPage() {
                         <button onClick={() => toggle(histKey)} className="text-gray-400 hover:text-gray-600">
                           {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </button>
+                      )}
+                      {!['PENDING', 'QUEUED', 'RUNNING'].includes(job.status) && (
+                        confirmDeleteJob === job.id ? (
+                          <span className="flex items-center gap-1.5">
+                            <button onClick={() => deleteJobMutation.mutate(job.id)} disabled={deleteJobMutation.isPending} className="text-xs px-2 py-1 bg-red-600 text-white rounded-lg disabled:opacity-50">Delete</button>
+                            <button onClick={() => setConfirmDeleteJob(null)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg text-gray-500">Cancel</button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteJob(job.id)}
+                            aria-label={`Delete ${job.type} run`}
+                            title="Delete this run from history. If it is the latest result for a stage, the stage reverts to the previous run."
+                            className="text-gray-300 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )
                       )}
                     </div>
                   </div>

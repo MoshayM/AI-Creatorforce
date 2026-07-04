@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ServiceUnavailableException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ServiceUnavailableException, Logger, BadRequestException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -88,6 +88,23 @@ export class JobsService {
       where: { id: jobId },
       data: { status: 'CANCELLED' },
     });
+  }
+
+  /** Permanently delete a job record (history cleanup). Logs and any approval
+   *  row cascade at the DB level. Active jobs must be cancelled first; if the
+   *  deleted row was a stage's latest result, that stage reverts to the
+   *  previous run. */
+  async remove(jobId: string, userId: string) {
+    const job = await this.prisma.agentJob.findUnique({
+      where: { id: jobId },
+      include: { project: { select: { userId: true } } },
+    });
+    if (!job || job.project.userId !== userId) throw new NotFoundException('Job not found');
+    if (['PENDING', 'QUEUED', 'RUNNING'].includes(job.status)) {
+      throw new BadRequestException('This job is still active — cancel it before deleting.');
+    }
+    await this.prisma.agentJob.delete({ where: { id: jobId } });
+    return { deleted: true };
   }
 
   async logStep(jobId: string, agentName: string, step: string, input: unknown, output: unknown, tokensIn = 0, tokensOut = 0, latencyMs = 0) {
