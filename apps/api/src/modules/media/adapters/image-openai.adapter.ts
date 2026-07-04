@@ -7,8 +7,11 @@ const DEFAULT_MODEL = process.env['IMAGE_OPENAI_MODEL'] ?? 'dall-e-3';
 export class OpenAiImageAdapter implements ImageAdapter {
   readonly name = 'openai-image';
 
+  // A 401 means the key is revoked — no point retrying it for every scene
+  private authFailed = false;
+
   available(): boolean {
-    return !!process.env['OPENAI_API_KEY'];
+    return !this.authFailed && !!process.env['OPENAI_API_KEY'];
   }
 
   async generateImage(req: ImageRequest): Promise<GeneratedMedia> {
@@ -31,6 +34,7 @@ export class OpenAiImageAdapter implements ImageAdapter {
       }),
     });
     if (!res.ok) {
+      if (res.status === 401) this.authFailed = true;
       throw new Error(`OpenAI image generation failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
     }
     const json = (await res.json()) as { data?: Array<{ b64_json?: string }> };

@@ -11,6 +11,7 @@ import { ElevenLabsVoiceAdapter } from './adapters/voice-elevenlabs.adapter';
 import { OpenAiVoiceAdapter } from './adapters/voice-openai.adapter';
 import { OfflineVoiceAdapter } from './adapters/voice-offline.adapter';
 import { OpenAiImageAdapter } from './adapters/image-openai.adapter';
+import { GeminiImageAdapter } from './adapters/image-gemini.adapter';
 import { OfflineImageAdapter } from './adapters/image-offline.adapter';
 import { OfflineMusicAdapter } from './adapters/music-offline.adapter';
 import { FfmpegSceneVideoAdapter } from './adapters/video-ffmpeg.adapter';
@@ -47,7 +48,8 @@ export class MediaService {
   };
   private readonly image: AdapterChain<ImageAdapter> = {
     configured: process.env['IMAGE_PROVIDER'],
-    adapters: [new OpenAiImageAdapter(), new OfflineImageAdapter()],
+    // Gemini first: the OpenAI key on this install is revoked (401-latched)
+    adapters: [new GeminiImageAdapter(), new OpenAiImageAdapter(), new OfflineImageAdapter()],
   };
   private readonly music: AdapterChain<MusicAdapter> = {
     configured: process.env['MUSIC_PROVIDER'],
