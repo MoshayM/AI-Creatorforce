@@ -19,14 +19,24 @@ export class GeminiImageAdapter implements ImageAdapter {
       req.negativePrompt ? `Avoid: ${req.negativePrompt}` : '',
     ].filter(Boolean).join('\n\n');
 
-    const res = await fetch(`${API_BASE}/${DEFAULT_MODEL}:generateContent?key=${process.env['GEMINI_API_KEY']}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseModalities: ['IMAGE'] },
-      }),
-    });
+    // Free-tier quota is per-minute — honor the server's retryDelay instead
+    // of instantly falling through to placeholder images
+    let res!: Response;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await fetch(`${API_BASE}/${DEFAULT_MODEL}:generateContent?key=${process.env['GEMINI_API_KEY']}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseModalities: ['IMAGE'] },
+        }),
+      });
+      if (res.status !== 429 || attempt === 2) break;
+      const body = await res.text();
+      const delayMatch = /"retryDelay"\s*:\s*"(\d+)/.exec(body);
+      const waitMs = Math.min((delayMatch ? Number(delayMatch[1]) : 60) * 1000 + 2000, 90_000);
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
     if (!res.ok) {
       throw new Error(`Gemini image generation failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
     }
