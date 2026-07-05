@@ -96,4 +96,20 @@ export const api = {
     updateApiKeys: (keys: Record<string, string>) =>
       apiClient.put('/settings/api-keys', keys),
   },
+  shortsStudio: {
+    listChannelVideos: (channelId: string, pageToken?: string) =>
+      apiClient.get(`/shorts-studio/channels/${channelId}/videos${pageToken ? `?pageToken=${pageToken}` : ''}`),
+    importVideo: (projectId: string, youtubeVideoId: string) =>
+      apiClient.post('/shorts-studio/videos/import', { projectId, youtubeVideoId }),
+    listImported: (projectId: string) =>
+      apiClient.get(`/shorts-studio/projects/${projectId}/videos`),
+    analyze: (importedVideoId: string) =>
+      apiClient.post(`/shorts-studio/videos/${importedVideoId}/analyze`),
+    analysisStatus: (importedVideoId: string) =>
+      apiClient.get(`/shorts-studio/videos/${importedVideoId}/analysis-status`),
+    transcript: (importedVideoId: string) =>
+      apiClient.get(`/shorts-studio/videos/${importedVideoId}/transcript`),
+    scenes: (importedVideoId: string) =>
+      apiClient.get(`/shorts-studio/videos/${importedVideoId}/scenes`),
+  },
 };
