@@ -619,6 +619,9 @@ export default function ProjectDetailPage() {
                         {new Date(job.createdAt).toLocaleString()}
                         {job.completedAt && ` · took ${formatDuration(new Date(job.completedAt).getTime() - new Date(job.startedAt ?? job.createdAt).getTime())}`}
                       </p>
+                      {job.error && (
+                        <p className="text-xs text-red-500 mt-1 truncate max-w-md" title={job.error}>{job.error}</p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {job.status === 'RUNNING' && (
@@ -638,7 +641,7 @@ export default function ProjectDetailPage() {
                       )}
                       <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_BADGE[job.status] ?? 'bg-gray-100 text-gray-600'}`}>
                         {STATUS_ICON[job.status]}
-                        {job.status}
+                        {STATUS_LABEL[job.status] ?? job.status}
                       </span>
                       {!!job.result && (
                         <button onClick={(e) => { e.stopPropagation(); toggle(histKey); }} className="text-gray-400 hover:text-gray-600">

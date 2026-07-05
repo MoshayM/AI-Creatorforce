@@ -12,13 +12,13 @@ test.describe('Navigation', () => {
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('a[href="/projects"]')).toBeVisible();
     await expect(page.locator('a[href="/approvals"]')).toBeVisible();
-    await expect(page.locator('a[href="/jobs"]')).toBeVisible();
     await expect(page.locator('a[href="/brand-kit"]')).toBeVisible();
     await expect(page.locator('a[href="/settings"]')).toBeVisible();
     // Removed links must not appear in the sidebar
     await expect(page.locator('a[href="/discover"]')).toHaveCount(0);
     await expect(page.locator('a[href="/analytics"]')).toHaveCount(0);
     await expect(page.locator('a[href="/assets"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/jobs"]')).toHaveCount(0);
   });
 
   test('sidebar shows brand name', async ({ page }) => {
@@ -44,15 +44,6 @@ test.describe('Navigation', () => {
     await page.waitForURL(/\/approvals/, { timeout: 50_000 });
     await expect(page).toHaveURL(/\/approvals/);
     await expect(page.getByText('Approval Center')).toBeVisible({ timeout: 8_000 });
-  });
-
-  test('navigate to Jobs page', async ({ page }) => {
-    await page.goto('/projects');
-    await page.waitForLoadState('domcontentloaded');
-    await page.locator('a[href="/jobs"]').click();
-    await page.waitForURL(/\/jobs/, { timeout: 50_000 });
-    await expect(page).toHaveURL(/\/jobs/);
-    await expect(page.getByText('Agent Jobs')).toBeVisible({ timeout: 8_000 });
   });
 
   test('navigate to Settings page', { timeout: 60_000 }, async ({ page }) => {
