@@ -1,3 +1,6 @@
+// This file is kept in sync with ../../infra/db/schema.prisma
+// Copy from infra/db/schema.prisma — Prisma requires schema to be in /prisma by default
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -43,13 +46,13 @@ model SystemConfig {
 }
 
 model ApiKey {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   name      String
-  keyHash   String   @unique
+  keyHash   String    @unique
   lastUsed  DateTime?
   expiresAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -59,37 +62,37 @@ model ApiKey {
 // ── YouTube Channels ──────────────────────────────────────────────────────────
 
 model Channel {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   userId           String
-  youtubeChannelId String   @unique
+  youtubeChannelId String    @unique
   title            String
   description      String?
   thumbnailUrl     String?
   customUrl        String?
-  subscriberCount  Int      @default(0)
-  videoCount       Int      @default(0)
-  encryptedTokens  String?  // AES-256-GCM encrypted JSON {access,refresh,expiry}; null for read-only connections
+  subscriberCount  Int       @default(0)
+  videoCount       Int       @default(0)
+  encryptedTokens  String?
   tokenExpiresAt   DateTime?
-  scopes           String[] @default([])
-  readOnly         Boolean  @default(false)
-  active           Boolean  @default(true)
+  scopes           String[]  @default([])
+  readOnly         Boolean   @default(false)
+  active           Boolean   @default(true)
   lastSyncedAt     DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   niche            String?
-  voiceProfile     Json?   // tone/style + consented TTS voice refs
-  brandKit         Json?   // colors/fonts/thumbnail style/overlay templates
+  voiceProfile     Json?
+  brandKit         Json?
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projects Project[]
-  videos   Video[]
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects           Project[]
+  videos             Video[]
   analyticsSnapshots AnalyticsSnapshot[]
 
   @@map("channels")
 }
 
-// ── Projects (content campaigns) ─────────────────────────────────────────────
+// ── Projects ──────────────────────────────────────────────────────────────────
 
 model Project {
   id          String        @id @default(cuid())
@@ -103,14 +106,16 @@ model Project {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  jobs      AgentJob[]
-  videos    Video[]
-  approvals Approval[]
-  assets    Asset[]
-  timelines Timeline[]
-  renders   Render[]
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel        Channel         @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  jobs           AgentJob[]
+  videos         Video[]
+  approvals      Approval[]
+  assets         Asset[]
+  timelines      Timeline[]
+  renders        Render[]
+  importedVideos ImportedVideo[]
+  shortClips     ShortClip[]
 
   @@map("projects")
 }
@@ -138,9 +143,9 @@ model AgentJob {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  agentLogs  AgentLog[]
-  approval   Approval?
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentLogs AgentLog[]
+  approval  Approval?
 
   @@map("agent_jobs")
 }
@@ -168,8 +173,22 @@ enum JobType {
   SUBTITLE_GENERATE
   EDIT_PLAN
   RENDER
+  FULL_PRODUCTION
   ANALYTICS
   GROWTH_REPORT
+  // Shorts Studio (ai.md spec, Section 15)
+  SHORTS_ANALYZE
+  VIDEO_IMPORT
+  TRANSCRIPT_ANALYSIS
+  SCENE_DETECTION
+  TOPIC_SEGMENTATION
+  HIGHLIGHT_DETECTION
+  SHORTS_GENERATION
+  AUTO_EDIT
+  CAPTION_GENERATION
+  SHORTS_RENDER
+  SHORTS_EXPORT
+  SHORTS_PUBLISH
 }
 
 enum JobStatus {
@@ -184,7 +203,7 @@ enum JobStatus {
   CANCELLED
 }
 
-// ── Agent Execution Logs ──────────────────────────────────────────────────────
+// ── Agent Logs ────────────────────────────────────────────────────────────────
 
 model AgentLog {
   id        String   @id @default(cuid())
@@ -203,16 +222,16 @@ model AgentLog {
   @@map("agent_logs")
 }
 
-// ── Compliance Results ────────────────────────────────────────────────────────
+// ── Compliance ────────────────────────────────────────────────────────────────
 
 model ComplianceResult {
-  id          String            @id @default(cuid())
-  jobId       String            @unique
-  passed      Boolean
-  score       Float
-  flags       ComplianceFlag[]
-  reviewedAt  DateTime          @default(now())
-  reviewerAI  String
+  id         String           @id @default(cuid())
+  jobId      String           @unique
+  passed     Boolean
+  score      Float
+  flags      ComplianceFlag[]
+  reviewedAt DateTime         @default(now())
+  reviewerAI String
 
   @@map("compliance_results")
 }
@@ -237,18 +256,18 @@ enum FlagSeverity {
   BLOCK
 }
 
-// ── Human Approvals ───────────────────────────────────────────────────────────
+// ── Approvals ─────────────────────────────────────────────────────────────────
 
 model Approval {
-  id          String         @id @default(cuid())
-  projectId   String
-  jobId       String         @unique
-  status      ApprovalStatus @default(PENDING)
-  reviewedBy  String?
-  notes       String?
-  reviewedAt  DateTime?
-  expiresAt   DateTime
-  createdAt   DateTime       @default(now())
+  id         String         @id @default(cuid())
+  projectId  String
+  jobId      String         @unique
+  status     ApprovalStatus @default(PENDING)
+  reviewedBy String?
+  notes      String?
+  reviewedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime       @default(now())
 
   project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   job     AgentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -266,26 +285,26 @@ enum ApprovalStatus {
 // ── Videos ────────────────────────────────────────────────────────────────────
 
 model Video {
-  id               String      @id @default(cuid())
-  projectId        String
-  channelId        String
-  youtubeVideoId   String?     @unique
-  title            String
-  description      String?
-  tags             String[]    @default([])
-  thumbnailUrl     String?
-  status           VideoStatus @default(DRAFT)
-  scheduledAt      DateTime?
-  publishedAt      DateTime?
-  viewCount        Int         @default(0)
-  likeCount        Int         @default(0)
-  commentCount     Int         @default(0)
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  id             String      @id @default(cuid())
+  projectId      String
+  channelId      String
+  youtubeVideoId String?     @unique
+  title          String
+  description    String?
+  tags           String[]    @default([])
+  thumbnailUrl   String?
+  status         VideoStatus @default(DRAFT)
+  scheduledAt    DateTime?
+  publishedAt    DateTime?
+  viewCount      Int         @default(0)
+  likeCount      Int         @default(0)
+  commentCount   Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
-  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  channel  Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  scripts  Script[]
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  channel Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  scripts Script[]
 
   @@map("videos")
 }
@@ -351,12 +370,12 @@ enum SubscriptionStatus {
 }
 
 model UsageLog {
-  id        String      @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   resource  UsageType
-  quantity  Int         @default(1)
-  meta      Json        @default("{}")
-  createdAt DateTime    @default(now())
+  quantity  Int       @default(1)
+  meta      Json      @default("{}")
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -388,6 +407,18 @@ enum AssetKind {
   SUBTITLE
   RENDER_SOURCE
   UPLOAD
+  // Shorts Studio (ai.md spec, Section 14)
+  SHORTS_SOURCE_VIDEO
+  SHORTS_TRANSCRIPT
+  SHORTS_SCENE_MANIFEST
+  SHORTS_CLIP_RENDER
+  SHORTS_CAPTION_TRACK
+  SHORTS_MUSIC
+  SHORTS_SFX
+  SHORTS_VOICE
+  SHORTS_THUMBNAIL
+  SHORTS_PREVIEW
+  SHORTS_FINAL_EXPORT
 }
 
 enum AssetStatus {
@@ -411,6 +442,12 @@ model Asset {
 
   project  Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   versions AssetVersion[]
+
+  importedVideoSources ImportedVideo[]
+  shortClipRenders     ShortClip[]
+  shortsTimelineItems  ShortsTimelineItem[]
+  shortsThumbnails     ShortsThumbnail[]
+  shortsExports        ShortsExportHistory[]
 
   @@index([projectId, kind, status])
   @@map("assets")
@@ -502,11 +539,11 @@ model Render {
 // ── Analytics ─────────────────────────────────────────────────────────────────
 
 model AnalyticsSnapshot {
-  id          String   @id @default(cuid())
-  channelId   String
-  ytVideoId   String?
-  capturedAt  DateTime @default(now())
-  metrics     Json     // ctr, retentionCurve, watchTime, revenue, subs, impressions
+  id         String   @id @default(cuid())
+  channelId  String
+  ytVideoId  String?
+  capturedAt DateTime @default(now())
+  metrics    Json
 
   channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
@@ -547,12 +584,12 @@ model PromptVersion {
 // ── Teams (Beta) ──────────────────────────────────────────────────────────────
 
 model Team {
-  id        String           @id @default(cuid())
+  id        String         @id @default(cuid())
   name      String
   ownerId   String
-  planTier  String           @default("free")
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  planTier  String         @default("free")
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
 
   memberships TeamMembership[]
 
@@ -578,4 +615,326 @@ model TeamMembership {
 
   @@unique([teamId, userId])
   @@map("team_memberships")
+}
+
+// ── Shorts Studio (ai.md spec, Section 17) ────────────────────────────────────
+// New relational timeline models are prefixed "Shorts" to avoid colliding with
+// the existing project-level Timeline (Json tracks) used by the long-form editor.
+
+model ImportedVideo {
+  id               String           @id @default(cuid())
+  projectId        String
+  youtubeVideoId   String
+  title            String
+  description      String?          @db.Text
+  durationMs       Int
+  thumbnailUrl     String?
+  viewCount        BigInt?
+  likeCount        BigInt?
+  commentCount     BigInt?
+  sourceAssetId    String?
+  transcriptStatus TranscriptStatus @default(PENDING)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceAsset Asset?  @relation(fields: [sourceAssetId], references: [id])
+
+  transcriptSegments TranscriptSegment[]
+  scenes             VideoScene[]
+  topicSegments      TopicSegment[]
+
+  @@unique([projectId, youtubeVideoId])
+  @@index([projectId])
+  @@map("imported_videos")
+}
+
+enum TranscriptStatus {
+  PENDING
+  YOUTUBE_CAPTIONS
+  ASR_GENERATED
+  FAILED
+}
+
+model TranscriptSegment {
+  id              String   @id @default(cuid())
+  importedVideoId String
+  startMs         Int
+  endMs           Int
+  speakerId       String?
+  text            String   @db.Text
+  embedding       Float[]  @default([])
+  createdAt       DateTime @default(now())
+
+  importedVideo ImportedVideo @relation(fields: [importedVideoId], references: [id], onDelete: Cascade)
+
+  @@index([importedVideoId, startMs])
+  @@map("transcript_segments")
+}
+
+model VideoScene {
+  id                    String   @id @default(cuid())
+  importedVideoId       String
+  startMs               Int
+  endMs                 Int
+  speakerId             String?
+  emotionScores         Json?
+  sceneChangeConfidence Float?
+  createdAt             DateTime @default(now())
+
+  importedVideo ImportedVideo @relation(fields: [importedVideoId], references: [id], onDelete: Cascade)
+
+  @@index([importedVideoId, startMs])
+  @@map("video_scenes")
+}
+
+model TopicSegment {
+  id              String        @id @default(cuid())
+  importedVideoId String
+  startMs         Int
+  endMs           Int
+  category        TopicCategory
+  title           String
+  summary         String        @db.Text
+  confidence      Float
+  createdAt       DateTime      @default(now())
+
+  importedVideo ImportedVideo @relation(fields: [importedVideoId], references: [id], onDelete: Cascade)
+  highlight     Highlight?
+  clips         ShortClip[]
+
+  @@index([importedVideoId, startMs])
+  @@map("topic_segments")
+}
+
+enum TopicCategory {
+  QUESTION_ANSWERED
+  STORY
+  TUTORIAL_STEP
+  FUNNY_MOMENT
+  IMPORTANT_STATEMENT
+  HOOK
+  PROBLEM
+  SOLUTION
+  STATISTIC
+  TIP
+  MISTAKE
+  WARNING
+  QUOTE
+  OPINION
+  LESSON
+  SUCCESS_STORY
+  FAILURE
+  CALL_TO_ACTION
+}
+
+model Highlight {
+  id               String   @id @default(cuid())
+  topicSegmentId   String   @unique
+  virality         Float
+  emotion          Float
+  retention        Float
+  hookStrength     Float
+  education        Float
+  entertainment    Float
+  confidence       Float
+  trendPotential   Float
+  shortSuitability Float
+  finalScore       Float
+  reason           String   @db.Text
+  titleSuggestion  String
+  keywords         String[] @default([])
+  createdAt        DateTime @default(now())
+
+  topicSegment TopicSegment @relation(fields: [topicSegmentId], references: [id], onDelete: Cascade)
+
+  @@index([finalScore])
+  @@map("highlights")
+}
+
+model ShortClip {
+  id               String          @id @default(cuid())
+  topicSegmentId   String
+  projectId        String
+  clipType         ClipType
+  status           ShortClipStatus @default(CANDIDATE)
+  sourceStartMs    Int
+  sourceEndMs      Int
+  reframeKeyframes Json?
+  renderAssetId    String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  topicSegment TopicSegment @relation(fields: [topicSegmentId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  renderAsset  Asset?       @relation(fields: [renderAssetId], references: [id])
+
+  timeline   ShortsTimeline?
+  thumbnails ShortsThumbnail[]
+  renderJobs ShortsRenderJob[]
+  exports    ShortsExportHistory[]
+
+  @@index([projectId, status])
+  @@map("short_clips")
+}
+
+enum ClipType {
+  YOUTUBE_SHORTS
+  INSTAGRAM_REELS
+  TIKTOK
+  LINKEDIN_CLIPS
+  FACEBOOK_REELS
+  PODCAST_HIGHLIGHTS
+}
+
+enum ShortClipStatus {
+  CANDIDATE
+  IN_EDITING
+  READY_FOR_RENDER
+  RENDERING
+  RENDERED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  EXPORTED
+  PUBLISHED
+}
+
+model ShortsTimeline {
+  id          String   @id @default(cuid())
+  shortClipId String   @unique
+  durationMs  Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  shortClip   ShortClip             @relation(fields: [shortClipId], references: [id], onDelete: Cascade)
+  tracks      ShortsTimelineTrack[]
+  captions    ShortsCaption[]
+  editHistory ShortsTimelineEdit[]
+
+  @@map("shorts_timelines")
+}
+
+model ShortsTimelineTrack {
+  id         String          @id @default(cuid())
+  timelineId String
+  type       ShortsTrackType
+  orderIndex Int
+
+  timeline ShortsTimeline       @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  items    ShortsTimelineItem[]
+
+  @@index([timelineId, orderIndex])
+  @@map("shorts_timeline_tracks")
+}
+
+enum ShortsTrackType {
+  VIDEO
+  AUDIO
+  MUSIC
+  CAPTION
+  OVERLAY
+}
+
+model ShortsTimelineItem {
+  id            String  @id @default(cuid())
+  trackId       String
+  startMs       Int
+  endMs         Int
+  sourceAssetId String?
+  cropRect      Json?
+  rotationDeg   Float?  @default(0)
+  speed         Float?  @default(1.0)
+  volume        Float?  @default(1.0)
+  properties    Json?
+
+  track       ShortsTimelineTrack @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  sourceAsset Asset?              @relation(fields: [sourceAssetId], references: [id])
+
+  @@index([trackId, startMs])
+  @@map("shorts_timeline_items")
+}
+
+model ShortsCaption {
+  id           String  @id @default(cuid())
+  timelineId   String
+  startMs      Int
+  endMs        Int
+  text         String
+  speakerColor String?
+  emphasis     Boolean @default(false)
+  emoji        String?
+  templateId   String?
+
+  timeline ShortsTimeline @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+
+  @@index([timelineId, startMs])
+  @@map("shorts_captions")
+}
+
+model ShortsTimelineEdit {
+  id         String   @id @default(cuid())
+  timelineId String
+  actorId    String // User.id, or 'AI_ASSISTANT'
+  command    Json
+  createdAt  DateTime @default(now())
+
+  timeline ShortsTimeline @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+
+  @@index([timelineId, createdAt])
+  @@map("shorts_timeline_edits")
+}
+
+model ShortsThumbnail {
+  id          String   @id @default(cuid())
+  shortClipId String
+  assetId     String
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  shortClip ShortClip @relation(fields: [shortClipId], references: [id], onDelete: Cascade)
+  asset     Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([shortClipId])
+  @@map("shorts_thumbnails")
+}
+
+model ShortsRenderJob {
+  id             String            @id @default(cuid())
+  shortClipId    String
+  jobId          String // AgentJob.id
+  ffmpegPass     Int               @default(0)
+  checkpointData Json?
+  status         ShortsRenderStatus @default(QUEUED)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  shortClip ShortClip @relation(fields: [shortClipId], references: [id], onDelete: Cascade)
+
+  @@index([shortClipId])
+  @@map("shorts_render_jobs")
+}
+
+enum ShortsRenderStatus {
+  QUEUED
+  RUNNING
+  CHECKPOINTED
+  COMPLETE
+  FAILED
+}
+
+model ShortsExportHistory {
+  id              String    @id @default(cuid())
+  shortClipId     String
+  clipType        ClipType
+  exportAssetId   String
+  publishedAt     DateTime?
+  publishTargetId String?
+  createdAt       DateTime  @default(now())
+
+  shortClip   ShortClip @relation(fields: [shortClipId], references: [id], onDelete: Cascade)
+  exportAsset Asset     @relation(fields: [exportAssetId], references: [id])
+
+  @@index([shortClipId])
+  @@map("shorts_export_history")
 }

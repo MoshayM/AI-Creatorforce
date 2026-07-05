@@ -25,6 +25,19 @@ export const JobTypeSchema = z.enum([
   'FULL_PRODUCTION',
   'ANALYTICS',
   'GROWTH_REPORT',
+  // Shorts Studio (ai.md spec, Section 15)
+  'SHORTS_ANALYZE',
+  'VIDEO_IMPORT',
+  'TRANSCRIPT_ANALYSIS',
+  'SCENE_DETECTION',
+  'TOPIC_SEGMENTATION',
+  'HIGHLIGHT_DETECTION',
+  'SHORTS_GENERATION',
+  'AUTO_EDIT',
+  'CAPTION_GENERATION',
+  'SHORTS_RENDER',
+  'SHORTS_EXPORT',
+  'SHORTS_PUBLISH',
 ]);
 export type JobType = z.infer<typeof JobTypeSchema>;
 

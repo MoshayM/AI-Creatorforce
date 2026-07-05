@@ -17,6 +17,7 @@ import { AnalyticsModule } from '../modules/analytics/analytics.module';
 import { GrowthModule } from '../modules/growth/growth.module';
 import { AssetsModule } from '../modules/assets/assets.module';
 import { MediaModule } from '../modules/media/media.module';
+import { ShortsStudioModule } from '../modules/shorts-studio/shorts-studio.module';
 import { GatewayModule } from '../gateway/gateway.module';
 
 @Module({
@@ -38,6 +39,7 @@ import { GatewayModule } from '../gateway/gateway.module';
     GrowthModule,
     AssetsModule,
     MediaModule,
+    ShortsStudioModule,
     GatewayModule,
   ],
   providers: [SupervisorWorker],

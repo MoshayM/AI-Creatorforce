@@ -20,6 +20,10 @@ import { AssetsService } from '../modules/assets/assets.service';
 import { MediaService } from '../modules/media/media.service';
 import { StorageService } from '../modules/media/storage.service';
 import { ExportsService } from '../modules/media/exports.service';
+import { VideoImportService } from '../modules/shorts-studio/video-import.service';
+import { TranscriptService } from '../modules/shorts-studio/transcript.service';
+import { SceneDetectionService } from '../modules/shorts-studio/scene-detection.service';
+import { SHORTS_IMPORT_STAGES } from '../modules/shorts-studio/shorts-studio.service';
 import { composeVideo, ffmpegPath, runFfmpegCapture, type ComposeScene } from '../modules/media/adapters/ffmpeg.util';
 import { encodeWhooshWav } from '../modules/media/adapters/codec.util';
 import { checkDurations, analyzeLoudness } from '../modules/media/quality.util';
@@ -69,6 +73,9 @@ export class SupervisorWorker extends WorkerHost {
     private readonly media: MediaService,
     private readonly storage: StorageService,
     private readonly exportsSvc: ExportsService,
+    private readonly videoImport: VideoImportService,
+    private readonly transcript: TranscriptService,
+    private readonly sceneDetection: SceneDetectionService,
     private readonly events: EventsGateway,
   ) {
     super();
@@ -1027,6 +1034,74 @@ export class SupervisorWorker extends WorkerHost {
           stagesSkipped: skipped.map((s) => s.type),
           exports: stageResults['PACKAGE'] ?? [],
         };
+      }
+
+      // ── Shorts Studio import pipeline (ai.md Sections 3, 15, 16) ────────────
+
+      case 'VIDEO_IMPORT': {
+        const importedVideoId = payload['importedVideoId'] as string;
+        if (!importedVideoId) throw new Error('VIDEO_IMPORT requires payload.importedVideoId');
+        return this.videoImport.ensureSourceDownloaded(importedVideoId, (m) => this.log(jobId, projectId, m));
+      }
+
+      case 'TRANSCRIPT_ANALYSIS': {
+        const importedVideoId = payload['importedVideoId'] as string;
+        if (!importedVideoId) throw new Error('TRANSCRIPT_ANALYSIS requires payload.importedVideoId');
+        return this.transcript.ensureTranscript(importedVideoId, (m) => this.log(jobId, projectId, m));
+      }
+
+      case 'SCENE_DETECTION': {
+        const importedVideoId = payload['importedVideoId'] as string;
+        if (!importedVideoId) throw new Error('SCENE_DETECTION requires payload.importedVideoId');
+        return this.sceneDetection.ensureScenes(importedVideoId, (m) => this.log(jobId, projectId, m));
+      }
+
+      case 'SHORTS_ANALYZE': {
+        // Pipeline root for one imported video. Each stage runs as a real child
+        // job (same convention as FULL_PRODUCTION) so results persist per stage
+        // and the dashboard lights up. Stages self-skip when their output rows
+        // already exist (ai.md resume rule 16.1) — a re-run only redoes gaps.
+        const importedVideoId = payload['importedVideoId'] as string;
+        if (!importedVideoId) throw new Error('SHORTS_ANALYZE requires payload.importedVideoId');
+
+        const stageResults: Record<string, unknown> = {};
+        let idx = 0;
+        for (const stageType of SHORTS_IMPORT_STAGES) {
+          idx += 1;
+          this.events.emitJobUpdate(jobId, {
+            status: 'RUNNING', type: 'SHORTS_ANALYZE',
+            pipelineStage: stageType, pipelineIndex: idx - 1, pipelineCount: SHORTS_IMPORT_STAGES.length,
+          }, projectId);
+          this.log(jobId, projectId, `Stage ${idx}/${SHORTS_IMPORT_STAGES.length}: ${stageType}`);
+
+          const child = await this.prisma.agentJob.create({
+            data: {
+              projectId, type: stageType, status: 'RUNNING', startedAt: new Date(),
+              payload: { pipelineMode: true, importedVideoId } as never,
+            },
+          });
+          this.events.emitJobUpdate(child.id, { status: 'RUNNING', type: stageType }, projectId);
+          try {
+            const result = await this.dispatch(stageType, projectId, child.id, { pipelineMode: true, importedVideoId });
+            await this.prisma.agentJob.update({
+              where: { id: child.id },
+              data: { status: 'COMPLETED', result: result as never, completedAt: new Date() },
+            });
+            this.events.emitJobComplete(child.id, { result }, projectId);
+            stageResults[stageType] = result;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            await this.prisma.agentJob.update({
+              where: { id: child.id },
+              data: { status: 'FAILED', error: msg, completedAt: new Date() },
+            }).catch(() => undefined);
+            this.events.emitJobFailed(child.id, msg, projectId);
+            throw err;
+          }
+        }
+
+        this.log(jobId, projectId, 'Shorts analysis pipeline complete ✓');
+        return { importedVideoId, stages: stageResults };
       }
 
       default:
