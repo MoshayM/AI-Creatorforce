@@ -28,8 +28,6 @@ interface CacheEntry {
   hitCount: number;
 }
 
-const cache = new Map<string, CacheEntry>();
-
 function cacheTtlMs(): number {
   const v = parseInt(process.env['COMPLIANCE_CACHE_TTL_MS'] ?? '', 10);
   return Number.isFinite(v) && v > 0 ? v : 86_400_000; // 24 h
@@ -45,26 +43,6 @@ function cacheKey(content: { title: string; script: string; description?: string
   return createHash('sha256').update(normalized).digest('hex');
 }
 
-function getFromCache(key: string): ComplianceResult | null {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    cache.delete(key);
-    return null;
-  }
-  entry.hitCount++;
-  return entry.result;
-}
-
-function setInCache(key: string, result: ComplianceResult): void {
-  cache.set(key, { result, expiresAt: Date.now() + cacheTtlMs(), hitCount: 0 });
-  // Evict oldest entries if cache grows beyond 500 items
-  if (cache.size > 500) {
-    const oldest = [...cache.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt)[0];
-    if (oldest) cache.delete(oldest[0]);
-  }
-}
-
 // ── Service ───────────────────────────────────────────────────────────────────
 
 export type ComplianceProgressCallback = (event: AIProgressEvent) => void;
@@ -72,13 +50,37 @@ export type ComplianceProgressCallback = (event: AIProgressEvent) => void;
 @Injectable()
 export class ComplianceService {
   private readonly logger = new Logger(ComplianceService.name);
+  // Instance-scoped (the service is a Nest singleton, so caching still spans
+  // requests) — a module-level Map leaked results across test instances and
+  // made enforce() read a stale pass instead of the current AI verdict.
+  private readonly cache = new Map<string, CacheEntry>();
+
+  private getFromCache(key: string): ComplianceResult | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+    entry.hitCount++;
+    return entry.result;
+  }
+
+  private setInCache(key: string, result: ComplianceResult): void {
+    this.cache.set(key, { result, expiresAt: Date.now() + cacheTtlMs(), hitCount: 0 });
+    // Evict oldest entries if cache grows beyond 500 items
+    if (this.cache.size > 500) {
+      const oldest = [...this.cache.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt)[0];
+      if (oldest) this.cache.delete(oldest[0]);
+    }
+  }
 
   async check(
     content: { title: string; script: string; description?: string; tags?: string[] },
     onProgress?: ComplianceProgressCallback,
   ): Promise<ComplianceResult> {
     const key = cacheKey(content);
-    const cached = getFromCache(key);
+    const cached = this.getFromCache(key);
     if (cached) {
       this.logger.log(`[compliance:cache-hit] key=${key.slice(0, 8)} score=${cached.score} passed=${cached.passed}`);
       return cached;
@@ -108,7 +110,7 @@ export class ComplianceService {
       { systemPrompt: COMPLIANCE_SYSTEM, maxTokens: 2048, onProgress },
     );
 
-    setInCache(key, result);
+    this.setInCache(key, result);
     this.logger.log(`[compliance:done] score=${result.score} passed=${result.passed} flags=${result.flags.length} cached_for=${Math.round(cacheTtlMs() / 3600000)}h`);
 
     return result;
@@ -130,11 +132,11 @@ export class ComplianceService {
   /** Invalidate a specific cache entry (e.g., after script is edited). */
   invalidate(content: Parameters<ComplianceService['check']>[0]): boolean {
     const key = cacheKey(content);
-    return cache.delete(key);
+    return this.cache.delete(key);
   }
 
   /** Returns cache statistics for monitoring. */
   cacheStats(): { size: number; keys: string[] } {
-    return { size: cache.size, keys: [...cache.keys()].map((k) => k.slice(0, 8)) };
+    return { size: this.cache.size, keys: [...this.cache.keys()].map((k) => k.slice(0, 8)) };
   }
 }
