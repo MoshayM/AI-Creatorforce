@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clapperboard, Loader2, Download, Wand2, CheckCircle2, XCircle, Clock, Film, Captions } from 'lucide-react';
+import { Clapperboard, Loader2, Download, Wand2, CheckCircle2, XCircle, Clock, Film, Captions, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Project {
@@ -57,6 +58,8 @@ const STAGE_LABELS: Record<string, string> = {
   VIDEO_IMPORT: 'Import',
   TRANSCRIPT_ANALYSIS: 'Transcript',
   SCENE_DETECTION: 'Scenes',
+  TOPIC_SEGMENTATION: 'Topics',
+  HIGHLIGHT_DETECTION: 'Highlights',
 };
 
 function AnalysisProgress({ importedVideoId }: { importedVideoId: string }) {
@@ -194,16 +197,26 @@ export default function ShortsStudioPage() {
                       <p className="text-xs text-gray-400 mt-0.5">{fmtDuration(v.durationMs)}</p>
                       <AnalysisProgress importedVideoId={v.id} />
                     </div>
-                    <button
-                      onClick={() => analyzeMutation.mutate(v.id)}
-                      disabled={analyzeMutation.isPending}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50 shrink-0"
-                    >
-                      {analyzeMutation.isPending && analyzeMutation.variables === v.id
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <Wand2 className="w-4 h-4" />}
-                      Analyze
-                    </button>
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button
+                        onClick={() => analyzeMutation.mutate(v.id)}
+                        disabled={analyzeMutation.isPending}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+                      >
+                        {analyzeMutation.isPending && analyzeMutation.variables === v.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Wand2 className="w-4 h-4" />}
+                        Analyze
+                      </button>
+                      {v._count.topicSegments > 0 && (
+                        <Link
+                          href={`/shorts-studio/videos/${v.id}`}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 rounded-lg text-sm hover:bg-brand-50 justify-center"
+                        >
+                          <Sparkles className="w-4 h-4" /> Results
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

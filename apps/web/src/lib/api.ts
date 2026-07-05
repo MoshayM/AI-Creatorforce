@@ -111,5 +111,15 @@ export const api = {
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/transcript`),
     scenes: (importedVideoId: string) =>
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/scenes`),
+    topics: (importedVideoId: string) =>
+      apiClient.get(`/shorts-studio/videos/${importedVideoId}/topics`),
+    highlights: (importedVideoId: string) =>
+      apiClient.get(`/shorts-studio/videos/${importedVideoId}/highlights`),
+    recommendations: (importedVideoId: string, limit = 10) =>
+      apiClient.get(`/shorts-studio/videos/${importedVideoId}/recommendations?limit=${limit}`),
+    generateClips: (highlightId: string, clipTypes: string[]) =>
+      apiClient.post(`/shorts-studio/highlights/${highlightId}/generate-clips`, { clipTypes }),
+    listClips: (projectId: string) =>
+      apiClient.get(`/shorts-studio/projects/${projectId}/clips`),
   },
 };

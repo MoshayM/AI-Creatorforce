@@ -2,8 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { JobsService } from '../jobs/jobs.service';
 
-/** Job types run by the shorts-import pipeline, in order (Phase 1 slice). */
-export const SHORTS_IMPORT_STAGES = ['VIDEO_IMPORT', 'TRANSCRIPT_ANALYSIS', 'SCENE_DETECTION'] as const;
+/** Job types run by the shorts-import pipeline, in order (ai.md Section 3.1). */
+export const SHORTS_IMPORT_STAGES = [
+  'VIDEO_IMPORT',
+  'TRANSCRIPT_ANALYSIS',
+  'SCENE_DETECTION',
+  'TOPIC_SEGMENTATION',
+  'HIGHLIGHT_DETECTION',
+] as const;
 
 @Injectable()
 export class ShortsStudioService {
@@ -65,24 +71,31 @@ export class ShortsStudioService {
     const latestByType = new Map<string, (typeof jobs)[number]>();
     for (const j of jobs) if (!latestByType.has(j.type)) latestByType.set(j.type, j);
 
-    const [transcriptSegments, scenes] = await Promise.all([
+    const [transcriptSegments, scenes, topicSegments, highlights] = await Promise.all([
       this.prisma.transcriptSegment.count({ where: { importedVideoId } }),
       this.prisma.videoScene.count({ where: { importedVideoId } }),
+      this.prisma.topicSegment.count({ where: { importedVideoId } }),
+      this.prisma.highlight.count({ where: { topicSegment: { importedVideoId } } }),
     ]);
+
+    const satisfiedBy: Record<(typeof SHORTS_IMPORT_STAGES)[number], boolean> = {
+      VIDEO_IMPORT: !!video.sourceAssetId,
+      TRANSCRIPT_ANALYSIS: transcriptSegments > 0,
+      SCENE_DETECTION: scenes > 0,
+      TOPIC_SEGMENTATION: topicSegments > 0,
+      HIGHLIGHT_DETECTION: highlights > 0,
+    };
 
     return {
       importedVideoId,
       transcriptStatus: video.transcriptStatus,
       sourceDownloaded: !!video.sourceAssetId,
-      counts: { transcriptSegments, scenes },
+      counts: { transcriptSegments, scenes, topicSegments, highlights },
       pipeline: latestByType.get('SHORTS_ANALYZE') ?? null,
       stages: SHORTS_IMPORT_STAGES.map((type) => ({
         type,
         job: latestByType.get(type) ?? null,
-        satisfied:
-          type === 'VIDEO_IMPORT' ? !!video.sourceAssetId :
-          type === 'TRANSCRIPT_ANALYSIS' ? transcriptSegments > 0 :
-          scenes > 0,
+        satisfied: satisfiedBy[type],
       })),
     };
   }
@@ -102,5 +115,31 @@ export class ShortsStudioService {
       where: { importedVideoId },
       orderBy: { startMs: 'asc' },
     });
+  }
+
+  async getTopics(importedVideoId: string, userId: string) {
+    await this.assertVideoOwnership(importedVideoId, userId);
+    return this.prisma.topicSegment.findMany({
+      where: { importedVideoId },
+      orderBy: { startMs: 'asc' },
+      include: { highlight: { select: { id: true, finalScore: true } } },
+    });
+  }
+
+  async getHighlights(importedVideoId: string, userId: string) {
+    await this.assertVideoOwnership(importedVideoId, userId);
+    return this.prisma.highlight.findMany({
+      where: { topicSegment: { importedVideoId } },
+      orderBy: { finalScore: 'desc' },
+      include: { topicSegment: true },
+    });
+  }
+
+  async assertHighlightOwnership(highlightId: string, userId: string) {
+    const highlight = await this.prisma.highlight.findFirst({
+      where: { id: highlightId, topicSegment: { importedVideo: { project: { userId } } } },
+    });
+    if (!highlight) throw new NotFoundException('Highlight not found');
+    return highlight;
   }
 }

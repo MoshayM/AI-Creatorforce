@@ -1,0 +1,237 @@
+'use client';
+import { useState } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2 } from 'lucide-react';
+import { api } from '@/lib/api';
+
+interface Topic {
+  id: string;
+  startMs: number;
+  endMs: number;
+  category: string;
+  title: string;
+  summary: string;
+  confidence: number;
+  highlight: { id: string; finalScore: number } | null;
+}
+
+interface Highlight {
+  id: string;
+  finalScore: number;
+  reason: string;
+  titleSuggestion: string;
+  keywords: string[];
+  virality: number;
+  emotion: number;
+  retention: number;
+  hookStrength: number;
+  education: number;
+  entertainment: number;
+  confidence: number;
+  trendPotential: number;
+  shortSuitability: number;
+  topicSegment: { id: string; startMs: number; endMs: number; category: string; title: string };
+}
+
+const DIMENSIONS: Array<{ key: keyof Highlight; label: string }> = [
+  { key: 'virality', label: 'Virality' },
+  { key: 'emotion', label: 'Emotion' },
+  { key: 'retention', label: 'Retention' },
+  { key: 'hookStrength', label: 'Hook' },
+  { key: 'education', label: 'Education' },
+  { key: 'entertainment', label: 'Entertainment' },
+  { key: 'confidence', label: 'Confidence' },
+  { key: 'trendPotential', label: 'Trend' },
+  { key: 'shortSuitability', label: 'Short fit' },
+];
+
+const CLIP_TYPES = [
+  { value: 'YOUTUBE_SHORTS', label: 'YouTube Shorts' },
+  { value: 'TIKTOK', label: 'TikTok' },
+  { value: 'INSTAGRAM_REELS', label: 'Instagram Reels' },
+];
+
+const CATEGORY_COLORS: Record<string, string> = {
+  HOOK: 'bg-pink-100 text-pink-700',
+  STORY: 'bg-amber-100 text-amber-700',
+  TIP: 'bg-green-100 text-green-700',
+  TUTORIAL_STEP: 'bg-blue-100 text-blue-700',
+  FUNNY_MOMENT: 'bg-purple-100 text-purple-700',
+  STATISTIC: 'bg-cyan-100 text-cyan-700',
+  CALL_TO_ACTION: 'bg-red-100 text-red-700',
+};
+
+function fmt(ms: number): string {
+  const s = Math.round(ms / 1000);
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function scoreColor(v: number): string {
+  if (v >= 70) return 'text-green-600';
+  if (v >= 40) return 'text-amber-600';
+  return 'text-gray-400';
+}
+
+function HighlightCard({ h }: { h: Highlight }) {
+  const qc = useQueryClient();
+  const [types, setTypes] = useState<string[]>(['YOUTUBE_SHORTS']);
+  const [generated, setGenerated] = useState(false);
+
+  const generate = useMutation({
+    mutationFn: () => api.shortsStudio.generateClips(h.id, types),
+    onSuccess: () => {
+      setGenerated(true);
+      void qc.invalidateQueries({ queryKey: ['shorts-clips'] });
+    },
+  });
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-lg font-bold text-brand-700">{Math.round(h.finalScore)}</span>
+            <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${CATEGORY_COLORS[h.topicSegment.category] ?? 'bg-gray-100 text-gray-600'}`}>
+              {h.topicSegment.category.replace(/_/g, ' ')}
+            </span>
+            <span className="text-xs text-gray-400">{fmt(h.topicSegment.startMs)}–{fmt(h.topicSegment.endMs)}</span>
+          </div>
+          <p className="font-semibold text-gray-900 mt-1.5">{h.titleSuggestion}</p>
+          <p className="text-sm text-gray-500 mt-1">{h.reason}</p>
+          {h.keywords.length > 0 && (
+            <p className="text-[11px] text-gray-400 mt-1.5 truncate">{h.keywords.map((k) => `#${k.replace(/\s+/g, '')}`).join(' ')}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 sm:grid-cols-9 gap-2 mt-4">
+        {DIMENSIONS.map(({ key, label }) => (
+          <div key={key} className="text-center">
+            <p className={`text-sm font-bold ${scoreColor(h[key] as number)}`}>{Math.round(h[key] as number)}</p>
+            <p className="text-[10px] text-gray-400">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-50 flex-wrap">
+        {CLIP_TYPES.map(({ value, label }) => (
+          <label key={value} className="flex items-center gap-1.5 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={types.includes(value)}
+              onChange={(e) => setTypes((t) => (e.target.checked ? [...t, value] : t.filter((x) => x !== value)))}
+              className="rounded border-gray-300"
+            />
+            {label}
+          </label>
+        ))}
+        <button
+          onClick={() => generate.mutate()}
+          disabled={generate.isPending || types.length === 0 || generated}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 disabled:opacity-50"
+        >
+          {generate.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : generated ? <CheckCircle2 className="w-3.5 h-3.5" />
+            : <Scissors className="w-3.5 h-3.5" />}
+          {generated ? 'Clips created' : 'Generate clips'}
+        </button>
+      </div>
+      {generate.isError && (
+        <p className="text-xs text-red-500 mt-2">
+          {(generate.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Failed to generate clips'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function ShortsVideoDetailPage() {
+  const { importedVideoId } = useParams<{ importedVideoId: string }>();
+  const [tab, setTab] = useState<'highlights' | 'topics'>('highlights');
+
+  const { data: topics = [], isLoading: loadingTopics } = useQuery<Topic[]>({
+    queryKey: ['shorts-topics', importedVideoId],
+    queryFn: () => api.shortsStudio.topics(importedVideoId).then((r) => r.data as Topic[]),
+  });
+  const { data: highlights = [], isLoading: loadingHighlights } = useQuery<Highlight[]>({
+    queryKey: ['shorts-highlights', importedVideoId],
+    queryFn: () => api.shortsStudio.highlights(importedVideoId).then((r) => r.data as Highlight[]),
+  });
+
+  const loading = loadingTopics || loadingHighlights;
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto">
+      <Link href="/shorts-studio" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-4">
+        <ArrowLeft className="w-4 h-4" /> Shorts Studio
+      </Link>
+
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Sparkles className="w-6 h-6 text-brand-600" /> Analysis results
+        </h1>
+        <div className="flex rounded-xl bg-gray-100 p-1 text-sm">
+          <button
+            onClick={() => setTab('highlights')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg ${tab === 'highlights' ? 'bg-white shadow-sm font-semibold text-gray-900' : 'text-gray-500'}`}
+          >
+            <Trophy className="w-4 h-4" /> Highlights ({highlights.length})
+          </button>
+          <button
+            onClick={() => setTab('topics')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg ${tab === 'topics' ? 'bg-white shadow-sm font-semibold text-gray-900' : 'text-gray-500'}`}
+          >
+            <ListTree className="w-4 h-4" /> Topics ({topics.length})
+          </button>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-gray-400 py-16 justify-center">
+          <Loader2 className="w-5 h-5 animate-spin" /> Loading analysis…
+        </div>
+      )}
+
+      {!loading && tab === 'highlights' && (
+        <div className="space-y-4">
+          {highlights.length === 0 && (
+            <p className="text-center text-gray-400 py-16">
+              No highlights yet — run Analyze from the Shorts Studio page and wait for the pipeline to finish.
+            </p>
+          )}
+          {highlights.map((h) => <HighlightCard key={h.id} h={h} />)}
+        </div>
+      )}
+
+      {!loading && tab === 'topics' && (
+        <div className="space-y-2">
+          {topics.length === 0 && (
+            <p className="text-center text-gray-400 py-16">No topics yet — run Analyze from the Shorts Studio page.</p>
+          )}
+          {topics.map((t) => (
+            <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+              <span className="text-xs text-gray-400 font-mono shrink-0 mt-0.5 w-20">{fmt(t.startMs)}–{fmt(t.endMs)}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600'}`}>
+                    {t.category.replace(/_/g, ' ')}
+                  </span>
+                  <p className="font-medium text-gray-900 truncate">{t.title}</p>
+                </div>
+                <p className="text-sm text-gray-500 mt-1">{t.summary}</p>
+              </div>
+              {t.highlight && (
+                <span className="text-sm font-bold text-brand-700 shrink-0" title="Highlight score">
+                  {Math.round(t.highlight.finalScore)}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -8,6 +8,10 @@ import { YouTubeReadService } from './youtube-read.service';
 import { VideoImportService } from './video-import.service';
 import { TranscriptService } from './transcript.service';
 import { SceneDetectionService } from './scene-detection.service';
+import { TopicSegmentationService } from './topic-segmentation.service';
+import { HighlightScoringService } from './highlight-scoring.service';
+import { ClipRecommendationService } from './clip-recommendation.service';
+import { ShortsGenerationService } from './shorts-generation.service';
 
 @Module({
   imports: [ChannelsModule, JobsModule, MediaModule],
@@ -18,6 +22,10 @@ import { SceneDetectionService } from './scene-detection.service';
     VideoImportService,
     TranscriptService,
     SceneDetectionService,
+    TopicSegmentationService,
+    HighlightScoringService,
+    ClipRecommendationService,
+    ShortsGenerationService,
   ],
   exports: [
     ShortsStudioService,
@@ -25,6 +33,10 @@ import { SceneDetectionService } from './scene-detection.service';
     VideoImportService,
     TranscriptService,
     SceneDetectionService,
+    TopicSegmentationService,
+    HighlightScoringService,
+    ClipRecommendationService,
+    ShortsGenerationService,
   ],
 })
 export class ShortsStudioModule {}

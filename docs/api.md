@@ -175,3 +175,25 @@ Event shape:
 ## 19. Versioning
 
 URI-versioned (`/api/v1`). Breaking changes ship under a new version; deprecations announced via `Deprecation` and `Sunset` headers.
+
+## 20. Shorts Studio
+
+Module spec: repo-root `ai.md`. All routes prefixed `/shorts-studio`, JWT-guarded, ownership-checked per project.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/shorts-studio/channels/:channelId/videos` | Page through the channel's uploads (`?pageToken=`) |
+| GET | `/shorts-studio/videos/:youtubeVideoId/metadata` | Fetch metadata without importing (`?channelId=`) |
+| POST | `/shorts-studio/videos/import` | `{ projectId, youtubeVideoId }` → ImportedVideo |
+| GET | `/shorts-studio/projects/:projectId/videos` | List imported videos with analysis counts |
+| POST | `/shorts-studio/videos/:id/analyze` | Enqueue the SHORTS_ANALYZE pipeline (import → transcript → scenes → topics → highlights) |
+| GET | `/shorts-studio/videos/:id/analysis-status` | Aggregated per-stage status + output counts |
+| GET | `/shorts-studio/videos/:id/transcript` | TranscriptSegment[] |
+| GET | `/shorts-studio/videos/:id/scenes` | VideoScene[] |
+| GET | `/shorts-studio/videos/:id/topics` | TopicSegment[] with highlight scores |
+| GET | `/shorts-studio/videos/:id/highlights` | Highlight[] ranked by finalScore |
+| GET | `/shorts-studio/videos/:id/recommendations` | Top-N clip recommendations (`?limit=5\|10\|20`, no AI call) |
+| POST | `/shorts-studio/highlights/:id/generate-clips` | `{ clipTypes: ClipType[] }` → candidate ShortClip[] + seeded timelines |
+| GET | `/shorts-studio/projects/:projectId/clips` | List ShortClip[] for a project |
+
+Pipeline stages run as child `AgentJob`s of the `SHORTS_ANALYZE` root and self-skip when their output rows already exist (resume semantics, `ai.md` §16). Requires `yt-dlp` (`YT_DLP_PATH`) for source download; Whisper ASR fallback uses `OPENAI_API_KEY`.

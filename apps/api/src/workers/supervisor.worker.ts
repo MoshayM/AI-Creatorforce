@@ -23,6 +23,8 @@ import { ExportsService } from '../modules/media/exports.service';
 import { VideoImportService } from '../modules/shorts-studio/video-import.service';
 import { TranscriptService } from '../modules/shorts-studio/transcript.service';
 import { SceneDetectionService } from '../modules/shorts-studio/scene-detection.service';
+import { TopicSegmentationService } from '../modules/shorts-studio/topic-segmentation.service';
+import { HighlightScoringService } from '../modules/shorts-studio/highlight-scoring.service';
 import { SHORTS_IMPORT_STAGES } from '../modules/shorts-studio/shorts-studio.service';
 import { composeVideo, ffmpegPath, runFfmpegCapture, type ComposeScene } from '../modules/media/adapters/ffmpeg.util';
 import { encodeWhooshWav } from '../modules/media/adapters/codec.util';
@@ -76,6 +78,8 @@ export class SupervisorWorker extends WorkerHost {
     private readonly videoImport: VideoImportService,
     private readonly transcript: TranscriptService,
     private readonly sceneDetection: SceneDetectionService,
+    private readonly topicSegmentation: TopicSegmentationService,
+    private readonly highlightScoring: HighlightScoringService,
     private readonly events: EventsGateway,
   ) {
     super();
@@ -1054,6 +1058,18 @@ export class SupervisorWorker extends WorkerHost {
         const importedVideoId = payload['importedVideoId'] as string;
         if (!importedVideoId) throw new Error('SCENE_DETECTION requires payload.importedVideoId');
         return this.sceneDetection.ensureScenes(importedVideoId, (m) => this.log(jobId, projectId, m));
+      }
+
+      case 'TOPIC_SEGMENTATION': {
+        const importedVideoId = payload['importedVideoId'] as string;
+        if (!importedVideoId) throw new Error('TOPIC_SEGMENTATION requires payload.importedVideoId');
+        return this.topicSegmentation.ensureTopics(importedVideoId, (m) => this.log(jobId, projectId, m));
+      }
+
+      case 'HIGHLIGHT_DETECTION': {
+        const importedVideoId = payload['importedVideoId'] as string;
+        if (!importedVideoId) throw new Error('HIGHLIGHT_DETECTION requires payload.importedVideoId');
+        return this.highlightScoring.ensureHighlights(importedVideoId, (m) => this.log(jobId, projectId, m));
       }
 
       case 'SHORTS_ANALYZE': {
