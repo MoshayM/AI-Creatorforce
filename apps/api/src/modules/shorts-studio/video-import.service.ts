@@ -6,6 +6,7 @@ import * as os from 'os';
 import { createHash } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../media/storage.service';
+import { ffmpegPath } from '../media/adapters/ffmpeg.util';
 import { YouTubeReadService } from './youtube-read.service';
 
 /**
@@ -142,11 +143,15 @@ export class VideoImportService {
 
   private runYtDlp(youtubeVideoId: string, outPath: string): Promise<void> {
     const bin = this.ytDlpBin();
+    // yt-dlp needs ffmpeg to merge separate video+audio streams; hand it the
+    // bundled ffmpeg-static binary so it doesn't depend on PATH.
+    const ffmpeg = ffmpegPath();
     const args = [
       `https://www.youtube.com/watch?v=${youtubeVideoId}`,
       '-f', 'bv*[ext=mp4][height<=1080]+ba[ext=m4a]/b[ext=mp4]/b',
       '--merge-output-format', 'mp4',
       '--no-playlist',
+      ...(ffmpeg ? ['--ffmpeg-location', ffmpeg] : []),
       '-o', outPath,
     ];
     return new Promise((resolve, reject) => {
