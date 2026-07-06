@@ -10,6 +10,7 @@ interface ChatMessage {
 
 interface CopilotResponse {
   reply: string;
+  language?: string;
   executed?: { action: string; result: unknown };
   needsConfirmation?: Record<string, unknown> & { action: string };
 }
@@ -45,7 +46,14 @@ export function CopilotPanel() {
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<CopilotResponse['needsConfirmation'] | null>(null);
   const [listening, setListening] = useState(false);
-  const [speakReplies, setSpeakReplies] = useState(false);
+  // Voice replies default ON — the copilot answers aloud in the user's language
+  const [speakReplies, setSpeakReplies] = useState(true);
+  // Two-way conversation: after the bot speaks, the mic reopens for the reply.
+  // Armed whenever the user's last turn was voice; disarmed on typing/close.
+  const conversationRef = useRef(false);
+  // BCP-47 of the user's speaking language, updated from every server reply
+  const [lang, setLang] = useState<string>(() =>
+    typeof navigator !== 'undefined' ? navigator.language : 'en-US');
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const voiceSupported = typeof window !== 'undefined' && !!getRecognition();
@@ -54,11 +62,28 @@ export function CopilotPanel() {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, pending, busy]);
 
-  const speak = useCallback((text: string) => {
-    if (!speakReplies || typeof window === 'undefined' || !window.speechSynthesis) return;
+  const speak = useCallback((text: string, replyLang?: string, onDone?: () => void) => {
+    if (!speakReplies || typeof window === 'undefined' || !window.speechSynthesis) {
+      onDone?.();
+      return;
+    }
+    const target = replyLang ?? lang;
     window.speechSynthesis.cancel(); // barge-in: new reply interrupts the old one
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
-  }, [speakReplies]);
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = target;
+    // Prefer an installed voice matching the user's language (e.g. hi-IN)
+    const voices = window.speechSynthesis.getVoices();
+    const prefix = target.split('-')[0]!.toLowerCase();
+    const match = voices.find((v) => v.lang.toLowerCase() === target.toLowerCase())
+      ?? voices.find((v) => v.lang.toLowerCase().startsWith(prefix));
+    if (match) utterance.voice = match;
+    utterance.onend = () => onDone?.();
+    utterance.onerror = () => onDone?.();
+    window.speechSynthesis.speak(utterance);
+  }, [speakReplies, lang]);
+
+  // Set after startListening is defined; lets speak()'s onend reopen the mic
+  const startListeningRef = useRef<() => void>(() => undefined);
 
   const send = useCallback(async (text: string, confirmedCommand?: Record<string, unknown>) => {
     const nextMessages: ChatMessage[] = text
@@ -72,29 +97,31 @@ export function CopilotPanel() {
       const res = await apiClient.post('/copilot/chat', {
         messages: nextMessages.slice(-10),
         ...(confirmedCommand ? { confirmedCommand } : {}),
+        // Lets a spoken "yes" complete the awaiting confirmation
+        ...(!confirmedCommand && pending ? { pendingCommand: pending } : {}),
       });
       const data = res.data as CopilotResponse;
       setMessages((m) => [...m, { role: 'assistant', content: data.reply }]);
       if (data.needsConfirmation) setPending(data.needsConfirmation);
-      speak(data.reply);
+      if (data.language) setLang(data.language); // STT + TTS follow the user's language
+      // Two-way turn-taking: when the user spoke, the bot speaks back and
+      // then reopens the mic for their answer — a real conversation loop.
+      speak(data.reply, data.language, () => {
+        if (conversationRef.current) startListeningRef.current();
+      });
     } catch (err) {
       const e = err as { response?: { data?: { message?: string } } };
       setMessages((m) => [...m, { role: 'assistant', content: `Something went wrong: ${e.response?.data?.message ?? 'request failed'}` }]);
     } finally {
       setBusy(false);
     }
-  }, [messages, speak]);
+  }, [messages, speak, pending]);
 
-  const toggleMic = useCallback(() => {
-    if (listening) {
-      recognitionRef.current?.stop();
-      setListening(false);
-      return;
-    }
+  const startListening = useCallback(() => {
     const rec = getRecognition();
     if (!rec) return;
     recognitionRef.current = rec;
-    rec.lang = 'en-US';
+    rec.lang = lang; // listen in the language the user has been speaking
     rec.interimResults = true;
     rec.continuous = false;
     let finalText = '';
@@ -109,13 +136,32 @@ export function CopilotPanel() {
     };
     rec.onend = () => {
       setListening(false);
-      if (finalText.trim()) void send(finalText.trim());
+      if (finalText.trim()) {
+        conversationRef.current = true; // voice turn keeps the conversation loop armed
+        void send(finalText.trim());
+      } else {
+        // Silence — end the hands-free loop rather than listening forever
+        conversationRef.current = false;
+        setInput('');
+      }
     };
-    rec.onerror = () => setListening(false);
+    rec.onerror = () => { setListening(false); conversationRef.current = false; };
     window.speechSynthesis?.cancel(); // barge-in
     rec.start();
     setListening(true);
-  }, [listening, send]);
+  }, [send, lang]);
+  startListeningRef.current = startListening;
+
+  const toggleMic = useCallback(() => {
+    if (listening) {
+      conversationRef.current = false;
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    conversationRef.current = true;
+    startListening();
+  }, [listening, startListening]);
 
   return (
     <>
@@ -142,7 +188,15 @@ export function CopilotPanel() {
             <button onClick={() => setSpeakReplies((s) => !s)} className="p-1.5 hover:bg-white/10 rounded-lg" title={speakReplies ? 'Voice replies on' : 'Voice replies off'}>
               {speakReplies ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
-            <button onClick={() => setOpen(false)} className="p-1.5 hover:bg-white/10 rounded-lg">
+            <button
+              onClick={() => {
+                conversationRef.current = false;
+                recognitionRef.current?.stop();
+                window.speechSynthesis?.cancel();
+                setOpen(false);
+              }}
+              className="p-1.5 hover:bg-white/10 rounded-lg"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -203,12 +257,12 @@ export function CopilotPanel() {
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && input.trim() && !busy) void send(input.trim()); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && input.trim() && !busy) { conversationRef.current = false; void send(input.trim()); } }}
               placeholder={listening ? 'Listening…' : 'Ask or command…'}
               className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-brand-400"
             />
             <button
-              onClick={() => input.trim() && !busy && void send(input.trim())}
+              onClick={() => { if (input.trim() && !busy) { conversationRef.current = false; void send(input.trim()); } }}
               disabled={!input.trim() || busy}
               className="p-2.5 bg-brand-600 text-white rounded-xl disabled:opacity-40 shrink-0"
             >

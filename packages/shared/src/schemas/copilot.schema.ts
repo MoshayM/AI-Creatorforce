@@ -30,19 +30,37 @@ export const CopilotCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('render_clip'), shortClipId: z.string() }),
   z.object({ action: z.literal('generate_captions'), shortClipId: z.string() }),
   z.object({ action: z.literal('clip_status'), shortClipId: z.string() }),
+  // Human-approval management by chat/voice — approving is the human gate,
+  // so approve goes through the confirmation step ("yes" spoken or tapped)
+  z.object({ action: z.literal('list_approvals') }),
+  z.object({ action: z.literal('approve_content'), approvalId: z.string(), notes: z.string().optional() }),
+  z.object({ action: z.literal('reject_content'), approvalId: z.string(), notes: z.string().optional() }),
+  // Voice/language preference: sets the project's content+voiceover language
+  // to the user's speaking language — applying it to narration is permission-gated
+  z.object({
+    action: z.literal('set_voice_language'),
+    projectId: z.string(),
+    /** BCP-47 or ISO 639-1, e.g. "hi", "en-US" */
+    language: z.string().min(2).max(12),
+    applyToVoiceover: z.boolean().default(true),
+  }),
 ]);
 export type CopilotCommand = z.infer<typeof CopilotCommandSchema>;
 
-/** Commands that spend real money or significant compute — require confirmation. */
+/** Commands needing explicit confirmation: real money, significant compute, or a human gate. */
 export const EXPENSIVE_ACTIONS: ReadonlyArray<CopilotCommand['action']> = [
   'run_production',
   'analyze_video',
   'render_clip',
+  'approve_content',
+  'set_voice_language',
 ];
 
 export const CopilotDecisionSchema = z.object({
-  /** What the copilot says back — always present, plain language. */
+  /** What the copilot says back — always in the USER'S language. */
   reply: z.string(),
+  /** BCP-47 tag of the language the user is speaking (drives TTS/STT). */
+  language: z.string().default('en-US'),
   /** The single command to execute, or null for a pure conversational answer. */
   command: CopilotCommandSchema.nullable(),
 });
@@ -54,7 +72,9 @@ export const CopilotMessageSchema = z.object({
 });
 export const CopilotChatRequestSchema = z.object({
   messages: z.array(CopilotMessageSchema).min(1).max(12),
-  /** Set when the user confirmed a previously-proposed expensive command. */
+  /** Set when the user confirmed a previously-proposed expensive command (button tap). */
   confirmedCommand: CopilotCommandSchema.optional(),
+  /** A command awaiting confirmation — lets a spoken "yes" complete it. */
+  pendingCommand: CopilotCommandSchema.optional(),
 });
 export type CopilotChatRequest = z.infer<typeof CopilotChatRequestSchema>;

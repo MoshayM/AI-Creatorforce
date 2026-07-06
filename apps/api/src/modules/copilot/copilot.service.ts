@@ -6,18 +6,26 @@ import {
 } from '@cf/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { JobsService } from '../jobs/jobs.service';
+import { ApprovalsService } from '../approvals/approvals.service';
 import { ShortsStudioService } from '../shorts-studio/shorts-studio.service';
 import { ClipRecommendationService } from '../shorts-studio/clip-recommendation.service';
 import { ShortsGenerationService } from '../shorts-studio/shorts-generation.service';
 
 const COPILOT_SYSTEM = `You are the CreatorForce Copilot — you drive a YouTube content platform for the user by emitting commands.
 
+Conversation style — you are having a REAL two-way spoken conversation:
+- Your replies are spoken aloud and the user answers by voice. Talk like a warm, capable human assistant, not a system. Short natural sentences. No lists, no markdown, no ids read aloud unless asked.
+- Keep the dialogue going: after answering or acting, end with ONE short, genuinely useful follow-up question or suggestion for the next step of their workflow (e.g. after showing highlights: "Shall I turn the top one into a Short?"). Never end a working session abruptly.
+- When something finishes or fails, tell them what it means for THEM and what you'd do next.
+- Acknowledge what you heard when acting: "Alright, starting the render for you now."
+
 Rules:
+- ALWAYS reply in the language the user is speaking/writing (Hindi in → Hindi out, Assamese in → Assamese out, etc.), and set "language" to its BCP-47 tag (e.g. "hi-IN", "as-IN", "en-US"). The platform speaks your reply aloud in that language.
 - Emit AT MOST ONE command per turn, chosen from the schema. If no action is needed, set command to null and just answer.
-- If the request is ambiguous (which project? which video?), set command to null and ask ONE clarifying question — never guess ids.
+- If the request is ambiguous (which project? which video? which approval?), set command to null and ask ONE clarifying question — never guess ids.
 - Use ids from the CONTEXT block only. Never invent ids.
-- Expensive actions (full production runs, video analysis, renders) will require the user's confirmation — still emit the command; the platform handles the confirmation step.
-- reply is what the user reads: say what you understood and what will happen, in one or two sentences. Plain language, no JSON.
+- Confirmation-gated actions (production runs, video analysis, renders, approving content, changing the voiceover language) will require the user's yes — still emit the command; the platform handles the confirmation step.
+- reply is what the user reads/hears: say what you understood and what will happen, in one or two sentences. Plain language, no JSON.
 
 Command palette:
 - list_projects — show the user's projects
@@ -31,11 +39,17 @@ Command palette:
 - render_clip {shortClipId} — render a clip to vertical video
 - generate_captions {shortClipId}
 - clip_status {shortClipId}
+- list_approvals — pending human reviews
+- approve_content {approvalId, notes?} — approve a pending review (this IS the human publish gate; requires the user's confirmation)
+- reject_content {approvalId, notes?} — reject a pending review
+- set_voice_language {projectId, language, applyToVoiceover} — make the project's scripts AND narration voiceover use the user's speaking language (asking permission first is mandatory; the confirmation step is that permission)
 
 Respond only with valid JSON.`;
 
 export interface CopilotResponse {
   reply: string;
+  /** BCP-47 tag of the user's language — the client speaks the reply in it. */
+  language?: string;
   executed?: { action: string; result: unknown };
   needsConfirmation?: CopilotCommand;
 }
@@ -47,6 +61,7 @@ export class CopilotService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jobs: JobsService,
+    private readonly approvals: ApprovalsService,
     private readonly shorts: ShortsStudioService,
     private readonly recommendations: ClipRecommendationService,
     private readonly generation: ShortsGenerationService,
@@ -76,28 +91,37 @@ export class CopilotService {
     }
 
     const context = await this.buildContext(userId);
+    const pendingNote = req.pendingCommand
+      ? `\n\nPENDING CONFIRMATION: this command awaits the user's yes/no: ${JSON.stringify(req.pendingCommand)}. If their latest message confirms it (yes/haan/ok/go ahead, any language), return EXACTLY that command. If they decline, set command to null and acknowledge.`
+      : '';
     const decision = await callAIStructured(
       [
         ...req.messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
         {
           role: 'user' as const,
-          content: `CONTEXT (current platform state — use these ids):\n${context}\n\nRespond with JSON: {"reply":"...","command":{...}|null}`,
+          content: `CONTEXT (current platform state — use these ids):\n${context}${pendingNote}\n\nRespond with JSON: {"reply":"...","language":"...","command":{...}|null}`,
         },
       ],
       CopilotDecisionSchema,
       { systemPrompt: COPILOT_SYSTEM, maxTokens: 1024 },
     );
 
-    if (!decision.command) return { reply: decision.reply };
+    if (!decision.command) return { reply: decision.reply, language: decision.language };
+
+    // A spoken/typed "yes" to the pending command IS the confirmation —
+    // execute directly instead of gating again.
+    const confirmsPending =
+      req.pendingCommand && JSON.stringify(decision.command) === JSON.stringify(req.pendingCommand);
 
     // Expensive/destructive commands stop at the confirmation gate (§8.2)
-    if (EXPENSIVE_ACTIONS.includes(decision.command.action)) {
-      return { reply: decision.reply, needsConfirmation: decision.command };
+    if (!confirmsPending && EXPENSIVE_ACTIONS.includes(decision.command.action)) {
+      return { reply: decision.reply, language: decision.language, needsConfirmation: decision.command };
     }
 
     const result = await this.execute(userId, decision.command);
     return {
       reply: `${decision.reply}\n\n${result.summary}`.trim(),
+      language: decision.language,
       executed: { action: decision.command.action, result: result.data },
     };
   }
@@ -229,6 +253,61 @@ export class CopilotService {
         return {
           summary: `Clip status: ${status.clipStatus?.toLowerCase().replace(/_/g, ' ')}${status.render ? ` — rendered, ${(status.render.sizeBytes / 1024 / 1024).toFixed(1)} MB` : ''}.`,
           data: status,
+        };
+      }
+
+      case 'list_approvals': {
+        const pending = await this.approvals.listPending(userId);
+        const lines = pending.map((a) => {
+          const result = a.job.result as { metadata?: { title?: string } } | null;
+          const title = result?.metadata?.title ?? a.job.type.replace(/_/g, ' ').toLowerCase();
+          return `• ${title} (${a.project.title}, approvalId ${a.id})`;
+        });
+        return {
+          summary: pending.length ? `Pending reviews:\n${lines.join('\n')}` : 'No pending approvals — all caught up.',
+          data: pending.map((a) => ({ id: a.id, type: a.job.type, project: a.project.title })),
+        };
+      }
+
+      case 'approve_content': {
+        // The spoken/typed confirmation that routed us here IS the human
+        // review (§8.2 confirmation policy) — recorded in the approval notes.
+        await this.approvals.approve(command.approvalId, userId, command.notes ?? 'Approved via Copilot (voice/chat confirmation)');
+        return { summary: 'Approved. If this was a Short awaiting publish, the upload starts now.', data: { approvalId: command.approvalId } };
+      }
+
+      case 'reject_content': {
+        await this.approvals.reject(command.approvalId, userId, command.notes ?? 'Rejected via Copilot');
+        return { summary: 'Rejected — nothing will be published.', data: { approvalId: command.approvalId } };
+      }
+
+      case 'set_voice_language': {
+        const project = await this.assertProject(command.projectId, userId);
+        // Content + narration language both follow Project.targetLang (the
+        // VOICE_GENERATE stage passes it into every TTS request); the granted
+        // permission is recorded on the channel's voiceProfile.
+        const lang = command.language.split('-')[0]!.toLowerCase();
+        await this.prisma.project.update({
+          where: { id: project.id },
+          data: { targetLang: lang },
+        });
+        const channel = await this.prisma.channel.findUnique({ where: { id: project.channelId }, select: { voiceProfile: true } });
+        await this.prisma.channel.update({
+          where: { id: project.channelId },
+          data: {
+            voiceProfile: {
+              ...((channel?.voiceProfile as object | null) ?? {}),
+              copilotLanguage: command.language,
+              useForVoiceover: command.applyToVoiceover,
+              permissionGrantedAt: new Date().toISOString(),
+            } as never,
+          },
+        });
+        return {
+          summary: command.applyToVoiceover
+            ? `Done — scripts and voiceover narration for "${project.title}" will use ${command.language}. Your permission is recorded on the channel's voice profile.`
+            : `Done — scripts for "${project.title}" will use ${command.language}; voiceover unchanged.`,
+          data: { projectId: project.id, targetLang: lang, applyToVoiceover: command.applyToVoiceover },
         };
       }
     }
