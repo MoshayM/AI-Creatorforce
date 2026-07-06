@@ -705,6 +705,8 @@ export async function callAIStructured<T>(
   } catch (e) {
     if (!(e instanceof z.ZodError)) throw e;
     const problems = e.errors.map((er) => `${er.path.join('.')}: ${er.message}`).join(', ');
+    // Log what the model actually said — schema failures are undiagnosable without it
+    console.warn(`[AI:schema-mismatch] problems="${problems.slice(0, 200)}" raw=${JSON.stringify(parsed).slice(0, 400)}`);
 
     // Valid JSON but wrong shape — retry once, naming the offending fields
     const fixMsgs: AIMessage[] = [
