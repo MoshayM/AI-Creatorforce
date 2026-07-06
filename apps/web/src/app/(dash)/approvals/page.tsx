@@ -132,8 +132,7 @@ function GenericResultView({ result }: { result: unknown }) {
  * review card (video preview + metadata for shorts). The preview blob only
  * loads once expanded, so a long history stays cheap.
  */
-function HistoryRow({ a }: { a: Approval }) {
-  const [open, setOpen] = useState(false);
+function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggle: () => void }) {
   const shorts = isShortsExport(a.job.type, a.job.result) ? a.job.result : null;
   const title = shorts?.metadata?.title
     ?? (a.job.type === 'SHORTS_EXPORT' ? 'Short clip' : a.job.type.replace(/_/g, ' ').toLowerCase());
@@ -141,10 +140,10 @@ function HistoryRow({ a }: { a: Approval }) {
   return (
     <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
       <div
-        onClick={() => setOpen((o) => !o)}
+        onClick={onToggle}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => !o); } }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors cursor-pointer"
       >
         {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
@@ -186,6 +185,8 @@ function HistoryRow({ a }: { a: Approval }) {
 export default function ApprovalsPage() {
   const qc = useQueryClient();
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
 
   const { data: approvals = [], isLoading } = useQuery<Approval[]>({
     queryKey: ['approvals'],
@@ -284,12 +285,46 @@ export default function ApprovalsPage() {
 
       {history.length > 0 && (
         <section className="mt-10">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-            <History className="w-4 h-4" /> Recently reviewed ({history.length})
-          </h2>
-          <div className="space-y-2">
-            {history.map((a) => <HistoryRow key={a.id} a={a} />)}
+          <div
+            onClick={() => setHistoryOpen((o) => !o)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHistoryOpen((o) => !o); } }}
+            className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+          >
+            {historyOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+              <History className="w-4 h-4" /> Recently reviewed
+            </h2>
+            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium">{history.length}</span>
+            {historyOpen && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenRows((prev) => prev.size === history.length ? new Set() : new Set(history.map((a) => a.id)));
+                }}
+                className="ml-auto text-xs text-brand-600 hover:underline"
+              >
+                {openRows.size === history.length ? 'Collapse all' : 'Expand all'}
+              </button>
+            )}
           </div>
+          {historyOpen && (
+            <div className="space-y-2 mt-2">
+              {history.map((a) => (
+                <HistoryRow
+                  key={a.id}
+                  a={a}
+                  open={openRows.has(a.id)}
+                  onToggle={() => setOpenRows((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
+                    return next;
+                  })}
+                />
+              ))}
+            </div>
+          )}
         </section>
       )}
     </div>
