@@ -1,6 +1,6 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, XCircle, Clock, Loader2, Clapperboard, Tag, FileText, History, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Loader2, Clapperboard, Tag, FileText, History, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { api, apiClient } from '@/lib/api';
 import { useEffect, useState } from 'react';
@@ -127,29 +127,57 @@ function GenericResultView({ result }: { result: unknown }) {
   );
 }
 
-/** Compact row for a reviewed/expired approval in the history section. */
+/**
+ * Reviewed/expired approval: compact row that expands on click into the full
+ * review card (video preview + metadata for shorts). The preview blob only
+ * loads once expanded, so a long history stays cheap.
+ */
 function HistoryRow({ a }: { a: Approval }) {
+  const [open, setOpen] = useState(false);
   const shorts = isShortsExport(a.job.type, a.job.result) ? a.job.result : null;
   const title = shorts?.metadata?.title
     ?? (a.job.type === 'SHORTS_EXPORT' ? 'Short clip' : a.job.type.replace(/_/g, ' ').toLowerCase());
   const effectiveStatus = a.status === 'PENDING' ? 'EXPIRED' : a.status;
   return (
-    <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3">
-      <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${STATUS_CHIP[effectiveStatus] ?? 'bg-gray-100 text-gray-500'}`}>
-        {effectiveStatus}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-gray-900 truncate">{title}</p>
-        <p className="text-[11px] text-gray-400 truncate">
-          {a.project.title} · {a.project.channel.title}
-          {a.reviewedAt ? ` · reviewed ${new Date(a.reviewedAt).toLocaleString()}` : ''}
-          {a.notes ? ` · “${a.notes}”` : ''}
-        </p>
+    <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+      <div
+        onClick={() => setOpen((o) => !o)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => !o); } }}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors cursor-pointer"
+      >
+        {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+        <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${STATUS_CHIP[effectiveStatus] ?? 'bg-gray-100 text-gray-500'}`}>
+          {effectiveStatus}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-900 truncate">{title}</p>
+          <p className="text-[11px] text-gray-400 truncate">
+            {a.project.title} · {a.project.channel.title}
+            {a.reviewedAt ? ` · reviewed ${new Date(a.reviewedAt).toLocaleString()}` : ''}
+          </p>
+        </div>
+        {shorts?.shortClipId && (
+          <Link
+            href={`/shorts-studio/clips/${shorts.shortClipId}/export`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-brand-600 hover:text-brand-700 shrink-0"
+            title="Open clip export page"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </Link>
+        )}
       </div>
-      {shorts?.shortClipId && (
-        <Link href={`/shorts-studio/clips/${shorts.shortClipId}/export`} className="text-brand-600 hover:text-brand-700 shrink-0" title="Open clip">
-          <ExternalLink className="w-4 h-4" />
-        </Link>
+      {open && (
+        <div className="px-4 pb-4 border-t border-gray-50 pt-3">
+          {shorts ? <ShortsExportReview result={shorts} /> : <GenericResultView result={a.job.result} />}
+          <div className="text-xs text-gray-500 space-y-0.5 -mt-2">
+            {a.notes && <p><span className="text-gray-400">Review notes:</span> “{a.notes}”</p>}
+            {a.reviewedAt && <p><span className="text-gray-400">Reviewed:</span> {new Date(a.reviewedAt).toLocaleString()}</p>}
+            <p><span className="text-gray-400">Expires{effectiveStatus === 'EXPIRED' ? 'd' : ''}:</span> {new Date(a.expiresAt).toLocaleString()}</p>
+          </div>
+        </div>
       )}
     </div>
   );
