@@ -83,6 +83,12 @@ export class CaptionGenerationService {
         emoji: styleByIndex.get(i)?.emoji ?? null,
       })),
     });
+    // Captions change the render output — bump the timeline so the render
+    // job's is-up-to-date check re-renders instead of reusing the old file
+    await this.prisma.shortsTimeline.update({
+      where: { id: clip.timeline!.id },
+      data: { updatedAt: new Date() },
+    });
     onLog?.(`Captions generated — ${cues.length} lines`);
     return { skipped: false, captions: cues.length };
   }
