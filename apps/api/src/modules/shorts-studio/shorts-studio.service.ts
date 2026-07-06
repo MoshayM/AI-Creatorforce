@@ -151,6 +151,31 @@ export class ShortsStudioService {
     return clip;
   }
 
+  async renderStatus(shortClipId: string) {
+    const clip = await this.prisma.shortClip.findUnique({
+      where: { id: shortClipId },
+      select: {
+        id: true,
+        status: true,
+        renderAsset: {
+          select: { id: true, createdAt: true, versions: { orderBy: { version: 'desc' }, take: 1, select: { id: true, sizeBytes: true, durationMs: true } } },
+        },
+      },
+    });
+    const renderJob = await this.prisma.shortsRenderJob.findFirst({
+      where: { shortClipId },
+      orderBy: { createdAt: 'desc' },
+    });
+    const version = clip?.renderAsset?.versions[0];
+    return {
+      clipStatus: clip?.status ?? null,
+      renderJob,
+      render: version
+        ? { assetId: clip!.renderAsset!.id, versionId: version.id, sizeBytes: Number(version.sizeBytes), durationMs: version.durationMs }
+        : null,
+    };
+  }
+
   async getClipsForVideo(importedVideoId: string, userId: string) {
     await this.assertVideoOwnership(importedVideoId, userId);
     return this.prisma.shortClip.findMany({

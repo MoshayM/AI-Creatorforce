@@ -11,6 +11,7 @@ import { ClipRecommendationService } from './clip-recommendation.service';
 import { ShortsGenerationService } from './shorts-generation.service';
 import { TimelineService } from './timeline.service';
 import { AiEditingAssistantService } from './ai-editing-assistant.service';
+import { ThumbnailGenerationService } from './thumbnail-generation.service';
 import { JobsService } from '../jobs/jobs.service';
 
 class ImportVideoDto {
@@ -37,6 +38,7 @@ export class ShortsStudioController {
     private readonly generation: ShortsGenerationService,
     private readonly timeline: TimelineService,
     private readonly assistant: AiEditingAssistantService,
+    private readonly thumbnails: ThumbnailGenerationService,
     private readonly jobs: JobsService,
   ) {}
 
@@ -195,5 +197,30 @@ export class ShortsStudioController {
   async generateCaptions(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
     const clip = await this.shorts.assertClipOwnership(shortClipId, user.sub);
     return this.jobs.enqueue(clip.projectId, 'CAPTION_GENERATION', { shortClipId });
+  }
+
+  // ── Render (18.5) ───────────────────────────────────────────────────────────
+
+  @Post('clips/:shortClipId/render')
+  async renderClip(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    const clip = await this.shorts.assertClipOwnership(shortClipId, user.sub);
+    return this.jobs.enqueue(clip.projectId, 'SHORTS_RENDER', { shortClipId });
+  }
+
+  @Get('clips/:shortClipId/render-status')
+  async renderStatus(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    const clip = await this.shorts.assertClipOwnership(shortClipId, user.sub);
+    return this.shorts.renderStatus(clip.id);
+  }
+
+  @Get('clips/:shortClipId/thumbnails')
+  async clipThumbnails(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    await this.shorts.assertClipOwnership(shortClipId, user.sub);
+    return this.thumbnails.listForClip(shortClipId);
+  }
+
+  @Post('thumbnails/:thumbnailId/set-primary')
+  async setPrimaryThumbnail(@Param('thumbnailId') thumbnailId: string, @CurrentUser() user: JwtPayload) {
+    return this.thumbnails.setPrimary(thumbnailId, user.sub);
   }
 }

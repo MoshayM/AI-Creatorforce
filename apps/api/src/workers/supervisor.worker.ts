@@ -26,6 +26,7 @@ import { SceneDetectionService } from '../modules/shorts-studio/scene-detection.
 import { TopicSegmentationService } from '../modules/shorts-studio/topic-segmentation.service';
 import { HighlightScoringService } from '../modules/shorts-studio/highlight-scoring.service';
 import { CaptionGenerationService } from '../modules/shorts-studio/caption-generation.service';
+import { ShortsRenderService } from '../modules/shorts-studio/shorts-render.service';
 import { SHORTS_IMPORT_STAGES } from '../modules/shorts-studio/shorts-studio.service';
 import { composeVideo, ffmpegPath, runFfmpegCapture, type ComposeScene } from '../modules/media/adapters/ffmpeg.util';
 import { encodeWhooshWav } from '../modules/media/adapters/codec.util';
@@ -82,6 +83,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly topicSegmentation: TopicSegmentationService,
     private readonly highlightScoring: HighlightScoringService,
     private readonly captionGeneration: CaptionGenerationService,
+    private readonly shortsRender: ShortsRenderService,
     private readonly events: EventsGateway,
   ) {
     super();
@@ -1078,6 +1080,12 @@ export class SupervisorWorker extends WorkerHost {
         const shortClipId = payload['shortClipId'] as string;
         if (!shortClipId) throw new Error('CAPTION_GENERATION requires payload.shortClipId');
         return this.captionGeneration.ensureCaptions(shortClipId, (m) => this.log(jobId, projectId, m));
+      }
+
+      case 'SHORTS_RENDER': {
+        const shortClipId = payload['shortClipId'] as string;
+        if (!shortClipId) throw new Error('SHORTS_RENDER requires payload.shortClipId');
+        return this.shortsRender.renderClip(shortClipId, jobId, (m) => this.log(jobId, projectId, m));
       }
 
       case 'SHORTS_ANALYZE': {

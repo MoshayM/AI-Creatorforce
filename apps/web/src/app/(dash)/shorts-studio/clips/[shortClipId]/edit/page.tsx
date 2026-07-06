@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Loader2, Play, Pause, Scissors, Trash2, Copy, Undo2, Redo2,
-  ZoomIn, ZoomOut, Wand2, Captions, Check, X, Save,
+  ZoomIn, ZoomOut, Wand2, Captions, Check, X, Save, Clapperboard,
 } from 'lucide-react';
 import { api, apiClient } from '@/lib/api';
 
@@ -544,10 +544,16 @@ export default function TimelineEditorPage() {
             <p className="text-xs text-gray-400">{clip!.clipType.replace(/_/g, ' ')} · {fmt(durationMs)} · {clip!.status.replace(/_/g, ' ')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-gray-400">
+        <div className="flex items-center gap-3 text-xs text-gray-400">
           {saving ? <span className="flex items-center gap-1"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</span>
             : pending.length > 0 ? <button onClick={() => void flush()} className="flex items-center gap-1 text-brand-600 hover:underline"><Save className="w-3.5 h-3.5" /> {pending.length} unsaved</button>
             : <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5 text-green-500" /> Saved</span>}
+          <Link
+            href={`/shorts-studio/clips/${shortClipId}/export`}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700"
+          >
+            <Clapperboard className="w-3.5 h-3.5" /> Export
+          </Link>
         </div>
       </div>
 

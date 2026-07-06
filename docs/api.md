@@ -202,5 +202,9 @@ Module spec: repo-root `ai.md`. All routes prefixed `/shorts-studio`, JWT-guarde
 | POST | `/shorts-studio/timelines/:id/ai-suggestions/apply` | Apply reviewed suggestions (audited as AI_ASSISTANT) |
 | GET | `/shorts-studio/timelines/:id/history` | ShortsTimelineEdit audit trail |
 | POST | `/shorts-studio/clips/:id/captions` | Enqueue CAPTION_GENERATION job (transcript → styled ShortsCaption rows) |
+| POST | `/shorts-studio/clips/:id/render` | Enqueue SHORTS_RENDER job (reframe + concat + caption burn-in, NVENC w/ CPU fallback) |
+| GET | `/shorts-studio/clips/:id/render-status` | ShortsRenderJob status + rendered asset ref |
+| GET | `/shorts-studio/clips/:id/thumbnails` | Thumbnail variations (generated automatically after first render) |
+| POST | `/shorts-studio/thumbnails/:id/set-primary` | Pick the primary thumbnail |
 
 Pipeline stages run as child `AgentJob`s of the `SHORTS_ANALYZE` root and self-skip when their output rows already exist (resume semantics, `ai.md` §16). Requires `yt-dlp` (`YT_DLP_PATH`) for source download; Whisper ASR fallback uses `OPENAI_API_KEY`.

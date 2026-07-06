@@ -15,6 +15,9 @@ import { ShortsGenerationService } from './shorts-generation.service';
 import { TimelineService } from './timeline.service';
 import { AiEditingAssistantService } from './ai-editing-assistant.service';
 import { CaptionGenerationService } from './caption-generation.service';
+import { SmartReframeService } from './smart-reframe.service';
+import { ShortsRenderService } from './shorts-render.service';
+import { ThumbnailGenerationService } from './thumbnail-generation.service';
 
 @Module({
   imports: [ChannelsModule, JobsModule, MediaModule],
@@ -32,6 +35,9 @@ import { CaptionGenerationService } from './caption-generation.service';
     TimelineService,
     AiEditingAssistantService,
     CaptionGenerationService,
+    SmartReframeService,
+    ShortsRenderService,
+    ThumbnailGenerationService,
   ],
   exports: [
     ShortsStudioService,
@@ -46,6 +52,9 @@ import { CaptionGenerationService } from './caption-generation.service';
     TimelineService,
     AiEditingAssistantService,
     CaptionGenerationService,
+    SmartReframeService,
+    ShortsRenderService,
+    ThumbnailGenerationService,
   ],
 })
 export class ShortsStudioModule {}
