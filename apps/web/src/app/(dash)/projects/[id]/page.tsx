@@ -461,6 +461,8 @@ export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  // Whole Recent Jobs section collapses to a summary bar (like Approvals history)
+  const [jobsOpen, setJobsOpen] = useState(false);
   // Live transient status per jobId (RETRYING, RATE_LIMITED, etc.)
   const [liveStatus, setLiveStatus] = useState<Record<string, { status: string; detail?: string }>>({});
   // Per-job activity log: messages streamed in real-time via WebSocket
@@ -575,13 +577,40 @@ export default function ProjectDetailPage() {
         }
       />
 
-      {/* Full Job History */}
+      {/* Full Job History — section collapses to one clickable bar */}
       <div className="bg-white border border-gray-200 rounded-xl">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">Recent Jobs</h2>
-          <p className="text-xs text-gray-400 mt-0.5">All AI agent runs for this project</p>
+        <div
+          onClick={() => setJobsOpen((o) => !o)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setJobsOpen((o) => !o); } }}
+          className={`px-6 py-4 flex items-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors rounded-t-xl ${jobsOpen ? 'border-b border-gray-100' : 'rounded-b-xl'}`}
+        >
+          {jobsOpen ? <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />}
+          <div>
+            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+              Recent Jobs
+              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium">{project.jobs.length}</span>
+            </h2>
+            <p className="text-xs text-gray-400 mt-0.5">All AI agent runs for this project</p>
+          </div>
+          {jobsOpen && project.jobs.length > 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpandedIds((prev) => {
+                  const allKeys = project.jobs.map((j) => (j.result ? `hist-${j.id}` : `log-${j.id}`));
+                  const allOpen = allKeys.every((k) => prev.has(k));
+                  return allOpen ? new Set() : new Set(allKeys);
+                });
+              }}
+              className="ml-auto text-xs text-brand-600 hover:underline shrink-0"
+            >
+              {project.jobs.every((j) => expandedIds.has(j.result ? `hist-${j.id}` : `log-${j.id}`)) ? 'Collapse all' : 'Expand all'}
+            </button>
+          )}
         </div>
-        {project.jobs.length === 0 ? (
+        {!jobsOpen ? null : project.jobs.length === 0 ? (
           <div className="text-center py-14 text-gray-400">
             <Play className="w-8 h-8 mx-auto mb-3 opacity-20" />
             <p className="text-sm">No jobs yet — run an agent above to start creating content.</p>
