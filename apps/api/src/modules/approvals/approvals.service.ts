@@ -1,12 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EventsGateway } from '../../gateway/events.gateway';
+import { JobsService } from '../jobs/jobs.service';
 
 @Injectable()
 export class ApprovalsService {
+  private readonly logger = new Logger(ApprovalsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventsGateway,
+    private readonly jobs: JobsService,
   ) {}
 
   async createApproval(projectId: string, jobId: string, expiresInHours = 48) {
@@ -71,6 +75,31 @@ export class ApprovalsService {
 
     // Notify frontend via WebSocket so the page updates without a full refresh.
     this.events.emitJobComplete(approval.jobId, { approved: true });
+
+    // Shorts publish approvals: the review IS the last human step — enqueue
+    // the publish server-side so it doesn't depend on a browser tab polling.
+    // Failure here is non-fatal; the clip stays resumable via the publish API.
+    try {
+      const job = await this.prisma.agentJob.findUnique({
+        where: { id: approval.jobId },
+        select: { type: true, projectId: true, result: true },
+      });
+      const result = job?.result as { shortClipId?: string; exportId?: string } | null;
+      if (job?.type === 'SHORTS_EXPORT' && result?.shortClipId && result?.exportId) {
+        await this.prisma.shortClip.update({
+          where: { id: result.shortClipId },
+          data: { status: 'APPROVED' },
+        });
+        await this.jobs.enqueue(job.projectId, 'SHORTS_PUBLISH', {
+          shortClipId: result.shortClipId,
+          exportId: result.exportId,
+          approvalId,
+        });
+        this.logger.log(`Approved shorts export — auto-enqueued SHORTS_PUBLISH for clip ${result.shortClipId}`);
+      }
+    } catch (err) {
+      this.logger.warn(`Post-approval publish enqueue failed (resumable via API): ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     return updated;
   }
