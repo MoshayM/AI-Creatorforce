@@ -42,12 +42,18 @@ export class TranscriptService {
       return { skipped: true, segments: existing, source: video.transcriptStatus };
     }
 
-    // 1) YouTube captions (owner captions, read-only scopes)
+    // 1) Owner captions via the Data API (needs force-ssl scope)
     onLog?.('Checking YouTube captions…');
     let cues = await this.youtubeRead.getTranscript(video.project.channelId, video.youtubeVideoId);
     let source: 'YOUTUBE_CAPTIONS' | 'ASR_GENERATED' = 'YOUTUBE_CAPTIONS';
 
-    // 2) ASR fallback on extracted audio
+    // 2) Public (auto-)captions via yt-dlp — no scope needed, free
+    if (!cues || cues.length === 0) {
+      onLog?.('Fetching public auto-captions…');
+      cues = await this.videoImport.downloadAutoCaptions(video.youtubeVideoId);
+    }
+
+    // 3) ASR fallback on extracted audio (chunked for long videos)
     if (!cues || cues.length === 0) {
       onLog?.('No usable captions — falling back to speech-to-text');
       cues = await this.transcribeWithWhisper(importedVideoId, onLog);
@@ -60,7 +66,7 @@ export class TranscriptService {
         data: { transcriptStatus: 'FAILED' },
       });
       throw new Error(
-        'Transcript unavailable: the video has no caption track and ASR fallback is not configured (set OPENAI_API_KEY).',
+        'Transcript unavailable: no caption track (owner or public auto-captions) and speech-to-text failed or is not configured (OPENAI_API_KEY).',
       );
     }
 
@@ -94,41 +100,55 @@ export class TranscriptService {
 
     const sourcePath = await this.videoImport.getSourcePath(importedVideoId);
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cf-asr-'));
-    const audioPath = path.join(tmpDir, 'audio.mp3');
     try {
+      // Whisper caps uploads at 25 MB, so long videos are transcribed in
+      // ~20-minute chunks; chunk timestamps are stitched using the exact
+      // audio duration Whisper reports back per chunk.
       onLog?.('Extracting audio track…');
-      // 64kbps mono keeps hour-long audio under Whisper's 25 MB upload limit
-      await runFfmpeg(['-i', sourcePath, '-vn', '-ac', '1', '-b:a', '64k', audioPath]);
-      const audio = await fsp.readFile(audioPath);
-      if (audio.length > 25 * 1024 * 1024) {
-        this.logger.warn(`Audio too large for Whisper API (${Math.round(audio.length / 1024 / 1024)} MB > 25 MB)`);
-        return null;
-      }
+      await runFfmpeg([
+        '-i', sourcePath, '-vn', '-ac', '1', '-b:a', '64k',
+        '-f', 'segment', '-segment_time', '1200', '-reset_timestamps', '1',
+        path.join(tmpDir, 'chunk-%03d.mp3'),
+      ]);
+      const chunks = (await fsp.readdir(tmpDir)).filter((f) => f.startsWith('chunk-')).sort();
+      if (chunks.length === 0) return null;
 
-      onLog?.('Transcribing audio (Whisper)…');
-      const form = new FormData();
-      form.append('file', new Blob([audio], { type: 'audio/mpeg' }), 'audio.mp3');
-      form.append('model', 'whisper-1');
-      form.append('response_format', 'verbose_json');
-      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: form,
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        this.logger.warn(`Whisper API error ${res.status}: ${body.slice(0, 300)}`);
-        return null;
+      const cues: TranscriptCueDTO[] = [];
+      let offsetMs = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        onLog?.(`Transcribing audio ${i + 1}/${chunks.length} (Whisper)…`);
+        const audio = await fsp.readFile(path.join(tmpDir, chunks[i]!));
+        if (audio.length > 25 * 1024 * 1024) {
+          this.logger.warn(`Chunk ${chunks[i]} exceeds Whisper's 25 MB limit — skipping`);
+          offsetMs += 1_200_000;
+          continue;
+        }
+        const form = new FormData();
+        form.append('file', new Blob([audio], { type: 'audio/mpeg' }), 'audio.mp3');
+        form.append('model', 'whisper-1');
+        form.append('response_format', 'verbose_json');
+        const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: form,
+        });
+        if (!res.ok) {
+          const body = await res.text().catch(() => '');
+          this.logger.warn(`Whisper API error ${res.status}: ${body.slice(0, 300)}`);
+          return cues.length > 0 ? cues : null;
+        }
+        const json = (await res.json()) as { segments?: WhisperSegment[]; duration?: number };
+        for (const s of json.segments ?? []) {
+          if (s.text.trim().length === 0) continue;
+          cues.push({
+            startMs: offsetMs + Math.round(s.start * 1000),
+            endMs: offsetMs + Math.round(s.end * 1000),
+            text: s.text.trim(),
+          });
+        }
+        offsetMs += json.duration ? Math.round(json.duration * 1000) : 1_200_000;
       }
-      const json = (await res.json()) as { segments?: WhisperSegment[] };
-      const segments = json.segments ?? [];
-      return segments
-        .filter((s) => s.text.trim().length > 0)
-        .map((s) => ({
-          startMs: Math.round(s.start * 1000),
-          endMs: Math.round(s.end * 1000),
-          text: s.text.trim(),
-        }));
+      return cues.length > 0 ? cues : null;
     } finally {
       await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
     }

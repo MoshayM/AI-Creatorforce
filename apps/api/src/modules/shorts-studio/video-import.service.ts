@@ -7,7 +7,7 @@ import { createHash } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../media/storage.service';
 import { ffmpegPath } from '../media/adapters/ffmpeg.util';
-import { YouTubeReadService } from './youtube-read.service';
+import { YouTubeReadService, parseSrt, type TranscriptCueDTO } from './youtube-read.service';
 
 /**
  * VIDEO_IMPORT stage (ai.md Section 3): creates/refreshes the ImportedVideo
@@ -139,6 +139,47 @@ export class VideoImportService {
 
   private ytDlpBin(): string {
     return process.env['YT_DLP_PATH'] ?? 'yt-dlp';
+  }
+
+  /**
+   * Fetch the video's public (auto-)captions via yt-dlp — no OAuth scope
+   * needed, works for any public video. Prefers the original spoken
+   * language ("<lang>-orig"), then English, then whatever exists.
+   */
+  async downloadAutoCaptions(youtubeVideoId: string): Promise<TranscriptCueDTO[] | null> {
+    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cf-subs-'));
+    try {
+      const ffmpeg = ffmpegPath();
+      await new Promise<void>((resolve, reject) => {
+        execFile(this.ytDlpBin(), [
+          `https://www.youtube.com/watch?v=${youtubeVideoId}`,
+          '--skip-download', '--no-playlist',
+          '--write-subs', '--write-auto-subs',
+          '--sub-format', 'srt/best',
+          '--sub-langs', 'all,-live_chat',
+          ...(ffmpeg ? ['--ffmpeg-location', ffmpeg] : []),
+          '-o', path.join(tmpDir, 'subs'),
+        ], { timeout: 300_000, maxBuffer: 8 * 1024 * 1024 }, (err, _stdout, stderr) => {
+          if (err) reject(new Error(`yt-dlp subtitles failed: ${(stderr || err.message).slice(0, 300)}`));
+          else resolve();
+        });
+      });
+
+      const files = (await fsp.readdir(tmpDir)).filter((f) => /\.(srt|vtt)$/.test(f));
+      if (files.length === 0) return null;
+      const pick =
+        files.find((f) => /-orig\.[a-z]+$/i.test(f.replace(/\.(srt|vtt)$/, ''))) ??
+        files.find((f) => /\.en[.-]/.test(f) || /\.en\.(srt|vtt)$/.test(f)) ??
+        files[0]!;
+      this.logger.log(`Auto-captions: picked ${pick} of [${files.join(', ')}]`);
+      const cues = parseSrt(await fsp.readFile(path.join(tmpDir, pick), 'utf8'));
+      return cues.length > 0 ? cues : null;
+    } catch (err) {
+      this.logger.warn(`Auto-caption download failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    } finally {
+      await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 
   private runYtDlp(youtubeVideoId: string, outPath: string): Promise<void> {
