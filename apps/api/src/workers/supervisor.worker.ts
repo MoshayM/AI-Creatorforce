@@ -27,6 +27,7 @@ import { TopicSegmentationService } from '../modules/shorts-studio/topic-segment
 import { HighlightScoringService } from '../modules/shorts-studio/highlight-scoring.service';
 import { CaptionGenerationService } from '../modules/shorts-studio/caption-generation.service';
 import { ShortsRenderService } from '../modules/shorts-studio/shorts-render.service';
+import { ShortsExportService } from '../modules/shorts-studio/shorts-export.service';
 import { SHORTS_IMPORT_STAGES } from '../modules/shorts-studio/shorts-studio.service';
 import { composeVideo, ffmpegPath, runFfmpegCapture, type ComposeScene } from '../modules/media/adapters/ffmpeg.util';
 import { encodeWhooshWav } from '../modules/media/adapters/codec.util';
@@ -84,6 +85,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly highlightScoring: HighlightScoringService,
     private readonly captionGeneration: CaptionGenerationService,
     private readonly shortsRender: ShortsRenderService,
+    private readonly shortsExport: ShortsExportService,
     private readonly events: EventsGateway,
   ) {
     super();
@@ -1086,6 +1088,22 @@ export class SupervisorWorker extends WorkerHost {
         const shortClipId = payload['shortClipId'] as string;
         if (!shortClipId) throw new Error('SHORTS_RENDER requires payload.shortClipId');
         return this.shortsRender.renderClip(shortClipId, jobId, (m) => this.log(jobId, projectId, m));
+      }
+
+      case 'SHORTS_EXPORT': {
+        const shortClipId = payload['shortClipId'] as string;
+        if (!shortClipId) throw new Error('SHORTS_EXPORT requires payload.shortClipId');
+        return this.shortsExport.exportClip(shortClipId, (m) => this.log(jobId, projectId, m));
+      }
+
+      case 'SHORTS_PUBLISH': {
+        const shortClipId = payload['shortClipId'] as string;
+        const approvalId = payload['approvalId'] as string;
+        const exportId = payload['exportId'] as string;
+        if (!shortClipId || !approvalId || !exportId) {
+          throw new Error('SHORTS_PUBLISH requires payload.shortClipId, approvalId and exportId');
+        }
+        return this.shortsExport.publishClip(shortClipId, approvalId, exportId, (m) => this.log(jobId, projectId, m));
       }
 
       case 'SHORTS_ANALYZE': {

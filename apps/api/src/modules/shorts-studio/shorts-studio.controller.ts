@@ -12,6 +12,7 @@ import { ShortsGenerationService } from './shorts-generation.service';
 import { TimelineService } from './timeline.service';
 import { AiEditingAssistantService } from './ai-editing-assistant.service';
 import { ThumbnailGenerationService } from './thumbnail-generation.service';
+import { ShortsExportService } from './shorts-export.service';
 import { JobsService } from '../jobs/jobs.service';
 
 class ImportVideoDto {
@@ -39,6 +40,7 @@ export class ShortsStudioController {
     private readonly timeline: TimelineService,
     private readonly assistant: AiEditingAssistantService,
     private readonly thumbnails: ThumbnailGenerationService,
+    private readonly exports: ShortsExportService,
     private readonly jobs: JobsService,
   ) {}
 
@@ -222,5 +224,39 @@ export class ShortsStudioController {
   @Post('thumbnails/:thumbnailId/set-primary')
   async setPrimaryThumbnail(@Param('thumbnailId') thumbnailId: string, @CurrentUser() user: JwtPayload) {
     return this.thumbnails.setPrimary(thumbnailId, user.sub);
+  }
+
+  // ── Export & Publish (18.6, 18.7) ───────────────────────────────────────────
+
+  @Post('clips/:shortClipId/export')
+  async exportClip(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    const clip = await this.shorts.assertClipOwnership(shortClipId, user.sub);
+    return this.jobs.enqueue(clip.projectId, 'SHORTS_EXPORT', { shortClipId });
+  }
+
+  @Get('clips/:shortClipId/exports')
+  async listExports(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    await this.shorts.assertClipOwnership(shortClipId, user.sub);
+    return this.exports.listExports(shortClipId);
+  }
+
+  @Post('clips/:shortClipId/request-publish')
+  async requestPublish(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    await this.shorts.assertClipOwnership(shortClipId, user.sub);
+    return this.exports.requestPublish(shortClipId);
+  }
+
+  @Post('clips/:shortClipId/publish')
+  async publish(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    const clip = await this.shorts.assertClipOwnership(shortClipId, user.sub);
+    // Approval is validated here AND re-validated inside the publish job/connector
+    const { approvalId, exportId } = await this.exports.assertPublishable(shortClipId);
+    return this.jobs.enqueue(clip.projectId, 'SHORTS_PUBLISH', { shortClipId, approvalId, exportId });
+  }
+
+  @Get('clips/:shortClipId/publish-status')
+  async publishStatus(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    await this.shorts.assertClipOwnership(shortClipId, user.sub);
+    return this.exports.publishState(shortClipId);
   }
 }

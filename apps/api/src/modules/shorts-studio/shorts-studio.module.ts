@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { ChannelsModule } from '../channels/channels.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { MediaModule } from '../media/media.module';
+import { ApprovalsModule } from '../approvals/approvals.module';
+import { ComplianceModule } from '../compliance/compliance.module';
+import { PublishingModule } from '../publishing/publishing.module';
 import { ShortsStudioService } from './shorts-studio.service';
 import { ShortsStudioController } from './shorts-studio.controller';
 import { YouTubeReadService } from './youtube-read.service';
@@ -18,9 +21,10 @@ import { CaptionGenerationService } from './caption-generation.service';
 import { SmartReframeService } from './smart-reframe.service';
 import { ShortsRenderService } from './shorts-render.service';
 import { ThumbnailGenerationService } from './thumbnail-generation.service';
+import { ShortsExportService } from './shorts-export.service';
 
 @Module({
-  imports: [ChannelsModule, JobsModule, MediaModule],
+  imports: [ChannelsModule, JobsModule, MediaModule, ApprovalsModule, ComplianceModule, PublishingModule],
   controllers: [ShortsStudioController],
   providers: [
     ShortsStudioService,
@@ -38,6 +42,7 @@ import { ThumbnailGenerationService } from './thumbnail-generation.service';
     SmartReframeService,
     ShortsRenderService,
     ThumbnailGenerationService,
+    ShortsExportService,
   ],
   exports: [
     ShortsStudioService,
@@ -55,6 +60,7 @@ import { ThumbnailGenerationService } from './thumbnail-generation.service';
     SmartReframeService,
     ShortsRenderService,
     ThumbnailGenerationService,
+    ShortsExportService,
   ],
 })
 export class ShortsStudioModule {}

@@ -206,5 +206,10 @@ Module spec: repo-root `ai.md`. All routes prefixed `/shorts-studio`, JWT-guarde
 | GET | `/shorts-studio/clips/:id/render-status` | ShortsRenderJob status + rendered asset ref |
 | GET | `/shorts-studio/clips/:id/thumbnails` | Thumbnail variations (generated automatically after first render) |
 | POST | `/shorts-studio/thumbnails/:id/set-primary` | Pick the primary thumbnail |
+| POST | `/shorts-studio/clips/:id/export` | Enqueue SHORTS_EXPORT (render + metadata.json + thumbnail ref → SHORTS_FINAL_EXPORT package) |
+| GET | `/shorts-studio/clips/:id/exports` | ShortsExportHistory[] |
+| POST | `/shorts-studio/clips/:id/request-publish` | Create the human-approval gate on the export (reviewed on /approvals) |
+| POST | `/shorts-studio/clips/:id/publish` | Enqueue SHORTS_PUBLISH — requires APPROVED approval; job re-runs the compliance gate before YouTube upload |
+| GET | `/shorts-studio/clips/:id/publish-status` | Approval + publish job state + youtubeVideoId |
 
 Pipeline stages run as child `AgentJob`s of the `SHORTS_ANALYZE` root and self-skip when their output rows already exist (resume semantics, `ai.md` §16). Requires `yt-dlp` (`YT_DLP_PATH`) for source download; Whisper ASR fallback uses `OPENAI_API_KEY`.

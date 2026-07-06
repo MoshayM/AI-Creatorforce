@@ -143,5 +143,13 @@ export const api = {
       apiClient.get(`/shorts-studio/clips/${shortClipId}/thumbnails`),
     setPrimaryThumbnail: (thumbnailId: string) =>
       apiClient.post(`/shorts-studio/thumbnails/${thumbnailId}/set-primary`),
+    exportClip: (shortClipId: string) =>
+      apiClient.post(`/shorts-studio/clips/${shortClipId}/export`),
+    requestPublish: (shortClipId: string) =>
+      apiClient.post(`/shorts-studio/clips/${shortClipId}/request-publish`),
+    publish: (shortClipId: string) =>
+      apiClient.post(`/shorts-studio/clips/${shortClipId}/publish`),
+    publishStatus: (shortClipId: string) =>
+      apiClient.get(`/shorts-studio/clips/${shortClipId}/publish-status`),
   },
 };
