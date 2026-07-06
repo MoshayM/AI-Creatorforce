@@ -891,6 +891,20 @@ export class SupervisorWorker extends WorkerHost {
           // and — when narration/music went in — is not silent. One retry,
           // then the stage FAILS. Never a silent COMPLETED.
           const hasAudioInputs = !!voicePath || !!musicPath;
+          // Real progress (§3.5): seconds encoded / seconds total, streamed
+          // from ffmpeg itself. Throttled DB writes for the Render row.
+          let lastEmitted = -5;
+          const onProgress = (pct: number) => {
+            if (pct - lastEmitted < 5 && pct !== 100) return;
+            lastEmitted = pct;
+            this.events.emitJobUpdate(jobId, { step: 'RENDER', status: 'RUNNING', progressPct: pct }, projectId);
+            if (renderRowId) {
+              void this.prisma.render.update({
+                where: { id: renderRowId },
+                data: { progressPct: Math.min(99, pct) },
+              }).catch(() => undefined);
+            }
+          };
           let renderValidation: Awaited<ReturnType<typeof validateMediaFile>> | null = null;
           for (let attempt = 1; attempt <= 2; attempt++) {
             await composeVideo({
@@ -903,6 +917,7 @@ export class SupervisorWorker extends WorkerHost {
               height,
               fps: 30,
               musicVolume: effectiveMusicVolume,
+              onProgress,
               ...(sfxPath && sfxTimestamps.length > 0 ? { sfx: { path: sfxPath, atSecs: sfxTimestamps } } : {}),
             });
             this.log(jobId, projectId, 'Validating render…', 'decode, duration, black-frame and loudness scan');
@@ -1049,7 +1064,21 @@ export class SupervisorWorker extends WorkerHost {
               if (payload['genre']) stagePayload['genre'] = payload['genre'];
             }
             if (stage.type === 'RENDER' && payload['preset']) stagePayload['preset'] = payload['preset'];
-            const result = await this.dispatch(stage.type, projectId, child.id, stagePayload);
+            // Stage-level retry with backoff (master prompt §3.2): one retry
+            // for transient failures, then the stage FAILS for real.
+            let result: unknown;
+            for (let attempt = 1; ; attempt++) {
+              try {
+                result = await this.dispatch(stage.type, projectId, child.id, stagePayload);
+                break;
+              } catch (stageErr) {
+                if (attempt >= 2) throw stageErr;
+                const waitMs = 5_000 * attempt;
+                this.log(child.id, projectId, `Stage ${stage.type} failed (attempt ${attempt}/2) — retrying in ${waitMs / 1000}s`,
+                  stageErr instanceof Error ? stageErr.message.slice(0, 150) : String(stageErr));
+                await new Promise((r) => setTimeout(r, waitMs));
+              }
+            }
             await this.prisma.agentJob.update({
               where: { id: child.id },
               data: { status: 'COMPLETED', result: result as never, completedAt: new Date() },

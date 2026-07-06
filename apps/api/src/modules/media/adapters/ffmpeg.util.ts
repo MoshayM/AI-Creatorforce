@@ -1,4 +1,4 @@
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { existsSync, promises as fs } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -49,6 +49,50 @@ export function escapeFilterPath(p: string): string {
   return p.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
 }
 
+/**
+ * Run ffmpeg reporting REAL progress (master prompt §3.5): percent is derived
+ * from the `time=` marker ffmpeg writes while encoding, against the known
+ * output duration — seconds encoded / seconds total, never a timer.
+ */
+export function runFfmpegWithProgress(
+  args: string[],
+  totalDurationSecs: number,
+  onProgress: (pct: number) => void,
+  timeoutMs = 1_800_000,
+): Promise<void> {
+  const bin = ffmpegPath();
+  if (!bin) return Promise.reject(new Error('ffmpeg binary not available'));
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, ['-y', '-hide_banner', ...args], { windowsHide: true });
+    let stderrTail = '';
+    let lastPct = -1;
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`ffmpeg timed out after ${Math.round(timeoutMs / 1000)}s`));
+    }, timeoutMs);
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      const text = chunk.toString();
+      stderrTail = (stderrTail + text).slice(-4000);
+      const m = /time=(\d+):(\d{2}):(\d{2})\.(\d+)/.exec(text);
+      if (m && totalDurationSecs > 0) {
+        const secs = +m[1]! * 3600 + +m[2]! * 60 + +m[3]!;
+        const pct = Math.min(99, Math.floor((secs / totalDurationSecs) * 100));
+        if (pct > lastPct) {
+          lastPct = pct;
+          try { onProgress(pct); } catch { /* progress must never kill the encode */ }
+        }
+      }
+    });
+    child.on('error', (err) => { clearTimeout(timer); reject(err); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) { onProgress(100); resolve(); }
+      else reject(new Error(`ffmpeg failed (exit ${code}): ${stderrTail.slice(-500)}`));
+    });
+  });
+}
+
 export interface ComposeScene {
   /** Video clip preferred; still image used with -loop otherwise. */
   videoPath?: string;
@@ -83,6 +127,8 @@ export interface ComposeOptions {
   musicVolume?: number;
   /** Optional SFX track: one file played at multiple timestamps. */
   sfx?: SfxOptions;
+  /** Real encode progress (0–100), derived from ffmpeg's time= marker. */
+  onProgress?: (pct: number) => void;
 }
 
 /**
@@ -170,7 +216,7 @@ export async function composeVideo(opts: ComposeOptions): Promise<void> {
   // -shortest is unreliable with filter_complex outputs (audio can outlive the
   // video track); cap the container to the scenes' total explicitly.
   const totalSecs = scenes.reduce((s, sc) => s + sc.durationSecs, 0);
-  await runFfmpeg([
+  const finalArgs = [
     ...args,
     '-filter_complex', filters.join(';'),
     '-map', '[vout]',
@@ -181,7 +227,9 @@ export async function composeVideo(opts: ComposeOptions): Promise<void> {
     '-shortest',
     '-movflags', '+faststart',
     outPath,
-  ]);
+  ];
+  if (opts.onProgress) await runFfmpegWithProgress(finalArgs, totalSecs, opts.onProgress);
+  else await runFfmpeg(finalArgs);
 }
 
 /** Write a buffer to a temp file and return its path (caller cleans up the dir). */
