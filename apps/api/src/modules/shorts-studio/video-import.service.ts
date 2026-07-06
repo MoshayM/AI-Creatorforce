@@ -141,6 +141,11 @@ export class VideoImportService {
     return process.env['YT_DLP_PATH'] ?? 'yt-dlp';
   }
 
+  /** yt-dlp needs a JS runtime for YouTube extraction; hand it our own node. */
+  private jsRuntimeArgs(): string[] {
+    return ['--js-runtimes', `node:${process.execPath}`];
+  }
+
   /**
    * Fetch the video's public (auto-)captions via yt-dlp — no OAuth scope
    * needed, works for any public video. Prefers the original spoken
@@ -157,6 +162,7 @@ export class VideoImportService {
           '--write-subs', '--write-auto-subs',
           '--sub-format', 'srt/best',
           '--sub-langs', 'all,-live_chat',
+          ...this.jsRuntimeArgs(),
           ...(ffmpeg ? ['--ffmpeg-location', ffmpeg] : []),
           '-o', path.join(tmpDir, 'subs'),
         ], { timeout: 300_000, maxBuffer: 8 * 1024 * 1024 }, (err, _stdout, stderr) => {
@@ -192,6 +198,7 @@ export class VideoImportService {
       '-f', 'bv*[ext=mp4][height<=1080]+ba[ext=m4a]/b[ext=mp4]/b',
       '--merge-output-format', 'mp4',
       '--no-playlist',
+      ...this.jsRuntimeArgs(),
       ...(ffmpeg ? ['--ffmpeg-location', ffmpeg] : []),
       '-o', outPath,
     ];
