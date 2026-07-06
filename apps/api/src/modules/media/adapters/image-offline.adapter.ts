@@ -11,7 +11,9 @@ export class OfflineImageAdapter implements ImageAdapter {
   readonly name = 'offline-gradient-image';
 
   available(): boolean {
-    return true;
+    // Placeholders are opt-in only (master prompt hard rule 1): without this
+    // flag a stage with no real provider FAILS instead of fabricating output.
+    return process.env['ALLOW_OFFLINE_MEDIA'] === 'true';
   }
 
   generateImage(req: ImageRequest): Promise<GeneratedMedia> {

@@ -32,6 +32,7 @@ import { SHORTS_IMPORT_STAGES } from '../modules/shorts-studio/shorts-studio.ser
 import { composeVideo, ffmpegPath, runFfmpegCapture, type ComposeScene } from '../modules/media/adapters/ffmpeg.util';
 import { encodeWhooshWav } from '../modules/media/adapters/codec.util';
 import { checkDurations, analyzeLoudness } from '../modules/media/quality.util';
+import { validateMediaFile, formatIssues } from '../modules/media/media-validation.util';
 import { buildSrt, buildVtt, fitCuesToDuration } from '../modules/media/subtitle.util';
 import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, type PipelineScope, type PipelineStage } from './pipeline-plan';
 import { EventsGateway } from '../gateway/events.gateway';
@@ -45,6 +46,7 @@ import type {
 import { promises as fsp } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { createHash } from 'crypto';
 
 interface JobPayload {
   jobId: string;
@@ -125,6 +127,14 @@ export class SupervisorWorker extends WorkerHost {
         where: { id: jobId },
         data: { status: 'FAILED', error: msg, completedAt: new Date() },
       });
+      // A failed render must never leave its Render row QUEUED/RENDERING
+      const renderRowId = payload['renderRowId'] as string | undefined;
+      if (renderRowId) {
+        await this.prisma.render.update({
+          where: { id: renderRowId },
+          data: { status: 'FAILED', error: { message: msg.slice(0, 500) } as never },
+        }).catch(() => undefined);
+      }
       this.events.emitJobLog(jobId, projectId, `Agent error: ${msg.slice(0, 120)}`);
       this.events.emitJobFailed(jobId, msg, projectId);
       // Do NOT rethrow — state is persisted in PostgreSQL; rethrowing causes BullMQ to
@@ -335,28 +345,36 @@ export class SupervisorWorker extends WorkerHost {
       }
 
       case 'THUMBNAIL': {
-        this.log(jobId, projectId, 'Loading script for thumbnail brief…');
+        this.log(jobId, projectId, 'Loading script for thumbnail…');
         const script = (payload['script'] as ScriptOutput | undefined)
           ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
-        this.log(jobId, projectId, 'Generating thumbnail visual brief…');
         const brief = {
           concept: script
             ? `Thumbnail for: "${script.title}". Hook: "${script.hook.slice(0, 80)}"`
             : `Thumbnail brief for project: ${project.title}`,
           suggestedTextOverlay: script?.title.slice(0, 40) ?? project.title,
           colorScheme: 'High-contrast: brand primary + white text, dark background',
-          visualElements: [
-            'Presenter face (reaction/emotion shot)',
-            `Topic graphic related to: ${project.niche ?? 'General'}`,
-            'Bold sans-serif text overlay',
-          ],
-          aspectRatio: '16:9 (1280×720 minimum, 2560×1440 recommended)',
-          note: 'Generated as a brief — actual image creation is Phase 2 (in-app asset generation).',
+          aspectRatio: '16:9 (1280×720)',
         };
-        this.log(jobId, projectId, 'Thumbnail brief ready', `Text overlay: "${brief.suggestedTextOverlay}"`);
-        await this.jobs.logStep(jobId, 'ThumbnailAgent', 'brief', { projectId }, brief, 0, 0, 0);
-        this.events.emitJobUpdate(jobId, { step: 'THUMBNAIL', status: 'COMPLETED', brief: true }, projectId);
-        return brief;
+        // The brief is the PROMPT, not the deliverable (master prompt hard
+        // rule 1) — the stage now produces a real, validated image asset
+        // through the provider chain, or FAILS.
+        this.log(jobId, projectId, 'Generating thumbnail image…', `Concept: ${brief.concept.slice(0, 100)}`);
+        const image = await this.media.generateImage(projectId, 'Thumbnail', {
+          prompt: [
+            `YouTube thumbnail, 16:9, cinematic, high contrast, no text.`,
+            brief.concept,
+            `Color scheme: ${brief.colorScheme}.`,
+            `Topic: ${project.niche ?? 'general'}.`,
+          ].join(' '),
+          width: 1280,
+          height: 720,
+        });
+        this.log(jobId, projectId, 'Thumbnail image ready ✓',
+          `${(image.sizeBytes / 1024).toFixed(0)} KB · provider ${image.provider}${image.notes ? ` · ${image.notes}` : ''}`);
+        await this.jobs.logStep(jobId, 'ThumbnailAgent', 'generate', { projectId }, { ...brief, assetId: image.assetId, provider: image.provider }, 0, 0, 0);
+        this.events.emitJobUpdate(jobId, { step: 'THUMBNAIL', status: 'COMPLETED' }, projectId);
+        return { ...brief, assetId: image.assetId, versionId: image.versionId, key: image.key, provider: image.provider, notes: image.notes };
       }
 
       case 'PUBLISH': {
@@ -696,6 +714,14 @@ export class SupervisorWorker extends WorkerHost {
         if (!ffmpegPath()) {
           throw new Error('Renderer unavailable — ffmpeg binary not found. Install ffmpeg or the ffmpeg-static package.');
         }
+        // Timeline-editor renders track a Render row; keep it honest
+        const renderRowId = payload['renderRowId'] as string | undefined;
+        if (renderRowId) {
+          await this.prisma.render.update({
+            where: { id: renderRowId },
+            data: { status: 'RENDERING', progressPct: 5 },
+          }).catch(() => undefined);
+        }
 
         // ── Feature 1: Render preset ────────────────────────────────────────
         type RenderPreset = 'LANDSCAPE' | 'VERTICAL' | 'SQUARE';
@@ -860,18 +886,36 @@ export class SupervisorWorker extends WorkerHost {
         const renderKey = `renders/${projectId}/final-${preset.toLowerCase()}.mp4`;
         const outPath = this.storage.resolve(renderKey);
         try {
-          await composeVideo({
-            scenes,
-            voicePath,
-            musicPath,
-            subtitlePath,
-            outPath,
-            width,
-            height,
-            fps: 30,
-            musicVolume: effectiveMusicVolume,
-            ...(sfxPath && sfxTimestamps.length > 0 ? { sfx: { path: sfxPath, atSecs: sfxTimestamps } } : {}),
-          });
+          // Quality gate (master prompt §9): the render is only COMPLETED when
+          // the output decodes, matches the timeline duration, is not black
+          // and — when narration/music went in — is not silent. One retry,
+          // then the stage FAILS. Never a silent COMPLETED.
+          const hasAudioInputs = !!voicePath || !!musicPath;
+          let renderValidation: Awaited<ReturnType<typeof validateMediaFile>> | null = null;
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            await composeVideo({
+              scenes,
+              voicePath,
+              musicPath,
+              subtitlePath,
+              outPath,
+              width,
+              height,
+              fps: 30,
+              musicVolume: effectiveMusicVolume,
+              ...(sfxPath && sfxTimestamps.length > 0 ? { sfx: { path: sfxPath, atSecs: sfxTimestamps } } : {}),
+            });
+            this.log(jobId, projectId, 'Validating render…', 'decode, duration, black-frame and loudness scan');
+            renderValidation = await validateMediaFile('VIDEO', outPath, {
+              expectedDurationMs: Math.round(totalSceneSecs * 1000),
+              requireAudio: hasAudioInputs,
+            });
+            if (renderValidation.ok) break;
+            this.log(jobId, projectId, `Render validation failed (attempt ${attempt}/2)`, formatIssues(renderValidation));
+          }
+          if (!renderValidation?.ok) {
+            throw new Error(`Render failed quality validation: ${formatIssues(renderValidation!)}`);
+          }
         } finally {
           if (tmpDir) await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
         }
@@ -908,6 +952,22 @@ export class SupervisorWorker extends WorkerHost {
           },
         });
         await this.prisma.asset.update({ where: { id: renderAsset.id }, data: { currentVersionId: renderVersion.id } });
+
+        if (renderRowId) {
+          // Real metadata only: content-derived checksum, actual size/duration
+          const checksum = createHash('sha256').update(await fsp.readFile(outPath)).digest('hex');
+          await this.prisma.render.update({
+            where: { id: renderRowId },
+            data: {
+              status: 'READY',
+              progressPct: 100,
+              r2Key: renderKey,
+              checksum,
+              durationMs: totalMs,
+              sizeBytes: BigInt(stat.size),
+            },
+          }).catch(() => undefined);
+        }
 
         this.log(jobId, projectId, 'Final video rendered ✓',
           `${(stat.size / 1024 / 1024).toFixed(1)} MB · ${Math.round(totalSceneSecs)}s · ${Math.round((Date.now() - t0) / 1000)}s render time · preset ${preset}`);

@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { JobsService } from '../jobs/jobs.service';
 import type { RenderPreset } from '@prisma/client';
 
 @Injectable()
 export class RenderService {
   private readonly logger = new Logger(RenderService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jobs: JobsService,
+  ) {}
 
   async queueRender(projectId: string, timelineVersion: number, preset: RenderPreset, userId: string) {
     const project = await this.prisma.project.findFirst({
@@ -40,8 +44,20 @@ export class RenderService {
       },
     });
 
-    // Simulate async render progress (real FFmpeg worker in production)
-    this.simulateRender(render.id).catch(err => this.logger.error(`Render sim failed: ${err}`));
+    // Real FFmpeg render via the agent job system (audit-placeholders.md B2:
+    // the previous simulateRender faked progress/checksum/size with timers).
+    // Timeline presets map onto the worker's aspect presets.
+    const presetMap: Record<string, string> = {
+      DRAFT_PROXY: 'LANDSCAPE',
+      YT_1080P: 'LANDSCAPE',
+      YT_4K: 'LANDSCAPE',
+      SHORTS_1080X1920: 'VERTICAL',
+    };
+    await this.jobs.enqueue(projectId, 'RENDER', {
+      preset: presetMap[preset] ?? 'LANDSCAPE',
+      renderRowId: render.id,
+      pipelineMode: true,
+    });
 
     return render;
   }
@@ -64,30 +80,4 @@ export class RenderService {
     });
   }
 
-  private async simulateRender(renderId: string) {
-    // In production this is replaced by a real FFmpeg render worker
-    await new Promise(r => setTimeout(r, 3000));
-    await this.prisma.render.update({
-      where: { id: renderId },
-      data: { status: 'RENDERING', progressPct: 10 },
-    });
-    await new Promise(r => setTimeout(r, 5000));
-    await this.prisma.render.update({
-      where: { id: renderId },
-      data: { status: 'RENDERING', progressPct: 60 },
-    });
-    await new Promise(r => setTimeout(r, 5000));
-    await this.prisma.render.update({
-      where: { id: renderId },
-      data: {
-        status: 'READY',
-        progressPct: 100,
-        r2Key: `renders/${renderId}/output.mp4`,
-        checksum: `sha256-${renderId.slice(0, 16)}`,
-        durationMs: 600000,
-        sizeBytes: BigInt(1024 * 1024 * 150), // 150MB placeholder
-      },
-    });
-    this.logger.log(`Render ${renderId} complete (simulated)`);
-  }
 }

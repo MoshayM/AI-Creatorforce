@@ -28,7 +28,9 @@ export class OfflineMusicAdapter implements MusicAdapter {
   readonly name = 'offline-synth-music';
 
   available(): boolean {
-    return true;
+    // Placeholders are opt-in only (master prompt hard rule 1): without this
+    // flag a stage with no real provider FAILS instead of fabricating output.
+    return process.env['ALLOW_OFFLINE_MEDIA'] === 'true';
   }
 
   compose(req: MusicRequest): Promise<GeneratedMedia> {

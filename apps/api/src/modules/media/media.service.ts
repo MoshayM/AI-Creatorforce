@@ -15,6 +15,7 @@ import { GeminiImageAdapter } from './adapters/image-gemini.adapter';
 import { OfflineImageAdapter } from './adapters/image-offline.adapter';
 import { OfflineMusicAdapter } from './adapters/music-offline.adapter';
 import { FfmpegSceneVideoAdapter } from './adapters/video-ffmpeg.adapter';
+import { validateMediaBuffer, formatIssues, type MediaValidationKind } from './media-validation.util';
 
 export interface StoredAsset {
   assetId: string;
@@ -97,7 +98,11 @@ export class MediaService {
     adapters: TAdapter[],
     call: (adapter: TAdapter, req: TReq) => Promise<GeneratedMedia>,
   ): Promise<StoredAsset> {
-    if (adapters.length === 0) throw new Error(`No available ${kind} provider adapters`);
+    if (adapters.length === 0) {
+      throw new Error(
+        `No available ${kind} provider — configure a provider API key, or set ALLOW_OFFLINE_MEDIA=true to accept clearly-labelled dev placeholders. Refusing to fabricate output (audit-placeholders.md).`,
+      );
+    }
 
     // Token optimization: never regenerate completed assets — identical
     // request (kind+label+params) returns the cached version. The preferred
@@ -135,6 +140,25 @@ export class MediaService {
     for (const adapter of adapters) {
       try {
         const media = await call(adapter, req);
+
+        // Validation gate (master prompt §9): reject silent/corrupt/zero-
+        // duration/undersized output BEFORE it can become a READY asset. A
+        // failed validation is an adapter failure — fall through to the next
+        // provider, or fail the stage. Never store fake-valid media.
+        const expectedDurationMs =
+          typeof (req as { durationSecs?: number }).durationSecs === 'number'
+            ? (req as { durationSecs: number }).durationSecs * 1000
+            : undefined;
+        const validation = await validateMediaBuffer(
+          kind as MediaValidationKind,
+          media.buffer,
+          media.ext,
+          { expectedDurationMs },
+        );
+        if (!validation.ok) {
+          throw new Error(`Output failed validation — ${formatIssues(validation)}`);
+        }
+
         const key = `assets/${projectId}/${asset.id}/v1/media.${media.ext}`;
         const { absPath, sizeBytes } = await this.storage.put(key, media.buffer);
         const contentHash = createHash('sha256').update(media.buffer).digest('hex');
