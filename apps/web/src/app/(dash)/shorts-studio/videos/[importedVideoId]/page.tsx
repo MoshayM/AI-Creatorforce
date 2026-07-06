@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Topic {
@@ -15,6 +15,16 @@ interface Topic {
   summary: string;
   confidence: number;
   highlight: { id: string; finalScore: number } | null;
+}
+
+interface Clip {
+  id: string;
+  clipType: string;
+  status: string;
+  sourceStartMs: number;
+  sourceEndMs: number;
+  topicSegment: { title: string; highlight: { titleSuggestion: string; finalScore: number } | null };
+  timeline: { id: string; durationMs: number; _count: { captions: number } } | null;
 }
 
 interface Highlight {
@@ -160,6 +170,10 @@ export default function ShortsVideoDetailPage() {
     queryKey: ['shorts-highlights', importedVideoId],
     queryFn: () => api.shortsStudio.highlights(importedVideoId).then((r) => r.data as Highlight[]),
   });
+  const { data: clips = [] } = useQuery<Clip[]>({
+    queryKey: ['shorts-clips', importedVideoId],
+    queryFn: () => api.shortsStudio.videoClips(importedVideoId).then((r) => r.data as Clip[]),
+  });
 
   const loading = loadingTopics || loadingHighlights;
 
@@ -188,6 +202,35 @@ export default function ShortsVideoDetailPage() {
           </button>
         </div>
       </div>
+
+      {clips.length > 0 && (
+        <section className="mb-6">
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+            <Clapperboard className="w-4 h-4" /> Clips ({clips.length})
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {clips.map((c) => (
+              <div key={c.id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 shadow-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {c.topicSegment.highlight?.titleSuggestion ?? c.topicSegment.title}
+                  </p>
+                  <p className="text-[11px] text-gray-400">
+                    {c.clipType.replace(/_/g, ' ')} · {c.timeline ? fmt(c.timeline.durationMs) : '—'} · {c.status.replace(/_/g, ' ').toLowerCase()}
+                    {c.timeline && c.timeline._count.captions > 0 ? ` · ${c.timeline._count.captions} captions` : ''}
+                  </p>
+                </div>
+                <Link
+                  href={`/shorts-studio/clips/${c.id}/edit`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 shrink-0"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </Link>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {loading && (
         <div className="flex items-center gap-2 text-gray-400 py-16 justify-center">

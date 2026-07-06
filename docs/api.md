@@ -195,5 +195,12 @@ Module spec: repo-root `ai.md`. All routes prefixed `/shorts-studio`, JWT-guarde
 | GET | `/shorts-studio/videos/:id/recommendations` | Top-N clip recommendations (`?limit=5\|10\|20`, no AI call) |
 | POST | `/shorts-studio/highlights/:id/generate-clips` | `{ clipTypes: ClipType[] }` → candidate ShortClip[] + seeded timelines |
 | GET | `/shorts-studio/projects/:projectId/clips` | List ShortClip[] for a project |
+| GET | `/shorts-studio/videos/:id/clips` | List ShortClip[] for one imported video |
+| GET | `/shorts-studio/clips/:id/timeline` | Timeline with tracks + items + captions + source asset refs |
+| PATCH | `/shorts-studio/timelines/:id` | `{ commands: TimelineCommand[] }` — TRIM/SPLIT/DELETE/MERGE/DUPLICATE/MOVE/RESIZE/CUT_RANGE, audited |
+| POST | `/shorts-studio/timelines/:id/ai-suggestions` | `{ capability }` → proposed TimelineCommand[] (remove-silence \| remove-fillers \| improve-pacing) |
+| POST | `/shorts-studio/timelines/:id/ai-suggestions/apply` | Apply reviewed suggestions (audited as AI_ASSISTANT) |
+| GET | `/shorts-studio/timelines/:id/history` | ShortsTimelineEdit audit trail |
+| POST | `/shorts-studio/clips/:id/captions` | Enqueue CAPTION_GENERATION job (transcript → styled ShortsCaption rows) |
 
 Pipeline stages run as child `AgentJob`s of the `SHORTS_ANALYZE` root and self-skip when their output rows already exist (resume semantics, `ai.md` §16). Requires `yt-dlp` (`YT_DLP_PATH`) for source download; Whisper ASR fallback uses `OPENAI_API_KEY`.

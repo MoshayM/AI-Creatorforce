@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, BadRequestException } from '@nestjs/common';
 import { IsString, IsArray, IsIn } from 'class-validator';
 import type { ClipType } from '@prisma/client';
+import { ApplyCommandsSchema, AssistCapabilitySchema } from '@cf/shared';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 import { ShortsStudioService } from './shorts-studio.service';
@@ -8,6 +9,9 @@ import { YouTubeReadService } from './youtube-read.service';
 import { VideoImportService } from './video-import.service';
 import { ClipRecommendationService } from './clip-recommendation.service';
 import { ShortsGenerationService } from './shorts-generation.service';
+import { TimelineService } from './timeline.service';
+import { AiEditingAssistantService } from './ai-editing-assistant.service';
+import { JobsService } from '../jobs/jobs.service';
 
 class ImportVideoDto {
   @IsString() projectId!: string;
@@ -31,6 +35,9 @@ export class ShortsStudioController {
     private readonly videoImport: VideoImportService,
     private readonly recommendations: ClipRecommendationService,
     private readonly generation: ShortsGenerationService,
+    private readonly timeline: TimelineService,
+    private readonly assistant: AiEditingAssistantService,
+    private readonly jobs: JobsService,
   ) {}
 
   // ── Import (18.1) ───────────────────────────────────────────────────────────
@@ -100,6 +107,11 @@ export class ShortsStudioController {
     return this.shorts.getHighlights(importedVideoId, user.sub);
   }
 
+  @Get('videos/:importedVideoId/clips')
+  async videoClips(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
+    return this.shorts.getClipsForVideo(importedVideoId, user.sub);
+  }
+
   // ── Generate (18.3) ─────────────────────────────────────────────────────────
 
   @Get('videos/:importedVideoId/recommendations')
@@ -128,5 +140,60 @@ export class ShortsStudioController {
   async listClips(@Param('projectId') projectId: string, @CurrentUser() user: JwtPayload) {
     await this.shorts.assertProjectOwnership(projectId, user.sub);
     return this.generation.listClips(projectId);
+  }
+
+  // ── Timeline / Editor (18.4) ────────────────────────────────────────────────
+
+  @Get('clips/:shortClipId/timeline')
+  async clipTimeline(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    return this.timeline.getTimelineForClip(shortClipId, user.sub);
+  }
+
+  @Patch('timelines/:timelineId')
+  async patchTimeline(
+    @Param('timelineId') timelineId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const parsed = ApplyCommandsSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid commands');
+    await this.timeline.assertTimelineOwnership(timelineId, user.sub);
+    return this.timeline.applyCommands(timelineId, user.sub, parsed.data.commands);
+  }
+
+  @Post('timelines/:timelineId/ai-suggestions')
+  async aiSuggestions(
+    @Param('timelineId') timelineId: string,
+    @Body() body: { capability?: string },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const capability = AssistCapabilitySchema.safeParse(body?.capability);
+    if (!capability.success) throw new BadRequestException('capability must be remove-silence | remove-fillers | improve-pacing');
+    await this.timeline.assertTimelineOwnership(timelineId, user.sub);
+    return this.assistant.suggest(timelineId, capability.data);
+  }
+
+  @Post('timelines/:timelineId/ai-suggestions/apply')
+  async applySuggestions(
+    @Param('timelineId') timelineId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const parsed = ApplyCommandsSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid commands');
+    await this.timeline.assertTimelineOwnership(timelineId, user.sub);
+    // Audit-tagged as the assistant even though a human accepted it (ai.md 9.2)
+    return this.timeline.applyCommands(timelineId, 'AI_ASSISTANT', parsed.data.commands);
+  }
+
+  @Get('timelines/:timelineId/history')
+  async timelineHistory(@Param('timelineId') timelineId: string, @CurrentUser() user: JwtPayload) {
+    return this.timeline.history(timelineId, user.sub);
+  }
+
+  @Post('clips/:shortClipId/captions')
+  async generateCaptions(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    const clip = await this.shorts.assertClipOwnership(shortClipId, user.sub);
+    return this.jobs.enqueue(clip.projectId, 'CAPTION_GENERATION', { shortClipId });
   }
 }

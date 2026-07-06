@@ -12,6 +12,9 @@ import { TopicSegmentationService } from './topic-segmentation.service';
 import { HighlightScoringService } from './highlight-scoring.service';
 import { ClipRecommendationService } from './clip-recommendation.service';
 import { ShortsGenerationService } from './shorts-generation.service';
+import { TimelineService } from './timeline.service';
+import { AiEditingAssistantService } from './ai-editing-assistant.service';
+import { CaptionGenerationService } from './caption-generation.service';
 
 @Module({
   imports: [ChannelsModule, JobsModule, MediaModule],
@@ -26,6 +29,9 @@ import { ShortsGenerationService } from './shorts-generation.service';
     HighlightScoringService,
     ClipRecommendationService,
     ShortsGenerationService,
+    TimelineService,
+    AiEditingAssistantService,
+    CaptionGenerationService,
   ],
   exports: [
     ShortsStudioService,
@@ -37,6 +43,9 @@ import { ShortsGenerationService } from './shorts-generation.service';
     HighlightScoringService,
     ClipRecommendationService,
     ShortsGenerationService,
+    TimelineService,
+    AiEditingAssistantService,
+    CaptionGenerationService,
   ],
 })
 export class ShortsStudioModule {}

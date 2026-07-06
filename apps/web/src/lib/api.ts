@@ -121,5 +121,19 @@ export const api = {
       apiClient.post(`/shorts-studio/highlights/${highlightId}/generate-clips`, { clipTypes }),
     listClips: (projectId: string) =>
       apiClient.get(`/shorts-studio/projects/${projectId}/clips`),
+    clipTimeline: (shortClipId: string) =>
+      apiClient.get(`/shorts-studio/clips/${shortClipId}/timeline`),
+    applyCommands: (timelineId: string, commands: unknown[]) =>
+      apiClient.patch(`/shorts-studio/timelines/${timelineId}`, { commands }),
+    aiSuggest: (timelineId: string, capability: string) =>
+      apiClient.post(`/shorts-studio/timelines/${timelineId}/ai-suggestions`, { capability }),
+    aiApply: (timelineId: string, commands: unknown[]) =>
+      apiClient.post(`/shorts-studio/timelines/${timelineId}/ai-suggestions/apply`, { commands }),
+    timelineHistory: (timelineId: string) =>
+      apiClient.get(`/shorts-studio/timelines/${timelineId}/history`),
+    generateCaptions: (shortClipId: string) =>
+      apiClient.post(`/shorts-studio/clips/${shortClipId}/captions`),
+    videoClips: (importedVideoId: string) =>
+      apiClient.get(`/shorts-studio/videos/${importedVideoId}/clips`),
   },
 };

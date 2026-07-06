@@ -142,4 +142,24 @@ export class ShortsStudioService {
     if (!highlight) throw new NotFoundException('Highlight not found');
     return highlight;
   }
+
+  async assertClipOwnership(shortClipId: string, userId: string) {
+    const clip = await this.prisma.shortClip.findFirst({
+      where: { id: shortClipId, project: { userId } },
+    });
+    if (!clip) throw new NotFoundException('Clip not found');
+    return clip;
+  }
+
+  async getClipsForVideo(importedVideoId: string, userId: string) {
+    await this.assertVideoOwnership(importedVideoId, userId);
+    return this.prisma.shortClip.findMany({
+      where: { topicSegment: { importedVideoId } },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        topicSegment: { select: { title: true, highlight: { select: { titleSuggestion: true, finalScore: true } } } },
+        timeline: { select: { id: true, durationMs: true, _count: { select: { captions: true } } } },
+      },
+    });
+  }
 }
