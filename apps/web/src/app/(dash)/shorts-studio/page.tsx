@@ -15,6 +15,7 @@ interface Project {
 interface ChannelVideo {
   youtubeVideoId: string;
   title: string;
+  description: string | null;
   durationMs: number;
   thumbnailUrl: string | null;
   viewCount: number | null;
@@ -121,6 +122,8 @@ export default function ShortsStudioPage() {
   // the Approvals history / Recent Jobs pattern)
   const [importedOpen, setImportedOpen] = useState(true);
   const [openVideoIds, setOpenVideoIds] = useState<Set<string>>(new Set());
+  const [channelOpen, setChannelOpen] = useState(true);
+  const [openChannelIds, setOpenChannelIds] = useState<Set<string>>(new Set());
 
   const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ['projects'],
@@ -277,41 +280,102 @@ export default function ShortsStudioPage() {
             </section>
           )}
 
-          {/* Channel library */}
+          {/* Channel library: section bar + per-video click-to-expand rows */}
           <section>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Channel videos</h2>
-            {loadingChannel && (
-              <div className="flex items-center gap-2 text-gray-400 py-10 justify-center">
-                <Loader2 className="w-5 h-5 animate-spin" /> Loading channel videos…
-              </div>
-            )}
-            {!!channelError && (
-              <div className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-xl p-4">
-                Could not load channel videos — {(channelError as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'check that the channel is connected with YouTube access.'}
-              </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {(channelVideos?.items ?? []).map((v) => (
-                <div key={v.youtubeVideoId} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
-                  {v.thumbnailUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={v.thumbnailUrl} alt="" className="w-24 h-14 object-cover rounded-lg shrink-0" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 line-clamp-2">{v.title}</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">{fmtDuration(v.durationMs)} · {fmtViews(v.viewCount)}</p>
-                  </div>
-                  <button
-                    onClick={() => importMutation.mutate(v.youtubeVideoId)}
-                    disabled={importedIds.has(v.youtubeVideoId) || importMutation.isPending}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs shrink-0 border border-brand-200 text-brand-700 hover:bg-brand-50 disabled:opacity-40 disabled:hover:bg-transparent"
-                  >
-                    {importedIds.has(v.youtubeVideoId) ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
-                    {importedIds.has(v.youtubeVideoId) ? 'Imported' : 'Import'}
-                  </button>
-                </div>
-              ))}
+            <div
+              onClick={() => setChannelOpen((o) => !o)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setChannelOpen((o) => !o); } }}
+              className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              {channelOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Channel videos</h2>
+              {(channelVideos?.items?.length ?? 0) > 0 && (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium">{channelVideos!.items.length}</span>
+              )}
+              {channelOpen && (channelVideos?.items?.length ?? 0) > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const all = channelVideos!.items.map((v) => v.youtubeVideoId);
+                    setOpenChannelIds((prev) => prev.size === all.length ? new Set() : new Set(all));
+                  }}
+                  className="ml-auto text-xs text-brand-600 hover:underline"
+                >
+                  {openChannelIds.size === (channelVideos?.items?.length ?? 0) ? 'Collapse all' : 'Expand all'}
+                </button>
+              )}
             </div>
+            {channelOpen && (
+              <div className="mt-2 space-y-2">
+                {loadingChannel && (
+                  <div className="flex items-center gap-2 text-gray-400 py-10 justify-center">
+                    <Loader2 className="w-5 h-5 animate-spin" /> Loading channel videos…
+                  </div>
+                )}
+                {!!channelError && (
+                  <div className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-xl p-4">
+                    Could not load channel videos — {(channelError as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'check that the channel is connected with YouTube access.'}
+                  </div>
+                )}
+                {(channelVideos?.items ?? []).map((v) => {
+                  const open = openChannelIds.has(v.youtubeVideoId);
+                  const alreadyImported = importedIds.has(v.youtubeVideoId);
+                  const toggle = () => setOpenChannelIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(v.youtubeVideoId)) next.delete(v.youtubeVideoId); else next.add(v.youtubeVideoId);
+                    return next;
+                  });
+                  return (
+                    <div key={v.youtubeVideoId} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                      <div
+                        onClick={toggle}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+                        className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors"
+                      >
+                        {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                        {v.thumbnailUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={v.thumbnailUrl} alt="" className="w-16 h-9 object-cover rounded-md shrink-0" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">{v.title}</p>
+                          <p className="text-[11px] text-gray-400">{fmtDuration(v.durationMs)} · {fmtViews(v.viewCount)}</p>
+                        </div>
+                        {alreadyImported && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
+                      </div>
+                      {open && (
+                        <div className="px-4 pb-4 pt-2 border-t border-gray-50 flex items-start gap-4 flex-wrap">
+                          {v.thumbnailUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={v.thumbnailUrl} alt="" className="w-48 rounded-lg shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-[220px]">
+                            {v.publishedAt && (
+                              <p className="text-[11px] text-gray-400">Published {new Date(v.publishedAt).toLocaleDateString()}</p>
+                            )}
+                            {v.description && (
+                              <p className="text-xs text-gray-600 mt-1 whitespace-pre-line line-clamp-5">{v.description}</p>
+                            )}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); importMutation.mutate(v.youtubeVideoId); }}
+                              disabled={alreadyImported || importMutation.isPending}
+                              className="mt-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40"
+                            >
+                              {alreadyImported ? <CheckCircle2 className="w-4 h-4" /> : importMutation.isPending && importMutation.variables === v.youtubeVideoId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                              {alreadyImported ? 'Imported' : 'Import for Shorts'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
         </>
       )}
