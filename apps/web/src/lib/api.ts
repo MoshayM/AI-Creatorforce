@@ -67,6 +67,7 @@ export const api = {
   },
   approvals: {
     listPending: () => apiClient.get('/approvals/pending'),
+    listHistory: () => apiClient.get('/approvals/history'),
     approve: (id: string, notes?: string) => apiClient.post(`/approvals/${id}/approve`, { notes }),
     reject: (id: string, notes?: string) => apiClient.post(`/approvals/${id}/reject`, { notes }),
   },

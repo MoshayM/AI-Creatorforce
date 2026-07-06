@@ -1,6 +1,6 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, XCircle, Clock, Loader2, Clapperboard, Tag, FileText } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Loader2, Clapperboard, Tag, FileText, History, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { api, apiClient } from '@/lib/api';
 import { useEffect, useState } from 'react';
@@ -9,9 +9,18 @@ interface Approval {
   id: string;
   status: string;
   expiresAt: string;
+  reviewedAt?: string | null;
+  notes?: string | null;
   project: { title: string; channel: { title: string } };
   job: { type: string; result: unknown };
 }
+
+const STATUS_CHIP: Record<string, string> = {
+  APPROVED: 'bg-green-100 text-green-700',
+  REJECTED: 'bg-red-100 text-red-700',
+  EXPIRED: 'bg-gray-100 text-gray-500',
+  PENDING: 'bg-gray-100 text-gray-500', // lapsed-pending shown as expired
+};
 
 interface ShortsExportResult {
   shortClipId?: string;
@@ -118,6 +127,34 @@ function GenericResultView({ result }: { result: unknown }) {
   );
 }
 
+/** Compact row for a reviewed/expired approval in the history section. */
+function HistoryRow({ a }: { a: Approval }) {
+  const shorts = isShortsExport(a.job.type, a.job.result) ? a.job.result : null;
+  const title = shorts?.metadata?.title
+    ?? (a.job.type === 'SHORTS_EXPORT' ? 'Short clip' : a.job.type.replace(/_/g, ' ').toLowerCase());
+  const effectiveStatus = a.status === 'PENDING' ? 'EXPIRED' : a.status;
+  return (
+    <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3">
+      <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${STATUS_CHIP[effectiveStatus] ?? 'bg-gray-100 text-gray-500'}`}>
+        {effectiveStatus}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-gray-900 truncate">{title}</p>
+        <p className="text-[11px] text-gray-400 truncate">
+          {a.project.title} · {a.project.channel.title}
+          {a.reviewedAt ? ` · reviewed ${new Date(a.reviewedAt).toLocaleString()}` : ''}
+          {a.notes ? ` · “${a.notes}”` : ''}
+        </p>
+      </div>
+      {shorts?.shortClipId && (
+        <Link href={`/shorts-studio/clips/${shorts.shortClipId}/export`} className="text-brand-600 hover:text-brand-700 shrink-0" title="Open clip">
+          <ExternalLink className="w-4 h-4" />
+        </Link>
+      )}
+    </div>
+  );
+}
+
 export default function ApprovalsPage() {
   const qc = useQueryClient();
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -128,16 +165,24 @@ export default function ApprovalsPage() {
     refetchInterval: 30_000,
   });
 
+  const { data: history = [] } = useQuery<Approval[]>({
+    queryKey: ['approvals-history'],
+    queryFn: () => api.approvals.listHistory().then((r) => r.data as Approval[]),
+    refetchInterval: 60_000,
+  });
+
   const approveMutation = useMutation({
     mutationFn: ({ id }: { id: string }) => api.approvals.approve(id, notes[id]),
     onSuccess: (_, { id }) => {
       qc.setQueryData<Approval[]>(['approvals'], (old) => (old ?? []).filter((a) => a.id !== id));
+      void qc.invalidateQueries({ queryKey: ['approvals-history'] });
     },
   });
   const rejectMutation = useMutation({
     mutationFn: ({ id }: { id: string }) => api.approvals.reject(id, notes[id]),
     onSuccess: (_, { id }) => {
       qc.setQueryData<Approval[]>(['approvals'], (old) => (old ?? []).filter((a) => a.id !== id));
+      void qc.invalidateQueries({ queryKey: ['approvals-history'] });
     },
   });
 
@@ -207,6 +252,17 @@ export default function ApprovalsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {history.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+            <History className="w-4 h-4" /> Recently reviewed ({history.length})
+          </h2>
+          <div className="space-y-2">
+            {history.map((a) => <HistoryRow key={a.id} a={a} />)}
+          </div>
+        </section>
       )}
     </div>
   );

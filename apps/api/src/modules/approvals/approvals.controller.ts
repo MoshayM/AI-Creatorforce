@@ -21,6 +21,11 @@ export class ApprovalsController {
     return this.svc.listPending(user.sub);
   }
 
+  @Get('history')
+  listHistory(@CurrentUser() user: JwtPayload) {
+    return this.svc.listHistory(user.sub);
+  }
+
   @Post(':id/approve')
   approve(@Param('id') id: string, @Body() dto: ReviewDto, @CurrentUser() user: JwtPayload) {
     return this.svc.approve(id, user.sub, dto.notes);

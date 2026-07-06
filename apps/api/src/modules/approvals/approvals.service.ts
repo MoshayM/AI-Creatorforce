@@ -33,6 +33,25 @@ export class ApprovalsService {
     });
   }
 
+  /** Reviewed (or expired) approvals — the Approval Center's history section. */
+  async listHistory(userId: string, limit = 50) {
+    return this.prisma.approval.findMany({
+      where: {
+        project: { userId },
+        OR: [
+          { status: { in: ['APPROVED', 'REJECTED', 'EXPIRED'] } },
+          { status: 'PENDING', expiresAt: { lte: new Date() } }, // lapsed but never marked
+        ],
+      },
+      include: {
+        job: { select: { type: true, result: true } },
+        project: { select: { title: true, channel: { select: { title: true } } } },
+      },
+      orderBy: [{ reviewedAt: 'desc' }, { createdAt: 'desc' }],
+      take: limit,
+    });
+  }
+
   async approve(approvalId: string, userId: string, notes?: string) {
     const approval = await this.getOwnedApproval(approvalId, userId);
     if (approval.expiresAt < new Date()) throw new BadRequestException('Approval expired');
