@@ -67,7 +67,22 @@ export class ShortsExportService {
     const latest = clip.exports[0];
     if (latest && latest.exportAsset.createdAt > clip.renderAsset!.createdAt) {
       onLog?.('Export package is up to date — reusing');
-      return { skipped: true, exportId: latest.id, exportAssetId: latest.exportAssetId };
+      const latestVersion = await this.prisma.assetVersion.findFirst({
+        where: { assetId: latest.exportAssetId },
+        orderBy: { version: 'desc' },
+        select: { id: true, durationMs: true },
+      });
+      const metadata = await this.buildMetadata(shortClipId);
+      return {
+        skipped: true,
+        exportId: latest.id,
+        exportAssetId: latest.exportAssetId,
+        shortClipId,
+        clipType: clip.clipType,
+        exportVersionId: latestVersion?.id ?? null,
+        durationMs: latestVersion?.durationMs ?? null,
+        metadata,
+      };
     }
 
     const metadata = await this.buildMetadata(shortClipId);
@@ -114,7 +129,17 @@ export class ShortsExportService {
     });
     await this.prisma.shortClip.update({ where: { id: shortClipId }, data: { status: 'EXPORTED' } });
     onLog?.(`Export package ready — ${(sizeBytes / 1024 / 1024).toFixed(1)} MB + metadata`);
-    return { skipped: false, exportId: history.id, exportAssetId: asset.id, metadata };
+    // Everything the Approval Center needs to render a human review card
+    return {
+      skipped: false,
+      exportId: history.id,
+      exportAssetId: asset.id,
+      shortClipId,
+      clipType: clip.clipType,
+      exportVersionId: version.id,
+      durationMs: renderVersion.durationMs,
+      metadata,
+    };
   }
 
   async listExports(shortClipId: string) {
