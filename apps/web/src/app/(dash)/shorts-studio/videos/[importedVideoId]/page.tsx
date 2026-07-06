@@ -311,6 +311,8 @@ export default function ShortsVideoDetailPage() {
   const [tab, setTab] = useState<'highlights' | 'topics'>('highlights');
   const [openHighlights, setOpenHighlights] = useState<Set<string>>(new Set());
   const [openTopics, setOpenTopics] = useState<Set<string>>(new Set());
+  const [clipsOpen, setClipsOpen] = useState(true);
+  const [openClips, setOpenClips] = useState<Set<string>>(new Set());
 
   const { data: topics = [], isLoading: loadingTopics } = useQuery<Topic[]>({
     queryKey: ['shorts-topics', importedVideoId],
@@ -355,30 +357,91 @@ export default function ShortsVideoDetailPage() {
 
       {clips.length > 0 && (
         <section className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-            <Clapperboard className="w-4 h-4" /> Clips ({clips.length})
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {clips.map((c) => (
-              <div key={c.id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 shadow-sm">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {c.topicSegment.highlight?.titleSuggestion ?? c.topicSegment.title}
-                  </p>
-                  <p className="text-[11px] text-gray-400">
-                    {c.clipType.replace(/_/g, ' ')} · {c.timeline ? fmt(c.timeline.durationMs) : '—'} · {c.status.replace(/_/g, ' ').toLowerCase()}
-                    {c.timeline && c.timeline._count.captions > 0 ? ` · ${c.timeline._count.captions} captions` : ''}
-                  </p>
-                </div>
-                <Link
-                  href={`/shorts-studio/clips/${c.id}/edit`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 shrink-0"
-                >
-                  <Pencil className="w-3.5 h-3.5" /> Edit
-                </Link>
-              </div>
-            ))}
+          <div
+            onClick={() => setClipsOpen((o) => !o)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setClipsOpen((o) => !o); } }}
+            className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors shadow-sm"
+          >
+            {clipsOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+              <Clapperboard className="w-4 h-4" /> Clips
+            </h2>
+            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium">{clips.length}</span>
+            {clipsOpen && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenClips((prev) => prev.size === clips.length ? new Set() : new Set(clips.map((c) => c.id)));
+                }}
+                className="ml-auto text-xs text-brand-600 hover:underline"
+              >
+                {openClips.size === clips.length ? 'Collapse all' : 'Expand all'}
+              </button>
+            )}
           </div>
+          {clipsOpen && (
+            <div className="space-y-2 mt-2">
+              {clips.map((c) => {
+                const open = openClips.has(c.id);
+                const toggle = () => setOpenClips((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(c.id)) next.delete(c.id); else next.add(c.id);
+                  return next;
+                });
+                const published = c.status === 'PUBLISHED';
+                return (
+                  <div key={c.id} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                    <div
+                      onClick={toggle}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+                      className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                    >
+                      {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                      <p className="text-sm font-medium text-gray-900 truncate flex-1 min-w-0">
+                        {c.topicSegment.highlight?.titleSuggestion ?? c.topicSegment.title}
+                      </p>
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {c.status.replace(/_/g, ' ').toLowerCase()}
+                      </span>
+                      <span className="text-[11px] text-gray-400 shrink-0">{c.timeline ? fmt(c.timeline.durationMs) : '—'}</span>
+                    </div>
+                    {open && (
+                      <div className="px-4 pb-4 pt-2 border-t border-gray-50 flex items-center gap-4 flex-wrap">
+                        <div className="text-xs text-gray-500 space-y-0.5 flex-1 min-w-[220px]">
+                          <p><span className="text-gray-400">Platform:</span> {c.clipType.replace(/_/g, ' ')}</p>
+                          <p><span className="text-gray-400">Source range:</span> {fmt(c.sourceStartMs)}–{fmt(c.sourceEndMs)}</p>
+                          <p><span className="text-gray-400">Captions:</span> {c.timeline?._count.captions ? `${c.timeline._count.captions} lines` : 'none yet'}</p>
+                          {c.topicSegment.highlight && (
+                            <p><span className="text-gray-400">Highlight score:</span> {Math.round(c.topicSegment.highlight.finalScore)}</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <Link
+                            href={`/shorts-studio/clips/${c.id}/edit`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700"
+                          >
+                            <Pencil className="w-3.5 h-3.5" /> Edit
+                          </Link>
+                          <Link
+                            href={`/shorts-studio/clips/${c.id}/export`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 rounded-lg text-xs hover:bg-brand-50"
+                          >
+                            <Clapperboard className="w-3.5 h-3.5" /> Export
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       )}
 
