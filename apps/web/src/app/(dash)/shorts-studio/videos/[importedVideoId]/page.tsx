@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Topic {
@@ -168,7 +168,24 @@ function usePublishFlow(highlightId: string, qc: ReturnType<typeof useQueryClien
   return { phase, run };
 }
 
-function HighlightCard({ h }: { h: Highlight }) {
+/** Tiny status chip shown in the collapsed row while a publish flow runs. */
+function PhaseChip({ phase }: { phase: FlowPhase }) {
+  if (phase.step === 'working') {
+    return <span className="flex items-center gap-1 px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full text-[11px] shrink-0"><Loader2 className="w-3 h-3 animate-spin" /> {phase.label}</span>;
+  }
+  if (phase.step === 'awaiting-approval') {
+    return <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[11px] shrink-0"><ShieldCheck className="w-3 h-3" /> awaiting review</span>;
+  }
+  if (phase.step === 'published') {
+    return <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[11px] shrink-0"><CheckCircle2 className="w-3 h-3" /> published</span>;
+  }
+  if (phase.step === 'error') {
+    return <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-[11px] shrink-0"><XCircle className="w-3 h-3" /> failed</span>;
+  }
+  return null;
+}
+
+function HighlightCard({ h, open, onToggle }: { h: Highlight; open: boolean; onToggle: () => void }) {
   const qc = useQueryClient();
   const [types, setTypes] = useState<string[]>(['YOUTUBE_SHORTS']);
   const [generated, setGenerated] = useState(false);
@@ -183,23 +200,31 @@ function HighlightCard({ h }: { h: Highlight }) {
   });
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-lg font-bold text-brand-700">{Math.round(h.finalScore)}</span>
-            <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${CATEGORY_COLORS[h.topicSegment.category] ?? 'bg-gray-100 text-gray-600'}`}>
-              {h.topicSegment.category.replace(/_/g, ' ')}
-            </span>
-            <span className="text-xs text-gray-400">{fmt(h.topicSegment.startMs)}–{fmt(h.topicSegment.endMs)}</span>
-          </div>
-          <p className="font-semibold text-gray-900 mt-1.5">{h.titleSuggestion}</p>
-          <p className="text-sm text-gray-500 mt-1">{h.reason}</p>
-          {h.keywords.length > 0 && (
-            <p className="text-[11px] text-gray-400 mt-1.5 truncate">{h.keywords.map((k) => `#${k.replace(/\s+/g, '')}`).join(' ')}</p>
-          )}
-        </div>
+    <div className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+      {/* Collapsed header — always visible, click to enlarge */}
+      <div
+        onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+        className="flex items-center gap-2.5 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+      >
+        {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+        <span className="text-lg font-bold text-brand-700 shrink-0 w-8 text-center">{Math.round(h.finalScore)}</span>
+        <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${CATEGORY_COLORS[h.topicSegment.category] ?? 'bg-gray-100 text-gray-600'}`}>
+          {h.topicSegment.category.replace(/_/g, ' ')}
+        </span>
+        <p className="font-semibold text-gray-900 text-sm truncate flex-1 min-w-0">{h.titleSuggestion}</p>
+        <PhaseChip phase={phase} />
+        <span className="text-xs text-gray-400 shrink-0">{fmt(h.topicSegment.startMs)}–{fmt(h.topicSegment.endMs)}</span>
       </div>
+
+      {!open ? null : (
+      <div className="px-5 pb-5 border-t border-gray-50 pt-3">
+      <p className="text-sm text-gray-500">{h.reason}</p>
+      {h.keywords.length > 0 && (
+        <p className="text-[11px] text-gray-400 mt-1.5 truncate">{h.keywords.map((k) => `#${k.replace(/\s+/g, '')}`).join(' ')}</p>
+      )}
 
       <div className="grid grid-cols-3 sm:grid-cols-9 gap-2 mt-4">
         {DIMENSIONS.map(({ key, label }) => (
@@ -275,6 +300,8 @@ function HighlightCard({ h }: { h: Highlight }) {
           {(generate.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Failed to generate clips'}
         </p>
       )}
+      </div>
+      )}
     </div>
   );
 }
@@ -282,6 +309,8 @@ function HighlightCard({ h }: { h: Highlight }) {
 export default function ShortsVideoDetailPage() {
   const { importedVideoId } = useParams<{ importedVideoId: string }>();
   const [tab, setTab] = useState<'highlights' | 'topics'>('highlights');
+  const [openHighlights, setOpenHighlights] = useState<Set<string>>(new Set());
+  const [openTopics, setOpenTopics] = useState<Set<string>>(new Set());
 
   const { data: topics = [], isLoading: loadingTopics } = useQuery<Topic[]>({
     queryKey: ['shorts-topics', importedVideoId],
@@ -366,7 +395,28 @@ export default function ShortsVideoDetailPage() {
               No highlights yet — run Analyze from the Shorts Studio page and wait for the pipeline to finish.
             </p>
           )}
-          {highlights.map((h) => <HighlightCard key={h.id} h={h} />)}
+          {highlights.length > 0 && (
+            <div className="flex justify-end -mb-2">
+              <button
+                onClick={() => setOpenHighlights((prev) => prev.size === highlights.length ? new Set() : new Set(highlights.map((h) => h.id)))}
+                className="text-xs text-brand-600 hover:underline"
+              >
+                {openHighlights.size === highlights.length ? 'Collapse all' : 'Expand all'}
+              </button>
+            </div>
+          )}
+          {highlights.map((h) => (
+            <HighlightCard
+              key={h.id}
+              h={h}
+              open={openHighlights.has(h.id)}
+              onToggle={() => setOpenHighlights((prev) => {
+                const next = new Set(prev);
+                if (next.has(h.id)) next.delete(h.id); else next.add(h.id);
+                return next;
+              })}
+            />
+          ))}
         </div>
       )}
 
@@ -375,25 +425,55 @@ export default function ShortsVideoDetailPage() {
           {topics.length === 0 && (
             <p className="text-center text-gray-400 py-16">No topics yet — run Analyze from the Shorts Studio page.</p>
           )}
-          {topics.map((t) => (
-            <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-              <span className="text-xs text-gray-400 font-mono shrink-0 mt-0.5 w-20">{fmt(t.startMs)}–{fmt(t.endMs)}</span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600'}`}>
+          {topics.length > 0 && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => setOpenTopics((prev) => prev.size === topics.length ? new Set() : new Set(topics.map((t) => t.id)))}
+                className="text-xs text-brand-600 hover:underline"
+              >
+                {openTopics.size === topics.length ? 'Collapse all' : 'Expand all'}
+              </button>
+            </div>
+          )}
+          {topics.map((t) => {
+            const open = openTopics.has(t.id);
+            const toggle = () => setOpenTopics((prev) => {
+              const next = new Set(prev);
+              if (next.has(t.id)) next.delete(t.id); else next.add(t.id);
+              return next;
+            });
+            return (
+              <div key={t.id} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                <div
+                  onClick={toggle}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+                  className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                >
+                  {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                  <span className="text-xs text-gray-400 font-mono shrink-0 w-20">{fmt(t.startMs)}–{fmt(t.endMs)}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600'}`}>
                     {t.category.replace(/_/g, ' ')}
                   </span>
-                  <p className="font-medium text-gray-900 truncate">{t.title}</p>
+                  <p className="font-medium text-gray-900 truncate text-sm flex-1 min-w-0">{t.title}</p>
+                  {t.highlight && (
+                    <span className="text-sm font-bold text-brand-700 shrink-0" title="Highlight score">
+                      {Math.round(t.highlight.finalScore)}
+                    </span>
+                  )}
                 </div>
-                <p className="text-sm text-gray-500 mt-1">{t.summary}</p>
+                {open && (
+                  <div className="px-4 pb-4 pt-2 border-t border-gray-50">
+                    <p className="text-sm text-gray-600">{t.summary}</p>
+                    <p className="text-[11px] text-gray-400 mt-2">
+                      {fmt(t.startMs)}–{fmt(t.endMs)} · {Math.round((t.endMs - t.startMs) / 1000)}s · confidence {(t.confidence * 100).toFixed(0)}%
+                    </p>
+                  </div>
+                )}
               </div>
-              {t.highlight && (
-                <span className="text-sm font-bold text-brand-700 shrink-0" title="Highlight score">
-                  {Math.round(t.highlight.finalScore)}
-                </span>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
