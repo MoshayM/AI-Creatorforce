@@ -1,9 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil } from 'lucide-react';
+import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Topic {
@@ -85,10 +85,94 @@ function scoreColor(v: number): string {
   return 'text-gray-400';
 }
 
+type FlowPhase =
+  | { step: 'idle' }
+  | { step: 'working'; label: string }
+  | { step: 'awaiting-approval' }
+  | { step: 'published'; url: string }
+  | { step: 'error'; message: string };
+
+/**
+ * One-click publish: clip → captions → render → export → approval request,
+ * then auto-publishes the moment the review is approved on /approvals.
+ * Every backend stage self-skips when already satisfied, so re-clicking
+ * resumes an interrupted flow instead of redoing work.
+ */
+function usePublishFlow(highlightId: string, qc: ReturnType<typeof useQueryClient>) {
+  const [phase, setPhase] = useState<FlowPhase>({ step: 'idle' });
+  const cancelled = useRef(false);
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  const waitJob = useCallback(async (jobId: string, label: string) => {
+    setPhase({ step: 'working', label });
+    for (;;) {
+      if (cancelled.current) throw new Error('cancelled');
+      const job = (await api.jobs.get(jobId)).data as { status: string; error?: string };
+      if (job.status === 'COMPLETED') return;
+      if (job.status === 'FAILED') throw new Error(job.error ?? `${label} failed`);
+      await sleep(4000);
+    }
+  }, []);
+
+  const run = useCallback(async () => {
+    cancelled.current = false;
+    try {
+      setPhase({ step: 'working', label: 'Creating clip…' });
+      const clips = (await api.shortsStudio.generateClips(highlightId, ['YOUTUBE_SHORTS'])).data as Array<{ id: string }>;
+      const clipId = clips[0]!.id;
+      void qc.invalidateQueries({ queryKey: ['shorts-clips'] });
+
+      const captionJob = (await api.shortsStudio.generateCaptions(clipId)).data as { id: string };
+      await waitJob(captionJob.id, 'Generating captions…');
+
+      const renderJob = (await api.shortsStudio.render(clipId)).data as { id: string };
+      await waitJob(renderJob.id, 'Rendering vertical video…');
+
+      const exportJob = (await api.shortsStudio.exportClip(clipId)).data as { id: string };
+      await waitJob(exportJob.id, 'Building export package…');
+
+      await api.shortsStudio.requestPublish(clipId);
+      setPhase({ step: 'awaiting-approval' });
+
+      // Poll the approval; auto-publish once the human review lands
+      for (;;) {
+        if (cancelled.current) throw new Error('cancelled');
+        const s = (await api.shortsStudio.publishStatus(clipId)).data as {
+          approval: { status: string } | null;
+          publishJob: { status: string; result?: { url?: string } } | null;
+        };
+        if (s.publishJob?.status === 'COMPLETED' && s.publishJob.result?.url) {
+          setPhase({ step: 'published', url: s.publishJob.result.url });
+          return;
+        }
+        if (s.approval?.status === 'REJECTED') throw new Error('Review was rejected on the Approvals page');
+        if (s.approval?.status === 'APPROVED' && (!s.publishJob || s.publishJob.status === 'FAILED')) {
+          const pub = (await api.shortsStudio.publish(clipId)).data as { id: string };
+          await waitJob(pub.id, 'Publishing to YouTube…');
+          const done = (await api.shortsStudio.publishStatus(clipId)).data as { publishJob: { result?: { url?: string } } | null };
+          setPhase({ step: 'published', url: done.publishJob?.result?.url ?? '' });
+          return;
+        }
+        setPhase({ step: 'awaiting-approval' });
+        await sleep(8000);
+      }
+    } catch (err) {
+      if ((err as Error).message !== 'cancelled') {
+        const e = err as { response?: { data?: { message?: string } }; message?: string };
+        setPhase({ step: 'error', message: e.response?.data?.message ?? e.message ?? 'Publish flow failed' });
+      }
+    }
+  }, [highlightId, qc, waitJob]);
+
+  return { phase, run };
+}
+
 function HighlightCard({ h }: { h: Highlight }) {
   const qc = useQueryClient();
   const [types, setTypes] = useState<string[]>(['YOUTUBE_SHORTS']);
   const [generated, setGenerated] = useState(false);
+  const { phase, run } = usePublishFlow(h.id, qc);
 
   const generate = useMutation({
     mutationFn: () => api.shortsStudio.generateClips(h.id, types),
@@ -141,14 +225,51 @@ function HighlightCard({ h }: { h: Highlight }) {
         <button
           onClick={() => generate.mutate()}
           disabled={generate.isPending || types.length === 0 || generated}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 disabled:opacity-50"
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 rounded-lg text-xs hover:bg-brand-50 disabled:opacity-50"
         >
           {generate.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
             : generated ? <CheckCircle2 className="w-3.5 h-3.5" />
             : <Scissors className="w-3.5 h-3.5" />}
           {generated ? 'Clips created' : 'Generate clips'}
         </button>
+        <button
+          onClick={() => void run()}
+          disabled={phase.step === 'working' || phase.step === 'awaiting-approval' || phase.step === 'published'}
+          title="Clip → captions → render → export, then publishes automatically after your approval"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 disabled:opacity-50"
+        >
+          {phase.step === 'working' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+          Publish
+        </button>
       </div>
+
+      {phase.step === 'working' && (
+        <p className="text-xs text-brand-700 mt-2 flex items-center gap-1.5">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> {phase.label}
+        </p>
+      )}
+      {phase.step === 'awaiting-approval' && (
+        <p className="text-xs text-amber-700 mt-2 flex items-center gap-1.5">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          Ready — waiting for your review on the{' '}
+          <Link href="/approvals" className="underline font-medium">Approvals page</Link>. Publishes automatically once approved.
+        </p>
+      )}
+      {phase.step === 'published' && (
+        <p className="text-xs text-green-700 mt-2 flex items-center gap-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5" /> Published!
+          {phase.url && (
+            <a href={phase.url} target="_blank" rel="noreferrer" className="underline font-medium flex items-center gap-0.5">
+              Watch on YouTube <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </p>
+      )}
+      {phase.step === 'error' && (
+        <p className="text-xs text-red-600 mt-2 flex items-center gap-1.5">
+          <XCircle className="w-3.5 h-3.5" /> {phase.message} — click Publish to resume (finished steps are skipped).
+        </p>
+      )}
       {generate.isError && (
         <p className="text-xs text-red-500 mt-2">
           {(generate.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Failed to generate clips'}

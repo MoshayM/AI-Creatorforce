@@ -182,7 +182,7 @@ export class ShortsStudioService {
       where: { topicSegment: { importedVideoId } },
       orderBy: { createdAt: 'desc' },
       include: {
-        topicSegment: { select: { title: true, highlight: { select: { titleSuggestion: true, finalScore: true } } } },
+        topicSegment: { select: { id: true, title: true, highlight: { select: { id: true, titleSuggestion: true, finalScore: true } } } },
         timeline: { select: { id: true, durationMs: true, _count: { select: { captions: true } } } },
       },
     });
