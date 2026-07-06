@@ -25,3 +25,6 @@ apps/e2e/test-results/
 
 # Local service state
 infra/redis/dump.rdb
+
+# yt-dlp source checkout + binary (local tooling, not part of the app)
+yt-dlp/
