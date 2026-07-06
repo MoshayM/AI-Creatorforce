@@ -26,6 +26,7 @@ import { TimelineModule } from './modules/timeline/timeline.module';
 import { RenderModule } from './modules/render/render.module';
 import { MediaModule } from './modules/media/media.module';
 import { ShortsStudioModule } from './modules/shorts-studio/shorts-studio.module';
+import { CopilotModule } from './modules/copilot/copilot.module';
 import { WorkersModule } from './workers/workers.module';
 import { GatewayModule } from './gateway/gateway.module';
 
@@ -69,6 +70,7 @@ import { GatewayModule } from './gateway/gateway.module';
     RenderModule,
     MediaModule,
     ShortsStudioModule,
+    CopilotModule,
     WorkersModule,
     GatewayModule,
   ],

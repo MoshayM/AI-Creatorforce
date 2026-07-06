@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard } from 'lucide-react';
+import { CopilotPanel } from '@/components/copilot-panel';
 
 const NAV = [
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
@@ -98,6 +99,7 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
           <main className="flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>
+      <CopilotPanel />
     </div>
   );
 }

@@ -4,3 +4,4 @@ export * from './compliance.schema';
 export * from './channel.schema';
 export * from './video.schema';
 export * from './shorts.schema';
+export * from './copilot.schema';
