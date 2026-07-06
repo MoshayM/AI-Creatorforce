@@ -155,24 +155,30 @@ export class VideoImportService {
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cf-subs-'));
     try {
       const ffmpeg = ffmpegPath();
-      await new Promise<void>((resolve, reject) => {
+      // A nonzero exit only matters if NOTHING downloaded — one language
+      // 429-ing must not discard the tracks that did arrive.
+      const stderrText = await new Promise<string>((resolve) => {
         execFile(this.ytDlpBin(), [
           `https://www.youtube.com/watch?v=${youtubeVideoId}`,
           '--skip-download', '--no-playlist',
           '--write-subs', '--write-auto-subs',
           '--sub-format', 'srt/best',
-          '--sub-langs', 'all,-live_chat',
+          // Original spoken track + English only — requesting all languages
+          // walks every auto-translation (~150) and gets rate-limited (429)
+          '--sub-langs', '.*-orig,en',
           ...this.jsRuntimeArgs(),
           ...(ffmpeg ? ['--ffmpeg-location', ffmpeg] : []),
           '-o', path.join(tmpDir, 'subs'),
         ], { timeout: 300_000, maxBuffer: 8 * 1024 * 1024 }, (err, _stdout, stderr) => {
-          if (err) reject(new Error(`yt-dlp subtitles failed: ${(stderr || err.message).slice(0, 300)}`));
-          else resolve();
+          resolve(err ? String(stderr || err.message) : '');
         });
       });
 
       const files = (await fsp.readdir(tmpDir)).filter((f) => /\.(srt|vtt)$/.test(f));
-      if (files.length === 0) return null;
+      if (files.length === 0) {
+        if (stderrText) this.logger.warn(`yt-dlp subtitles failed: ${stderrText.slice(0, 300)}`);
+        return null;
+      }
       const pick =
         files.find((f) => /-orig\.[a-z]+$/i.test(f.replace(/\.(srt|vtt)$/, ''))) ??
         files.find((f) => /\.en[.-]/.test(f) || /\.en\.(srt|vtt)$/.test(f)) ??
