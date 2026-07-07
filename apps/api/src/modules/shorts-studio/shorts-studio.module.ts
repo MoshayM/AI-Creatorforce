@@ -21,6 +21,7 @@ import { SmallVideoGenerationService } from './small-video-generation.service';
 import { ChurchPackService } from './church-pack.service';
 import { ChapterSyncService } from './chapter-sync.service';
 import { SocialContentService } from './social-content.service';
+import { QuoteCardRenderService } from './quote-card-render.service';
 import { ClipRecommendationService } from './clip-recommendation.service';
 import { ShortsGenerationService } from './shorts-generation.service';
 import { TimelineService } from './timeline.service';
@@ -49,6 +50,7 @@ import { ShortsExportService } from './shorts-export.service';
     ChurchPackService,
     ChapterSyncService,
     SocialContentService,
+    QuoteCardRenderService,
     ClipRecommendationService,
     ShortsGenerationService,
     TimelineService,
@@ -74,6 +76,7 @@ import { ShortsExportService } from './shorts-export.service';
     ChurchPackService,
     ChapterSyncService,
     SocialContentService,
+    QuoteCardRenderService,
     ClipRecommendationService,
     ShortsGenerationService,
     TimelineService,

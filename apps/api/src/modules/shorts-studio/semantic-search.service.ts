@@ -113,4 +113,69 @@ export class SemanticSearchService {
       needsEmbeddings: false,
     };
   }
+
+  /**
+   * Cross-video NL search (Ai-video edit.md §11: "list all sermons that
+   * mention grace") — one embedding call, then a dot-product scan over
+   * every embedded segment in the user's library, results grouped per
+   * video with each video's best moments. In-process scan is fine at this
+   * deployment's scale (single user, thousands of segments — see the
+   * pgvector deviation note in docs/video-hub.md).
+   */
+  async searchLibrary(userId: string, query: string, limitVideos = 5, limitPerVideo = 3) {
+    if (billingEnforced()) {
+      const { available } = await this.wallet.availableCredits(userId);
+      if (available < 1) throw new BadRequestException('INSUFFICIENT_CREDITS');
+    }
+
+    const segments = await this.prisma.transcriptSegment.findMany({
+      where: { embedding: { isEmpty: false }, importedVideo: { project: { userId } } },
+      select: {
+        id: true, startMs: true, endMs: true, text: true, embedding: true,
+        importedVideo: { select: { id: true, title: true } },
+      },
+    });
+    if (segments.length === 0) {
+      return { query, videos: [], embeddedSegments: 0 };
+    }
+
+    const accumulator = newAccumulator();
+    const { embeddings } = await runWithAiContext({ userId, accumulator }, () => embedTexts([query]));
+    if (billingEnforced() && accumulator.costUsd > 0) {
+      await this.wallet.debit(userId, {
+        entryType: 'USAGE_DEBIT',
+        amount: Math.max(1, creditsForCost(accumulator.costUsd)),
+        referenceType: 'AI_REQUEST',
+        idempotencyKey: `library-search:${randomUUID()}`,
+        metadata: { kind: 'library-search', costUsd: accumulator.costUsd },
+      }).catch(() => undefined);
+    }
+
+    const ranked = rankBySimilarity(
+      embeddings[0]!,
+      segments.map((s) => ({ item: s, vector: s.embedding })),
+      limitVideos * limitPerVideo * 4,
+    );
+
+    // Group by video, keep each video's best hits, rank videos by top score
+    const byVideo = new Map<string, { videoId: string; title: string; topScore: number; matches: Array<{ startMs: number; text: string; score: number }> }>();
+    for (const { item, score } of ranked) {
+      const v = byVideo.get(item.importedVideo.id) ?? {
+        videoId: item.importedVideo.id,
+        title: item.importedVideo.title,
+        topScore: score,
+        matches: [],
+      };
+      if (v.matches.length < limitPerVideo) {
+        v.matches.push({ startMs: item.startMs, text: item.text, score: Number(score.toFixed(4)) });
+      }
+      byVideo.set(item.importedVideo.id, v);
+    }
+    const videos = [...byVideo.values()]
+      .sort((a, b) => b.topScore - a.topScore)
+      .slice(0, limitVideos)
+      .map((v) => ({ ...v, topScore: Number(v.topScore.toFixed(4)) }));
+
+    return { query, videos, embeddedSegments: segments.length };
+  }
 }

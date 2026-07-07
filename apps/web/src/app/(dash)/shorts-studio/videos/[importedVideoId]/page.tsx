@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle, ChevronDown, ChevronRight, BookOpen, Check, Search, Share2, Copy } from 'lucide-react';
+import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle, ChevronDown, ChevronRight, BookOpen, Check, Search, Share2, Copy, Image as ImageIcon } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Topic {
@@ -912,6 +912,23 @@ function SocialTab({ pieces, onGenerate, generating, queued }: {
   queued: boolean;
 }) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [renderingId, setRenderingId] = useState<string | null>(null);
+  const downloadCard = async (piece: SocialPiece) => {
+    setRenderingId(piece.id);
+    try {
+      const { data } = await api.shortsStudio.renderQuoteCard(piece.id);
+      const { versionId } = data as { versionId: string };
+      const file = await api.shortsStudio.mediaVersionFile(versionId);
+      const url = URL.createObjectURL(file.data as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quote-card-${piece.id}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setRenderingId(null);
+    }
+  };
   const copy = (id: string, text: string) => {
     void navigator.clipboard.writeText(text).then(() => {
       setCopiedId(id);
@@ -964,7 +981,18 @@ function SocialTab({ pieces, onGenerate, generating, queued }: {
                   <p className="text-[11px] text-gray-400">
                     {q.content.attribution ? `${q.content.attribution} · ` : ''}{q.content.startMs != null ? fmt(q.content.startMs) : ''}
                   </p>
-                  <CopyBtn id={q.id} text={q.content.quote ?? ''} />
+                  <span className="flex items-center gap-3">
+                    <button
+                      onClick={() => void downloadCard(q)}
+                      disabled={renderingId === q.id}
+                      className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 disabled:opacity-50"
+                      title="Render and download a 1080×1080 PNG"
+                    >
+                      {renderingId === q.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5" />}
+                      PNG
+                    </button>
+                    <CopyBtn id={q.id} text={q.content.quote ?? ''} />
+                  </span>
                 </div>
               </div>
             ))}

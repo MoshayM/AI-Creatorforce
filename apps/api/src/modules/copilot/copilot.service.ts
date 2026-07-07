@@ -45,6 +45,7 @@ Command palette:
 - list_highlights {importedVideoId, limit} — top Shorts moments for an analyzed video
 - list_chapters {importedVideoId} — YouTube-style chapters detected for an analyzed video
 - search_video {importedVideoId, query} — find moments by meaning ("find John 3:16", "where do they talk about grace") and get their timestamps
+- search_library {query} — search ALL the user's analyzed videos at once ("which sermons mention grace?")
 - generate_small_videos {importedVideoId} — create one horizontal 1–10 min video candidate per detected chapter (render each afterwards with render_clip)
 - generate_church_pack {importedVideoId} — bible references, discussion questions, and a devotional for every chapter (requires the user's confirmation)
 - sync_chapters_to_youtube {importedVideoId} — publish the chapter timestamps into the video's YouTube description (edits the live video; requires the user's confirmation)
@@ -416,6 +417,21 @@ export class CopilotService {
           `${i + 1}. [${stamp(r.startMs)}] ${r.text.slice(0, 100)}${r.chapter ? ` (chapter: ${r.chapter})` : ''}`);
         return {
           summary: lines.length ? `Closest moments for "${command.query}":\n${lines.join('\n')}` : `Nothing close to "${command.query}" in this video.`,
+          data: found,
+        };
+      }
+
+      case 'search_library': {
+        const found = await this.semanticSearch.searchLibrary(userId, command.query);
+        if (found.embeddedSegments === 0) {
+          return { summary: 'None of your videos have embeddings yet — run embedding generation on an analyzed video first.', data: found };
+        }
+        const lines = found.videos.map((v, i) =>
+          `${i + 1}. ${v.title.slice(0, 60)} — best at [${stamp(v.matches[0]?.startMs ?? 0)}]: ${v.matches[0]?.text.slice(0, 80) ?? ''}`);
+        return {
+          summary: lines.length
+            ? `Videos matching "${command.query}":\n${lines.join('\n')}`
+            : `Nothing in your library comes close to "${command.query}".`,
           data: found,
         };
       }

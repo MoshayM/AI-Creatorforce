@@ -126,6 +126,10 @@ export const api = {
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/topics`),
     highlights: (importedVideoId: string) =>
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/highlights`),
+    renderQuoteCard: (socialContentId: string) =>
+      apiClient.post(`/shorts-studio/social-content/${socialContentId}/render-quote-card`),
+    mediaVersionFile: (versionId: string) =>
+      apiClient.get(`/media/versions/${versionId}/file`, { responseType: 'blob' }),
     socialContent: (importedVideoId: string) =>
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/social-content`),
     generateSocialContent: (importedVideoId: string) =>

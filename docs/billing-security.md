@@ -18,7 +18,8 @@
 | §5.3 Reserve→settle | Soft-hold before AI request, settle on completion | ✅ shipped (opt-in via `BILLING_ENFORCE_CREDITS`) |
 | §11 Reconciliation jobs | ledger-reconciliation, stale-hold sweeper, settlement/orphan recovery | ✅ shipped (interval-based) |
 | §7 Refunds & disputes | Admin refund with clamped credit claw-back; `charge.dispute.created` flags + audits | ✅ shipped |
-| §5.4 Credit expiry | per-lot expiry (bonus/promo TTL) | ❌ needs credit-lot tracking — deferred |
+| §5.4 Credit expiry | credit lots per grant, per-bucket TTL, daily expiry job | ✅ shipped |
+| §7 Fraud freeze | disputes freeze recharges (`FRAUD_HOLD`); admin unfreeze endpoint | ✅ shipped |
 | §6.6 Mobile IAP | Apple IAP / Google Play Billing adapters | ⏸ deferred until mobile clients exist |
 | Platform spec (§ all) | iOS/Android/desktop shells, domains, DNS/TLS, deep links | ⏸ deferred — no mobile/desktop clients yet |
 
@@ -137,11 +138,24 @@
   single-tenant local deployment; the spec's bigint applies at platform
   scale).
 
+### Credit lots & fraud freeze (§5.4/§7, slice 4)
+
+- **`credit_lots`**: every grant is a lot with its own expiry (promo 30d /
+  bonus 90d / referral 180d / purchased never; `CREDIT_TTL_*_DAYS` env).
+  Pre-existing balances were backfilled as grandfathered never-expiring lots.
+  Debits consume lots — bucket priority first, soonest-expiring within a
+  bucket (`planLotDebit`, pure + tested); expired lots are unspendable even
+  before the sweep; ledger entries record the lot split.
+- **Expiry job** (daily, before ledger reconciliation): idempotent EXPIRY
+  ledger debit per lot, counters synced. Expiry *email* notifications (7/3/1
+  days) remain open — no outbound email infra exists.
+- **Fraud freeze**: `charge.dispute.created` sets `user.rechargesFrozen`;
+  recharge attempts fail closed with `FRAUD_HOLD`;
+  `POST /admin/users/:id/recharges-frozen` (audited) lifts it after review.
+
 ## Next steps
 
-1. Credit-lot tracking → per-lot expiry job (§5.4 "bonus expires first")
-   and expiry notifications.
-2. Account-level fraud/freeze state (user status field) so disputes can
-   auto-block recharges (§7).
-3. Apple IAP / Google Play Billing adapters behind a
+1. Expiry warning notifications (7/3/1 days) once an email/notification
+   channel exists.
+2. Apple IAP / Google Play Billing adapters behind a
    `PaymentGatewayAdapter` interface when mobile clients exist (§6.6).

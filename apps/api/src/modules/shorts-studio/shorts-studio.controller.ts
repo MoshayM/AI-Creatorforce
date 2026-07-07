@@ -17,6 +17,7 @@ import { SemanticSearchService } from './semantic-search.service';
 import { SmallVideoGenerationService } from './small-video-generation.service';
 import { ChapterSyncService } from './chapter-sync.service';
 import { SocialContentService } from './social-content.service';
+import { QuoteCardRenderService } from './quote-card-render.service';
 import { JobsService } from '../jobs/jobs.service';
 
 class ImportVideoDto {
@@ -54,6 +55,7 @@ export class ShortsStudioController {
     private readonly smallVideos: SmallVideoGenerationService,
     private readonly chapterSync: ChapterSyncService,
     private readonly social: SocialContentService,
+    private readonly quoteCards: QuoteCardRenderService,
     private readonly jobs: JobsService,
   ) {}
 
@@ -144,6 +146,12 @@ export class ShortsStudioController {
     return this.search.search(importedVideoId, q.trim(), n, user.sub);
   }
 
+  @Get('search')
+  async searchLibrary(@Query('q') q: string | undefined, @CurrentUser() user: JwtPayload) {
+    if (!q?.trim()) throw new BadRequestException('Query parameter "q" is required');
+    return this.search.searchLibrary(user.sub, q.trim());
+  }
+
   @Post('videos/:importedVideoId/generate-embeddings')
   async generateEmbeddings(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
     return this.shorts.enqueueEmbeddingGeneration(importedVideoId, user.sub);
@@ -183,6 +191,11 @@ export class ShortsStudioController {
   @Post('videos/:importedVideoId/social-content')
   async generateSocialContent(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
     return this.shorts.enqueueSocialContent(importedVideoId, user.sub);
+  }
+
+  @Post('social-content/:socialContentId/render-quote-card')
+  async renderQuoteCard(@Param('socialContentId') socialContentId: string, @CurrentUser() user: JwtPayload) {
+    return this.quoteCards.render(socialContentId, user.sub);
   }
 
   @Post('videos/:importedVideoId/sync-chapters')

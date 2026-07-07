@@ -193,11 +193,22 @@
 - Rows written before this slice stay unattributed (they predate the
   context) — only new calls are broken down.
 
-## Next steps (Phase 6 remainder)
+### Cross-video search + quote-card images (§10/§11, Phase 6 slice 3)
 
-1. Embedding-grounded copilot answers ("list sermons that mention grace" —
-   §11 cross-video query) once cross-video search exists.
-2. Quote-card IMAGE rendering (1080×1080 PNG via the thumbnail/ffmpeg path) —
-   text data is ready in social_content.
-3. Phase 7 hardening: 4–8 hr video load tests (windowed chapter detection,
-   embedding batch throughput).
+- **Library search**: `GET /shorts-studio/search?q=` and copilot
+  `search_library` — one embedding call, dot-product scan over every embedded
+  segment the user owns, results grouped per video with each video's best
+  moments ("which sermons mention grace?" §11). Credit-debited like
+  single-video search when enforcement is on.
+- **Quote-card PNGs**: `POST /shorts-studio/social-content/:id/render-quote-card`
+  renders the stored quote to a 1080×1080 card (ffmpeg lavfi + drawtext:
+  accent quotation mark, wrapped quote via textfile, attribution + video
+  title) persisted as an IMAGE asset — idempotent via `renderedVersionId` on
+  the content row; served by the existing `/media/versions/:id/file`. Social
+  tab quote cards get a PNG download button. `wrapQuote` is pure + tested.
+
+## Next steps (Phase 7)
+
+1. Load hardening for 4–8 hr videos: chapter-detection windowing past ~600
+   topics, embedding batch throughput, render-queue backpressure. Needs a
+   long source video to exercise — untested at that scale so far.

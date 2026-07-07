@@ -26,6 +26,8 @@ export const CopilotCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('list_chapters'), importedVideoId: z.string() }),
   // NL search over stored embeddings — one tiny embedding call, no LLM re-analysis
   z.object({ action: z.literal('search_video'), importedVideoId: z.string(), query: z.string().min(1).max(200) }),
+  // Cross-video: "which videos mention grace?" — searches the whole library
+  z.object({ action: z.literal('search_library'), query: z.string().min(1).max(200) }),
   // Chapter → small-video candidates: pure DB rows, zero AI (§10/§12.4)
   z.object({ action: z.literal('generate_small_videos'), importedVideoId: z.string() }),
   // Church AI pack (§11): bible refs + discussion questions + devotional per chapter

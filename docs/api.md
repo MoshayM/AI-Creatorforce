@@ -197,6 +197,8 @@ Module spec: repo-root `ai.md`. All routes prefixed `/shorts-studio`, JWT-guarde
 | POST | `/shorts-studio/videos/:id/detect-chapters` | Enqueue standalone CHAPTER_DETECTION (for videos analyzed before chapters shipped; self-skips if chapters exist) |
 | PATCH | `/shorts-studio/chapters/:chapterId` | `{ title?, summary? }` — manual edit, sets `editedByUser` so re-detection keeps it |
 | GET | `/shorts-studio/videos/:id/search` | NL search over transcript embeddings (`?q=&limit=`): top matches with timestamps, chapter context, cosine score. One embedding call per query, no LLM |
+| GET | `/shorts-studio/search` | Cross-video library search (`?q=`): matches grouped per video, ranked by best moment (§11) |
+| POST | `/shorts-studio/social-content/:id/render-quote-card` | Render a QUOTE_CARD to a 1080×1080 PNG (IMAGE asset); idempotent; file via `GET /media/versions/:versionId/file` |
 | POST | `/shorts-studio/videos/:id/generate-embeddings` | Enqueue standalone EMBEDDING_GENERATION (resumable — only un-embedded segments are sent) |
 | POST | `/shorts-studio/videos/:id/small-videos` | Batched chapter → SMALL_VIDEO candidates (16:9, 1–10 min, zero AI); same clip/timeline/render/export path as Shorts. Chapters under 60s are skipped |
 | POST | `/shorts-studio/videos/:id/church-pack` | Enqueue CHURCH_PACK_GENERATION: bible refs + discussion questions + devotional per chapter, ONE batched LLM call (§11/§12.4). Chapters with a devotional are skipped on re-run; results ride on `GET .../chapters` |
@@ -250,6 +252,7 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | GET | `/admin/users` | `admin:users` — roles + wallet/plan |
 | POST | `/admin/wallet/adjust` | `wallet:adjust` — grant/claw back credits with reason; audited with before/after |
 | POST | `/admin/payments/:id/refund` | `billing:refund` — full/partial Stripe refund with proportional credit claw-back (clamped to balance, shortfall recorded); audited |
+| POST | `/admin/users/:id/recharges-frozen` | `admin:users` — lift/apply the §7 dispute recharge freeze; audited |
 
 Roles: `SUPER_ADMIN` > `OWNER` > `MEMBER`; elevated identities come from `SUPER_ADMIN_EMAILS` / `OWNER_EMAILS` env config (never hardcoded). The `credit_ledger` is append-only and idempotent — every balance is reconstructable from it.
 
