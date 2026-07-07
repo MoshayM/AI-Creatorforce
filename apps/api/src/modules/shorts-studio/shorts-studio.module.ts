@@ -14,6 +14,8 @@ import { SceneDetectionService } from './scene-detection.service';
 import { TopicSegmentationService } from './topic-segmentation.service';
 import { HighlightScoringService } from './highlight-scoring.service';
 import { ChapterDetectionService } from './chapter-detection.service';
+import { EmbeddingGenerationService } from './embedding-generation.service';
+import { SemanticSearchService } from './semantic-search.service';
 import { ClipRecommendationService } from './clip-recommendation.service';
 import { ShortsGenerationService } from './shorts-generation.service';
 import { TimelineService } from './timeline.service';
@@ -36,6 +38,8 @@ import { ShortsExportService } from './shorts-export.service';
     TopicSegmentationService,
     HighlightScoringService,
     ChapterDetectionService,
+    EmbeddingGenerationService,
+    SemanticSearchService,
     ClipRecommendationService,
     ShortsGenerationService,
     TimelineService,
@@ -55,6 +59,8 @@ import { ShortsExportService } from './shorts-export.service';
     TopicSegmentationService,
     HighlightScoringService,
     ChapterDetectionService,
+    EmbeddingGenerationService,
+    SemanticSearchService,
     ClipRecommendationService,
     ShortsGenerationService,
     TimelineService,

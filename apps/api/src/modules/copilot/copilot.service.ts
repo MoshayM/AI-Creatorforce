@@ -10,6 +10,7 @@ import { ApprovalsService } from '../approvals/approvals.service';
 import { ShortsStudioService } from '../shorts-studio/shorts-studio.service';
 import { ClipRecommendationService } from '../shorts-studio/clip-recommendation.service';
 import { ShortsGenerationService } from '../shorts-studio/shorts-generation.service';
+import { SemanticSearchService } from '../shorts-studio/semantic-search.service';
 import { IntentCacheService } from './intent-cache.service';
 
 const COPILOT_SYSTEM = `You are the CreatorForce Copilot — you drive a YouTube content platform for the user by emitting commands.
@@ -38,6 +39,7 @@ Command palette:
 - analyze_video {importedVideoId} — run the Shorts analysis pipeline
 - list_highlights {importedVideoId, limit} — top Shorts moments for an analyzed video
 - list_chapters {importedVideoId} — YouTube-style chapters detected for an analyzed video
+- search_video {importedVideoId, query} — find moments by meaning ("find John 3:16", "where do they talk about grace") and get their timestamps
 - generate_clips {highlightId, clipTypes} — create candidate Shorts clips (clipTypes values: YOUTUBE_SHORTS, INSTAGRAM_REELS, TIKTOK, LINKEDIN_CLIPS, FACEBOOK_REELS, PODCAST_HIGHLIGHTS)
 - render_clip {shortClipId} — render a clip to vertical video
 - generate_captions {shortClipId}
@@ -48,6 +50,15 @@ Command palette:
 - set_voice_language {projectId, language, applyToVoiceover} — make the project's scripts AND narration voiceover use the user's speaking language (asking permission first is mandatory; the confirmation step is that permission)
 
 Respond only with valid JSON.`;
+
+/** ms → "m:ss" / "h:mm:ss" for spoken/read timestamp lists. */
+function stamp(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  return h > 0 ? `${h}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${mm}:${String(ss).padStart(2, '0')}`;
+}
 
 export interface CopilotResponse {
   reply: string;
@@ -81,6 +92,7 @@ export class CopilotService {
     private readonly shorts: ShortsStudioService,
     private readonly recommendations: ClipRecommendationService,
     private readonly generation: ShortsGenerationService,
+    private readonly semanticSearch: SemanticSearchService,
     private readonly intentCache: IntentCacheService,
   ) {}
 
@@ -353,17 +365,27 @@ export class CopilotService {
           orderBy: { startMs: 'asc' },
           select: { id: true, startMs: true, endMs: true, title: true, summary: true },
         });
-        const stamp = (ms: number) => {
-          const s = Math.floor(ms / 1000);
-          const h = Math.floor(s / 3600);
-          const mm = Math.floor((s % 3600) / 60);
-          const ss = s % 60;
-          return h > 0 ? `${h}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${mm}:${String(ss).padStart(2, '0')}`;
-        };
         const lines = chapters.map((c, i) => `${i + 1}. [${stamp(c.startMs)}] ${c.title}`);
         return {
           summary: lines.length ? `Chapters:\n${lines.join('\n')}` : 'No chapters yet — run the analysis (or chapter detection) first.',
           data: chapters,
+        };
+      }
+
+      case 'search_video': {
+        await this.shorts.assertVideoOwnership(command.importedVideoId, userId);
+        const found = await this.semanticSearch.search(command.importedVideoId, command.query, 5);
+        if (found.needsEmbeddings) {
+          return {
+            summary: 'This video has no embeddings yet — run embedding generation (or re-run the analysis) and I can search it.',
+            data: found,
+          };
+        }
+        const lines = found.results.map((r, i) =>
+          `${i + 1}. [${stamp(r.startMs)}] ${r.text.slice(0, 100)}${r.chapter ? ` (chapter: ${r.chapter})` : ''}`);
+        return {
+          summary: lines.length ? `Closest moments for "${command.query}":\n${lines.join('\n')}` : `Nothing close to "${command.query}" in this video.`,
+          data: found,
         };
       }
 

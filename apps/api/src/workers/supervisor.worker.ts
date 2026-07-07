@@ -26,6 +26,7 @@ import { SceneDetectionService } from '../modules/shorts-studio/scene-detection.
 import { TopicSegmentationService } from '../modules/shorts-studio/topic-segmentation.service';
 import { HighlightScoringService } from '../modules/shorts-studio/highlight-scoring.service';
 import { ChapterDetectionService } from '../modules/shorts-studio/chapter-detection.service';
+import { EmbeddingGenerationService } from '../modules/shorts-studio/embedding-generation.service';
 import { CaptionGenerationService } from '../modules/shorts-studio/caption-generation.service';
 import { ShortsRenderService } from '../modules/shorts-studio/shorts-render.service';
 import { ShortsExportService } from '../modules/shorts-studio/shorts-export.service';
@@ -87,6 +88,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly topicSegmentation: TopicSegmentationService,
     private readonly highlightScoring: HighlightScoringService,
     private readonly chapterDetection: ChapterDetectionService,
+    private readonly embeddingGeneration: EmbeddingGenerationService,
     private readonly captionGeneration: CaptionGenerationService,
     private readonly shortsRender: ShortsRenderService,
     private readonly shortsExport: ShortsExportService,
@@ -1173,6 +1175,12 @@ export class SupervisorWorker extends WorkerHost {
         const importedVideoId = payload['importedVideoId'] as string;
         if (!importedVideoId) throw new Error('CHAPTER_DETECTION requires payload.importedVideoId');
         return this.chapterDetection.ensureChapters(importedVideoId, (m) => this.log(jobId, projectId, m));
+      }
+
+      case 'EMBEDDING_GENERATION': {
+        const importedVideoId = payload['importedVideoId'] as string;
+        if (!importedVideoId) throw new Error('EMBEDDING_GENERATION requires payload.importedVideoId');
+        return this.embeddingGeneration.ensureEmbeddings(importedVideoId, (m) => this.log(jobId, projectId, m));
       }
 
       case 'CAPTION_GENERATION': {

@@ -191,6 +191,7 @@ enum JobType {
   SHORTS_PUBLISH
   // Video Intelligence (Ai-video edit.md §5, Phase 5)
   CHAPTER_DETECTION
+  EMBEDDING_GENERATION
 }
 
 enum JobStatus {

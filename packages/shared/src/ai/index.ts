@@ -782,3 +782,93 @@ export async function callAIStructured<T>(
     }
   }
 }
+
+// ── Embeddings (Ai-video edit.md §5 Embedding Generation, §12 metering) ───────
+// Anthropic has no embeddings API, so the chain is openai → gemini (whichever
+// has a key), both through the OpenAI-compatible SDK. Vectors come back
+// unit-normalized so a plain dot product IS cosine similarity everywhere.
+
+const EMBEDDING_MODELS: Record<'openai' | 'gemini', string> = {
+  openai: 'text-embedding-3-small',
+  gemini: 'gemini-embedding-001',
+};
+
+/** Requested output dims — both models support down-projection to 768. */
+export const EMBEDDING_DIMS = 768;
+
+// USD per 1M input tokens (embeddings have no output tokens)
+const EMBEDDING_COST_PER_1M: Record<'openai' | 'gemini', number> = {
+  openai: 0.02,
+  gemini: 0.15,
+};
+
+const EMBEDDING_BATCH_SIZE = 100;
+
+export interface EmbeddingResult {
+  /** One unit-normalized vector per input text, in input order. */
+  embeddings: number[][];
+  provider: 'openai' | 'gemini';
+  model: string;
+  tokensIn: number;
+}
+
+function pickEmbeddingProvider(): 'openai' | 'gemini' {
+  if (process.env['OPENAI_API_KEY']) return 'openai';
+  if (process.env['GEMINI_API_KEY']) return 'gemini';
+  throw new Error('Embeddings need OPENAI_API_KEY or GEMINI_API_KEY');
+}
+
+function unitNorm(v: number[]): number[] {
+  const mag = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
+  return mag > 0 ? v.map((x) => x / mag) : v;
+}
+
+export async function embedTexts(texts: string[]): Promise<EmbeddingResult> {
+  const provider = pickEmbeddingProvider();
+  const model = EMBEDDING_MODELS[provider];
+  const client = provider === 'openai' ? getOpenAI() : getGemini();
+
+  const embeddings: number[][] = [];
+  let tokensIn = 0;
+
+  for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
+    const batch = texts.slice(i, i + EMBEDDING_BATCH_SIZE);
+    const release = await getSemaphore().acquire();
+    try {
+      let lastErr: unknown;
+      let response: OpenAI.CreateEmbeddingResponse | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await client.embeddings.create({ model, input: batch, dimensions: EMBEDDING_DIMS });
+          break;
+        } catch (err) {
+          lastErr = err;
+          const status = (err as { status?: number }).status ?? 0;
+          if (status !== 429 && status < 500) throw err;
+          await new Promise((r) => setTimeout(r, 1000 * 4 ** attempt));
+        }
+      }
+      if (!response) throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+
+      // The API may return items out of order — index is authoritative
+      const ordered = [...response.data].sort((a, b) => a.index - b.index);
+      embeddings.push(...ordered.map((d) => unitNorm(d.embedding)));
+      tokensIn += response.usage?.prompt_tokens ?? batch.reduce((s, t) => s + estimateTokens(t), 0);
+    } finally {
+      release();
+    }
+  }
+
+  // Same ledger as chat calls (§12.2.8) — no embedding goes unmetered
+  try {
+    usageListener?.({
+      provider,
+      model,
+      tokensIn,
+      tokensOut: 0,
+      costUsd: (tokensIn / 1_000_000) * EMBEDDING_COST_PER_1M[provider],
+    });
+  } catch { /* noop */ }
+
+  return { embeddings, provider, model, tokensIn };
+}

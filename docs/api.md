@@ -186,7 +186,7 @@ Module spec: repo-root `ai.md`. All routes prefixed `/shorts-studio`, JWT-guarde
 | GET | `/shorts-studio/videos/:youtubeVideoId/metadata` | Fetch metadata without importing (`?channelId=`) |
 | POST | `/shorts-studio/videos/import` | `{ projectId, youtubeVideoId }` → ImportedVideo |
 | GET | `/shorts-studio/projects/:projectId/videos` | List imported videos with analysis counts |
-| POST | `/shorts-studio/videos/:id/analyze` | Enqueue the SHORTS_ANALYZE pipeline (import → transcript → scenes → topics → highlights → chapters) |
+| POST | `/shorts-studio/videos/:id/analyze` | Enqueue the SHORTS_ANALYZE pipeline (import → transcript → scenes → topics → highlights → chapters → embeddings) |
 | GET | `/shorts-studio/videos/:id/analysis-status` | Aggregated per-stage status + output counts |
 | GET | `/shorts-studio/videos/:id/transcript` | TranscriptSegment[] |
 | GET | `/shorts-studio/videos/:id/scenes` | VideoScene[] |
@@ -196,6 +196,8 @@ Module spec: repo-root `ai.md`. All routes prefixed `/shorts-studio`, JWT-guarde
 | GET | `/shorts-studio/videos/:id/chapters` | Chapter[] — contiguous YouTube-style chapters (Ai-video edit.md §5, Phase 5) |
 | POST | `/shorts-studio/videos/:id/detect-chapters` | Enqueue standalone CHAPTER_DETECTION (for videos analyzed before chapters shipped; self-skips if chapters exist) |
 | PATCH | `/shorts-studio/chapters/:chapterId` | `{ title?, summary? }` — manual edit, sets `editedByUser` so re-detection keeps it |
+| GET | `/shorts-studio/videos/:id/search` | NL search over transcript embeddings (`?q=&limit=`): top matches with timestamps, chapter context, cosine score. One embedding call per query, no LLM |
+| POST | `/shorts-studio/videos/:id/generate-embeddings` | Enqueue standalone EMBEDDING_GENERATION (resumable — only un-embedded segments are sent) |
 | POST | `/shorts-studio/highlights/:id/generate-clips` | `{ clipTypes: ClipType[] }` → candidate ShortClip[] + seeded timelines |
 | GET | `/shorts-studio/projects/:projectId/clips` | List ShortClip[] for a project |
 | GET | `/shorts-studio/videos/:id/clips` | List ShortClip[] for one imported video |

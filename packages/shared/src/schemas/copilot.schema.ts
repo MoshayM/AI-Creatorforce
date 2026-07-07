@@ -24,6 +24,8 @@ export const CopilotCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('list_highlights'), importedVideoId: z.string(), limit: z.number().int().min(1).max(20).default(5) }),
   // Deterministic-first (§12): the chapter list is stored data — zero tokens
   z.object({ action: z.literal('list_chapters'), importedVideoId: z.string() }),
+  // NL search over stored embeddings — one tiny embedding call, no LLM re-analysis
+  z.object({ action: z.literal('search_video'), importedVideoId: z.string(), query: z.string().min(1).max(200) }),
   z.object({
     action: z.literal('generate_clips'),
     highlightId: z.string(),

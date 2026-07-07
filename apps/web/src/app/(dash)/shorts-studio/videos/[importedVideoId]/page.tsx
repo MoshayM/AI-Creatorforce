@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle, ChevronDown, ChevronRight, BookOpen, Check } from 'lucide-react';
+import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle, ChevronDown, ChevronRight, BookOpen, Check, Search } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Topic {
@@ -26,6 +26,14 @@ interface Chapter {
   keyPoints: string[];
   confidence: number;
   editedByUser: boolean;
+}
+
+interface SearchResponse {
+  query: string;
+  results: Array<{ segmentId: string; startMs: number; endMs: number; text: string; score: number; chapter: string | null }>;
+  embeddedSegments: number;
+  totalSegments: number;
+  needsEmbeddings: boolean;
 }
 
 interface Clip {
@@ -320,7 +328,8 @@ function HighlightCard({ h, open, onToggle }: { h: Highlight; open: boolean; onT
 export default function ShortsVideoDetailPage() {
   const { importedVideoId } = useParams<{ importedVideoId: string }>();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<'highlights' | 'topics' | 'chapters'>('highlights');
+  const [tab, setTab] = useState<'highlights' | 'topics' | 'chapters' | 'search'>('highlights');
+  const [searchQuery, setSearchQuery] = useState('');
   const [openHighlights, setOpenHighlights] = useState<Set<string>>(new Set());
   const [openTopics, setOpenTopics] = useState<Set<string>>(new Set());
   const [openChapters, setOpenChapters] = useState<Set<string>>(new Set());
@@ -339,6 +348,12 @@ export default function ShortsVideoDetailPage() {
   });
   const detectChapters = useMutation({
     mutationFn: () => api.shortsStudio.detectChapters(importedVideoId),
+  });
+  const searchVideo = useMutation({
+    mutationFn: (q: string) => api.shortsStudio.searchVideo(importedVideoId, q).then((r) => r.data as SearchResponse),
+  });
+  const generateEmbeddings = useMutation({
+    mutationFn: () => api.shortsStudio.generateEmbeddings(importedVideoId),
   });
   const renameChapter = useMutation({
     mutationFn: ({ chapterId, title }: { chapterId: string; title: string }) =>
@@ -387,6 +402,12 @@ export default function ShortsVideoDetailPage() {
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg ${tab === 'chapters' ? 'bg-white shadow-sm font-semibold text-gray-900' : 'text-gray-500'}`}
           >
             <BookOpen className="w-4 h-4" /> Chapters ({chapters.length})
+          </button>
+          <button
+            onClick={() => setTab('search')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg ${tab === 'search' ? 'bg-white shadow-sm font-semibold text-gray-900' : 'text-gray-500'}`}
+          >
+            <Search className="w-4 h-4" /> Search
           </button>
         </div>
       </div>
@@ -679,6 +700,83 @@ export default function ShortsVideoDetailPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {!loading && tab === 'search' && (
+        <div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (searchQuery.trim()) searchVideo.mutate(searchQuery.trim());
+            }}
+            className="flex gap-2 mb-4"
+          >
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder='Search by meaning — e.g. "find John 3:16", "where do they talk about grace"'
+              className="flex-1 text-sm border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white shadow-sm"
+            />
+            <button
+              type="submit"
+              disabled={searchVideo.isPending || !searchQuery.trim()}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm hover:bg-brand-700 disabled:opacity-50"
+            >
+              {searchVideo.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              Search
+            </button>
+          </form>
+
+          {searchVideo.data?.needsEmbeddings && (
+            <div className="text-center py-12">
+              <p className="text-gray-400 mb-4">This video has no embeddings yet — search needs them.</p>
+              <button
+                onClick={() => generateEmbeddings.mutate()}
+                disabled={generateEmbeddings.isPending || generateEmbeddings.isSuccess}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+              >
+                {generateEmbeddings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {generateEmbeddings.isSuccess ? 'Generating — try searching again shortly' : 'Generate embeddings'}
+              </button>
+            </div>
+          )}
+
+          {searchVideo.isError && (
+            <p className="text-center text-red-500 text-sm py-8">
+              {(searchVideo.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Search failed'}
+            </p>
+          )}
+
+          {searchVideo.data && !searchVideo.data.needsEmbeddings && (
+            <div className="space-y-2">
+              {searchVideo.data.results.length === 0 && (
+                <p className="text-center text-gray-400 py-12">No close matches for “{searchVideo.data.query}”.</p>
+              )}
+              {searchVideo.data.results.map((r) => (
+                <div key={r.segmentId} className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 flex items-start gap-3">
+                  <span className="text-xs text-brand-700 font-mono font-semibold bg-brand-50 rounded-lg px-2 py-1 shrink-0">
+                    {fmt(r.startMs)}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-800">{r.text}</p>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      {r.chapter ? <>chapter: {r.chapter} · </> : null}match {(r.score * 100).toFixed(0)}%
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {searchVideo.data.results.length > 0 && searchVideo.data.embeddedSegments < searchVideo.data.totalSegments && (
+                <p className="text-[11px] text-gray-400 text-center pt-2">
+                  Searched {searchVideo.data.embeddedSegments}/{searchVideo.data.totalSegments} segments — embedding run incomplete.
+                </p>
+              )}
+            </div>
+          )}
+
+          {!searchVideo.data && !searchVideo.isPending && !searchVideo.isError && (
+            <p className="text-center text-gray-400 py-12">Type a phrase to jump to the moment it's spoken.</p>
+          )}
         </div>
       )}
     </div>

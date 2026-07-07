@@ -60,6 +60,14 @@
   panel.
 - Undo ring buffer (§7.4) deferred: `actions` records everything needed to
   build it, but no inverse-operations engine exists yet.
+- **No pgvector** (spec §10 vector-db): this deployment runs a native Windows
+  Postgres 16 without the extension. Embeddings live in the existing
+  `TranscriptSegment.embedding Float[]` column as unit-normalized 768-dim
+  vectors; search is an in-process dot-product scan (milliseconds for a
+  single video's few thousand segments). Revisit pgvector when cross-library
+  search at scale lands.
+- Embeddings use openai → gemini (Anthropic has no embeddings API); on this
+  machine Gemini (`gemini-embedding-001`) is the live path.
 
 ### Chapter detection (§5/§11, Phase 5 slice 1)
 
@@ -79,10 +87,29 @@
 - **UI**: Chapters tab on the analysis page — accordion with key points,
   inline rename, and a Detect-chapters button when empty.
 
+### Embeddings + NL search (§5, Phase 5 slice 2)
+
+- **`embedTexts` in the shared aiClient**: openai → gemini chain, batched
+  (100/request), unit-normalized 768-dim vectors, metered into the
+  `token_usage` ledger like every other AI call (§12.2.8).
+- **`EMBEDDING_GENERATION` job**: last SHORTS_ANALYZE stage (deliberately —
+  a missing embeddings key never blocks topics/highlights/chapters). Embeds
+  only segments without a vector, persisting per chunk → naturally resumable,
+  self-skips when complete. `POST /videos/:id/generate-embeddings` runs it
+  standalone.
+- **Search**: `GET /videos/:id/search?q=` — one embedding call for the query,
+  dot-product scan over stored vectors, results carry timestamps + containing
+  chapter. Dimension-mismatched (stale) vectors are skipped, not mis-scored.
+- **Copilot**: `search_video` command ("find John 3:16" → spoken timestamp
+  list, §22 Search tab example).
+- **UI**: Search tab on the analysis page — query box, timestamp-chip results
+  with chapter context and match %, generate-embeddings empty state.
+
 ## Next steps (Phase 5 remainder)
 
-1. Embeddings job + pgvector for NL search ("find John 3:16").
-2. Small-video generation service reusing the Shorts render path with
+1. Small-video generation service reusing the Shorts render path with
    horizontal presets (chapter → small video is now a direct mapping).
-3. Church AI intelligence pack (chapter summaries → devotionals, discussion
+2. Church AI intelligence pack (chapter summaries → devotionals, discussion
    questions) and Phase 6 YouTube chapter timestamp sync.
+3. Embedding-grounded copilot answers ("list sermons that mention grace" —
+   §11 cross-video query) once cross-video search exists.

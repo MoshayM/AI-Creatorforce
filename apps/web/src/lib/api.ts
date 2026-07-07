@@ -116,6 +116,10 @@ export const api = {
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/topics`),
     highlights: (importedVideoId: string) =>
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/highlights`),
+    searchVideo: (importedVideoId: string, q: string, limit = 10) =>
+      apiClient.get(`/shorts-studio/videos/${importedVideoId}/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+    generateEmbeddings: (importedVideoId: string) =>
+      apiClient.post(`/shorts-studio/videos/${importedVideoId}/generate-embeddings`),
     chapters: (importedVideoId: string) =>
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/chapters`),
     detectChapters: (importedVideoId: string) =>

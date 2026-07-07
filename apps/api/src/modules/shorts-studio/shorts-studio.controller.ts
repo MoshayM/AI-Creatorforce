@@ -13,6 +13,7 @@ import { TimelineService } from './timeline.service';
 import { AiEditingAssistantService } from './ai-editing-assistant.service';
 import { ThumbnailGenerationService } from './thumbnail-generation.service';
 import { ShortsExportService } from './shorts-export.service';
+import { SemanticSearchService } from './semantic-search.service';
 import { JobsService } from '../jobs/jobs.service';
 
 class ImportVideoDto {
@@ -46,6 +47,7 @@ export class ShortsStudioController {
     private readonly assistant: AiEditingAssistantService,
     private readonly thumbnails: ThumbnailGenerationService,
     private readonly exports: ShortsExportService,
+    private readonly search: SemanticSearchService,
     private readonly jobs: JobsService,
   ) {}
 
@@ -119,6 +121,26 @@ export class ShortsStudioController {
   @Get('videos/:importedVideoId/clips')
   async videoClips(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
     return this.shorts.getClipsForVideo(importedVideoId, user.sub);
+  }
+
+  // ── Search & Embeddings (Ai-video edit.md §5, Phase 5) ─────────────────────
+
+  @Get('videos/:importedVideoId/search')
+  async searchVideo(
+    @Param('importedVideoId') importedVideoId: string,
+    @Query('q') q: string | undefined,
+    @Query('limit') limit: string | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.shorts.assertVideoOwnership(importedVideoId, user.sub);
+    if (!q?.trim()) throw new BadRequestException('Query parameter "q" is required');
+    const n = Math.min(Math.max(parseInt(limit ?? '10', 10) || 10, 1), 25);
+    return this.search.search(importedVideoId, q.trim(), n);
+  }
+
+  @Post('videos/:importedVideoId/generate-embeddings')
+  async generateEmbeddings(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
+    return this.shorts.enqueueEmbeddingGeneration(importedVideoId, user.sub);
   }
 
   // ── Chapters (Ai-video edit.md §5/§11, Phase 5) ─────────────────────────────

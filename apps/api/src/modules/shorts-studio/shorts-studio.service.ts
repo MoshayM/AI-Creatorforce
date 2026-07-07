@@ -10,6 +10,8 @@ export const SHORTS_IMPORT_STAGES = [
   'TOPIC_SEGMENTATION',
   'HIGHLIGHT_DETECTION',
   'CHAPTER_DETECTION',
+  // Last on purpose: a missing embeddings key must never block the stages above
+  'EMBEDDING_GENERATION',
 ] as const;
 
 @Injectable()
@@ -72,12 +74,13 @@ export class ShortsStudioService {
     const latestByType = new Map<string, (typeof jobs)[number]>();
     for (const j of jobs) if (!latestByType.has(j.type)) latestByType.set(j.type, j);
 
-    const [transcriptSegments, scenes, topicSegments, highlights, chapters] = await Promise.all([
+    const [transcriptSegments, scenes, topicSegments, highlights, chapters, embeddedSegments] = await Promise.all([
       this.prisma.transcriptSegment.count({ where: { importedVideoId } }),
       this.prisma.videoScene.count({ where: { importedVideoId } }),
       this.prisma.topicSegment.count({ where: { importedVideoId } }),
       this.prisma.highlight.count({ where: { topicSegment: { importedVideoId } } }),
       this.prisma.chapter.count({ where: { importedVideoId } }),
+      this.prisma.transcriptSegment.count({ where: { importedVideoId, embedding: { isEmpty: false } } }),
     ]);
 
     const satisfiedBy: Record<(typeof SHORTS_IMPORT_STAGES)[number], boolean> = {
@@ -87,13 +90,14 @@ export class ShortsStudioService {
       TOPIC_SEGMENTATION: topicSegments > 0,
       HIGHLIGHT_DETECTION: highlights > 0,
       CHAPTER_DETECTION: chapters > 0,
+      EMBEDDING_GENERATION: transcriptSegments > 0 && embeddedSegments >= transcriptSegments,
     };
 
     return {
       importedVideoId,
       transcriptStatus: video.transcriptStatus,
       sourceDownloaded: !!video.sourceAssetId,
-      counts: { transcriptSegments, scenes, topicSegments, highlights, chapters },
+      counts: { transcriptSegments, scenes, topicSegments, highlights, chapters, embeddedSegments },
       pipeline: latestByType.get('SHORTS_ANALYZE') ?? null,
       stages: SHORTS_IMPORT_STAGES.map((type) => ({
         type,
@@ -150,6 +154,12 @@ export class ShortsStudioService {
   async enqueueChapterDetection(importedVideoId: string, userId: string) {
     const video = await this.assertVideoOwnership(importedVideoId, userId);
     return this.jobs.enqueue(video.projectId, 'CHAPTER_DETECTION', { importedVideoId });
+  }
+
+  /** Standalone EMBEDDING_GENERATION run — for videos analyzed before search shipped. */
+  async enqueueEmbeddingGeneration(importedVideoId: string, userId: string) {
+    const video = await this.assertVideoOwnership(importedVideoId, userId);
+    return this.jobs.enqueue(video.projectId, 'EMBEDDING_GENERATION', { importedVideoId });
   }
 
   /** Manual rename/edit (Ai-video edit.md §11) — flagged so re-detection keeps it. */
