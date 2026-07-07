@@ -37,6 +37,25 @@ export const ENTRY_BUCKET: Partial<Record<LedgerEntryType, CreditBucket>> = {
   REFUND: 'purchasedCredits',
 };
 
+/**
+ * Convert real provider spend into credits to debit: ceil(cost × rate ×
+ * markup), never negative. Markup is where margin lives (spec §1 "margin is
+ * always known"). Pure — exported for tests.
+ */
+export function creditsForCost(
+  costUsd: number,
+  rate = Math.max(1, Math.round(Number(process.env['CREDITS_PER_USD']) || 100)),
+  markup = Math.max(1, Number(process.env['AI_CREDIT_MARKUP']) || 2),
+): number {
+  if (!Number.isFinite(costUsd) || costUsd <= 0) return 0;
+  return Math.ceil(costUsd * rate * markup);
+}
+
+/** Credit-hold enforcement is opt-in (BILLING_ENFORCE_CREDITS) so zero-credit local deployments keep working. */
+export function billingEnforced(): boolean {
+  return (process.env['BILLING_ENFORCE_CREDITS'] ?? 'false').toLowerCase() === 'true';
+}
+
 export interface LedgerWrite {
   entryType: LedgerEntryType;
   amount: number;
@@ -163,6 +182,99 @@ export class WalletService {
         });
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
     );
+  }
+
+  // ── Reserve → settle soft holds (§5.3) ─────────────────────────────────────
+
+  private holdTtlMs(): number {
+    return Math.max(5, Number(process.env['HOLD_TTL_MINUTES']) || 120) * 60_000;
+  }
+
+  /** Sum of live holds — expired HELD rows don't count (crash safety). */
+  private async heldCredits(tx: Prisma.TransactionClient, walletId: string): Promise<number> {
+    const agg = await tx.creditReservation.aggregate({
+      where: { walletId, status: 'HELD', expiresAt: { gt: new Date() } },
+      _sum: { amount: true },
+    });
+    return agg._sum.amount ?? 0;
+  }
+
+  async availableCredits(userId: string) {
+    const wallet = await this.ensureWallet(userId);
+    const held = await this.heldCredits(this.prisma, wallet.id);
+    return { balance: wallet.balanceCredits, held, available: wallet.balanceCredits - held };
+  }
+
+  /**
+   * Soft-hold credits before an AI run. Fails closed (§9.1) when the
+   * available balance (balance − live holds) can't cover the estimate.
+   * Replaying the same idempotency key returns the existing reservation.
+   */
+  async reserve(userId: string, amount: number, idempotencyKey: string, referenceType: string, referenceId?: string) {
+    if (!Number.isInteger(amount) || amount <= 0) throw new BadRequestException('Reserve amount must be a positive integer');
+    const wallet = await this.ensureWallet(userId);
+    const existing = await this.prisma.creditReservation.findUnique({ where: { idempotencyKey } });
+    if (existing) return existing;
+
+    return this.prisma.$transaction(async (tx) => {
+      const fresh = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
+      const held = await this.heldCredits(tx, wallet.id);
+      if (fresh.balanceCredits - held < amount) {
+        throw new BadRequestException('INSUFFICIENT_CREDITS');
+      }
+      return tx.creditReservation.create({
+        data: {
+          walletId: wallet.id,
+          amount,
+          referenceType,
+          referenceId,
+          idempotencyKey,
+          expiresAt: new Date(Date.now() + this.holdTtlMs()),
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  /**
+   * Close a hold with the REAL debit (§5.3 step 3) — the actual amount may
+   * be above or below the estimate. Completed work is never lost: if actual
+   * exceeds what the wallet still covers, the debit clamps to available and
+   * the shortfall is recorded on the reservation metadata trail.
+   */
+  async settleReservation(reservationId: string, actualCredits: number, metadata?: Record<string, unknown>) {
+    const reservation = await this.prisma.creditReservation.findUniqueOrThrow({ where: { id: reservationId } });
+    if (reservation.status !== 'HELD') return reservation; // idempotent: already closed
+
+    let debited = 0;
+    if (actualCredits > 0) {
+      const wallet = await this.prisma.wallet.findUniqueOrThrow({ where: { id: reservation.walletId } });
+      debited = Math.min(actualCredits, wallet.balanceCredits);
+      if (debited < actualCredits) {
+        this.logger.warn(`[settle] reservation ${reservationId}: actual ${actualCredits} exceeds balance — debiting ${debited}`);
+      }
+      if (debited > 0) {
+        await this.debit(wallet.userId, {
+          entryType: 'USAGE_DEBIT',
+          amount: debited,
+          referenceType: 'AI_REQUEST',
+          referenceId: reservation.referenceId ?? reservation.id,
+          idempotencyKey: `settle:${reservation.id}`,
+          metadata: { ...metadata, reservationId: reservation.id, actualCredits, held: reservation.amount },
+        });
+      }
+    }
+    return this.prisma.creditReservation.update({
+      where: { id: reservationId },
+      data: { status: 'SETTLED', settledCredits: debited },
+    });
+  }
+
+  /** §5.3 step 4: the run failed — release the hold, debit nothing. */
+  async releaseReservation(reservationId: string) {
+    await this.prisma.creditReservation.updateMany({
+      where: { id: reservationId, status: 'HELD' },
+      data: { status: 'RELEASED' },
+    });
   }
 
   /** Replay-safe wrapper: a duplicate idempotency key returns the original ledger row (§5.2 step 9). */

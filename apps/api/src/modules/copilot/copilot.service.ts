@@ -14,7 +14,9 @@ import { SemanticSearchService } from '../shorts-studio/semantic-search.service'
 import { SmallVideoGenerationService } from '../shorts-studio/small-video-generation.service';
 import { ChapterSyncService } from '../shorts-studio/chapter-sync.service';
 import { IntentCacheService } from './intent-cache.service';
-import { runWithAiContext } from '../../common/ai-usage.context';
+import { newAccumulator, runWithAiContext } from '../../common/ai-usage.context';
+import { WalletService, billingEnforced, creditsForCost } from '../wallet/wallet.service';
+import { randomUUID } from 'crypto';
 
 const COPILOT_SYSTEM = `You are the CreatorForce Copilot — you drive a YouTube content platform for the user by emitting commands.
 
@@ -104,6 +106,7 @@ export class CopilotService {
     private readonly smallVideos: SmallVideoGenerationService,
     private readonly chapterSync: ChapterSyncService,
     private readonly intentCache: IntentCacheService,
+    private readonly walletService: WalletService,
   ) {}
 
   // §8.2 safety: simple per-user rate limit (20 copilot turns/minute)
@@ -149,21 +152,39 @@ export class CopilotService {
       const pendingNote = req.pendingCommand
         ? `\n\nPENDING CONFIRMATION: this command awaits the user's yes/no: ${JSON.stringify(req.pendingCommand)}. If their latest message confirms it (yes/haan/ok/go ahead, any language), return EXACTLY that command. If they decline, set command to null and acknowledge.`
         : '';
-      decision = await runWithAiContext({ userId }, () => callAIStructured(
-        [
-          ...req.messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+      // §5.3 reserve→settle around the one LLM call of this turn (cache hits
+      // never get here — zero tokens, zero holds).
+      const accumulator = newAccumulator();
+      let reservationId: string | null = null;
+      if (billingEnforced()) {
+        const estimate = Math.max(1, Number(process.env['COPILOT_RESERVE_CREDITS']) || 5);
+        const reservation = await this.walletService.reserve(userId, estimate, `copilot:${randomUUID()}`, 'AI_REQUEST');
+        reservationId = reservation.id;
+      }
+      try {
+        decision = await runWithAiContext({ userId, accumulator }, () => callAIStructured(
+          [
+            ...req.messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+            {
+              role: 'user' as const,
+              content: `CONTEXT (current platform state — use these ids):\n${context}${pendingNote}\n\nRespond with JSON: {"reply":"...","language":"...","command":{...}|null}`,
+            },
+          ],
+          CopilotDecisionSchema,
           {
-            role: 'user' as const,
-            content: `CONTEXT (current platform state — use these ids):\n${context}${pendingNote}\n\nRespond with JSON: {"reply":"...","language":"...","command":{...}|null}`,
+            systemPrompt: COPILOT_SYSTEM,
+            maxTokens: 1024,
+            onUsage: (e) => { tokensUsed += e.tokensIn + e.tokensOut; },
           },
-        ],
-        CopilotDecisionSchema,
-        {
-          systemPrompt: COPILOT_SYSTEM,
-          maxTokens: 1024,
-          onUsage: (e) => { tokensUsed += e.tokensIn + e.tokensOut; },
-        },
-      ));
+        ));
+      } catch (err) {
+        if (reservationId) await this.walletService.releaseReservation(reservationId).catch(() => undefined);
+        throw err;
+      }
+      if (reservationId) {
+        await this.walletService.settleReservation(reservationId, creditsForCost(accumulator.costUsd), { source: 'copilot' })
+          .catch((e) => this.logger.warn(`copilot settle failed: ${e instanceof Error ? e.message : String(e)}`));
+      }
       if (!req.pendingCommand) await this.intentCache.maybeStore(lastUserText, decision);
     }
 

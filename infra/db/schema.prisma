@@ -704,8 +704,9 @@ model Wallet {
   lifetimeUsed       Int      @default(0)
   updatedAt          DateTime @updatedAt
 
-  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  entries CreditLedger[]
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries      CreditLedger[]
+  reservations CreditReservation[]
 
   @@map("wallets")
 }
@@ -748,6 +749,35 @@ model CreditLedger {
 
   @@index([walletId, createdAt])
   @@map("credit_ledger")
+}
+
+// Reserve→settle soft holds (billing spec §5.3): a hold caps spendable
+// balance without touching the ledger; settling posts the REAL debit and
+// closes the hold. Expired HELD rows are ignored by availability math, so a
+// crashed job can never strand credits.
+enum ReservationStatus {
+  HELD
+  SETTLED
+  RELEASED
+}
+
+model CreditReservation {
+  id             String            @id @default(cuid())
+  walletId       String
+  amount         Int
+  status         ReservationStatus @default(HELD)
+  settledCredits Int?
+  referenceType  String
+  referenceId    String?
+  idempotencyKey String            @unique
+  expiresAt      DateTime
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, status, expiresAt])
+  @@map("credit_reservations")
 }
 
 enum PaymentGateway {

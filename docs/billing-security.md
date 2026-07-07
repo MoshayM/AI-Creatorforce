@@ -15,7 +15,7 @@
 | §5.2 Recharge | Stripe Checkout (payment mode) → signature-verified webhook → deduped credit grant | ✅ shipped |
 | §9.2 RBAC | Permission strings, role→permission map, `PermissionsGuard`; SUPER_ADMIN/OWNER emails from env, never source | ✅ shipped |
 | §10 Admin API | `/admin/billing/revenue`, `/admin/audit-logs`, `/admin/users`, `/admin/wallet/adjust` (audited) | ✅ shipped |
-| §5.3 Reserve→settle | Soft-hold before AI request, settle on completion | ❌ next slice |
+| §5.3 Reserve→settle | Soft-hold before AI request, settle on completion | ✅ shipped (opt-in via `BILLING_ENFORCE_CREDITS`) |
 | §5.4/§11 Expiry + reconciliation jobs | credit-expiry, ledger-reconciliation, settlement reconciliation | ❌ next slice |
 | §7 Refunds & disputes | Admin refund with credit claw-back; dispute webhooks | ❌ next slice |
 | §6.6 Mobile IAP | Apple IAP / Google Play Billing adapters | ⏸ deferred until mobile clients exist |
@@ -65,6 +65,32 @@
 - Settings page: wallet card with bucket breakdown + $5–$100 recharge via
   Stripe Checkout.
 
+### Reserve→settle holds (§5.3, slice 2)
+
+- **`credit_reservations`**: HELD / SETTLED / RELEASED with a TTL
+  (`HOLD_TTL_MINUTES`, default 120) — availability math ignores expired HELD
+  rows, so a crashed job can never strand credits. Available = balance −
+  live holds, checked inside a serializable transaction (fail closed).
+- **Hook points**: the supervisor reserves `JOB_RESERVE_CREDITS` (default 50)
+  before dispatching any job — insufficient credits fail the job *before* a
+  single provider call; the copilot reserves `COPILOT_RESERVE_CREDITS`
+  (default 5) around its one LLM call per turn (cache hits never reserve).
+  The real cost accumulates through the AsyncLocalStorage usage context
+  (`AiUsageAccumulator`, fed by the same global listener that writes
+  `token_usage`), and the settle debits
+  `creditsForCost(costUsd) = ceil(cost × CREDITS_PER_USD × AI_CREDIT_MARKUP)`
+  as a `USAGE_DEBIT` ledger entry keyed `settle:<reservationId>`.
+- **Failure** releases the hold with no debit (§5.3 step 4 — retried jobs
+  would otherwise double-charge). **Settle overrun** clamps to the remaining
+  balance and logs the shortfall — completed work is never thrown away over
+  a few credits.
+- **Enforcement is opt-in** (`BILLING_ENFORCE_CREDITS=false` default): with
+  it off, usage is still metered and attributed but nothing is held or
+  debited — the current zero-credit local deployment is unaffected. Flip to
+  `true` once wallets are funded.
+- Known gap: semantic-search query embeddings (fractions of a cent) are
+  metered but not debited — noted for the reconciliation slice.
+
 ## Deliberate deviations from the spec docs
 
 - **Monolith, not microservices** (§2/§3): billing/wallet/admin are NestJS
@@ -89,11 +115,11 @@
 
 ## Next steps
 
-1. Reserve→settle credit holds (§5.3) wired into the AI usage path — debit
-   real credits per AI call using the existing token_usage cost attribution.
-2. Nightly jobs (§11): ledger reconciliation (cache == ledger sum),
-   credit expiry, Stripe settlement reconciliation.
-3. Refund endpoint (`billing:refund`) with credit claw-back + dispute
+1. Nightly jobs (§11): ledger reconciliation (cache == ledger sum),
+   credit expiry, stale-reservation sweeper, Stripe settlement
+   reconciliation.
+2. Refund endpoint (`billing:refund`) with credit claw-back + dispute
    webhook handling (§7).
+3. Debit semantic-search query embeddings (currently metered only).
 4. Apple IAP / Google Play Billing adapters behind a
    `PaymentGatewayAdapter` interface when mobile clients exist (§6.6).

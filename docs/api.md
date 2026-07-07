@@ -252,4 +252,6 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 
 Roles: `SUPER_ADMIN` > `OWNER` > `MEMBER`; elevated identities come from `SUPER_ADMIN_EMAILS` / `OWNER_EMAILS` env config (never hardcoded). The `credit_ledger` is append-only and idempotent — every balance is reconstructable from it.
 
+Reserve→settle (§5.3, opt-in `BILLING_ENFORCE_CREDITS`): jobs hold `JOB_RESERVE_CREDITS` and copilot turns `COPILOT_RESERVE_CREDITS` before AI runs; the real cost (accumulated via the AI usage context) settles as a `USAGE_DEBIT` of `ceil(costUsd × CREDITS_PER_USD × AI_CREDIT_MARKUP)`; failures release the hold. Holds expire after `HOLD_TTL_MINUTES` so crashes never strand credits.
+
 Every turn lands in the `actions` audit table (source `UI`/`COPILOT`/`VOICE`, status, `fromCache`, `tokensUsed`); spoken turns also record `voice_commands` (raw transcript + resolved intent); `copilot_sessions` keeps compressed per-user intent history. The `token_usage` ledger is populated by a global usage hook on the shared aiClient — no AI call goes unmetered. Rows carry `userId`/`jobId`/`projectId`/`importedVideoId` attribution from an AsyncLocalStorage context (`common/ai-usage.context.ts`) set by the supervisor around each job dispatch, by the copilot around each chat turn, and by semantic search around query embeddings — no per-call plumbing.

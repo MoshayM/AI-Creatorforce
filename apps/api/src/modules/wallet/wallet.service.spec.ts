@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { planDebit, type BucketBalances } from './wallet.service';
+import { creditsForCost, planDebit, type BucketBalances } from './wallet.service';
 
 const buckets = (p: number, b: number, r: number, pur: number): BucketBalances => ({
   promotionalCredits: p,
@@ -41,5 +41,23 @@ describe('planDebit — §5.4 spend priority (promo → bonus → referral → p
     expect(() => planDebit(buckets(10, 0, 0, 0), 0)).toThrow(BadRequestException);
     expect(() => planDebit(buckets(10, 0, 0, 0), -3)).toThrow(BadRequestException);
     expect(() => planDebit(buckets(10, 0, 0, 0), 1.5)).toThrow(BadRequestException);
+  });
+});
+
+describe('creditsForCost — §5.3 settle conversion', () => {
+  it('applies rate × markup and rounds up (fractional credits always charge)', () => {
+    // $0.011 × 100 credits/USD × 2 markup = 2.2 → 3
+    expect(creditsForCost(0.011, 100, 2)).toBe(3);
+    expect(creditsForCost(0.5, 100, 2)).toBe(100);
+  });
+
+  it('charges at least 1 credit for any nonzero cost', () => {
+    expect(creditsForCost(0.000001, 100, 2)).toBe(1);
+  });
+
+  it('returns 0 for zero, negative, or non-finite cost', () => {
+    expect(creditsForCost(0, 100, 2)).toBe(0);
+    expect(creditsForCost(-1, 100, 2)).toBe(0);
+    expect(creditsForCost(Number.NaN, 100, 2)).toBe(0);
   });
 });

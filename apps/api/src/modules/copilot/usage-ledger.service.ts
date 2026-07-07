@@ -27,6 +27,12 @@ export class UsageLedgerService implements OnModuleInit, OnModuleDestroy {
   /** Fire-and-forget: the ledger must never slow down or fail an AI call. */
   record(event: AIUsageEvent): void {
     const ctx = currentAiContext();
+    if (ctx?.accumulator) {
+      ctx.accumulator.costUsd += event.costUsd;
+      ctx.accumulator.tokensIn += event.tokensIn;
+      ctx.accumulator.tokensOut += event.tokensOut;
+      ctx.accumulator.calls += 1;
+    }
     void this.prisma.tokenUsage
       .create({
         data: {

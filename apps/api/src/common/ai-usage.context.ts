@@ -7,11 +7,25 @@ import { AsyncLocalStorage } from 'async_hooks';
  * (UsageLedgerService) reads whatever context is active when a call lands —
  * no per-call plumbing through the services in between.
  */
+/** Mutable per-run usage total — feeds §5.3 settle with the REAL cost. */
+export interface AiUsageAccumulator {
+  costUsd: number;
+  tokensIn: number;
+  tokensOut: number;
+  calls: number;
+}
+
+export function newAccumulator(): AiUsageAccumulator {
+  return { costUsd: 0, tokensIn: 0, tokensOut: 0, calls: 0 };
+}
+
 export interface AiUsageContext {
   userId?: string;
   jobId?: string;
   projectId?: string;
   importedVideoId?: string;
+  /** When present, every provider call inside the context adds to it. */
+  accumulator?: AiUsageAccumulator;
 }
 
 const storage = new AsyncLocalStorage<AiUsageContext>();

@@ -39,7 +39,8 @@ import { checkDurations, analyzeLoudness } from '../modules/media/quality.util';
 import { validateMediaFile, formatIssues } from '../modules/media/media-validation.util';
 import { buildSrt, buildVtt, fitCuesToDuration } from '../modules/media/subtitle.util';
 import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, type PipelineScope, type PipelineStage } from './pipeline-plan';
-import { runWithAiContext } from '../common/ai-usage.context';
+import { newAccumulator, runWithAiContext } from '../common/ai-usage.context';
+import { WalletService, billingEnforced, creditsForCost } from '../modules/wallet/wallet.service';
 import { EventsGateway } from '../gateway/events.gateway';
 import { AGENT_QUEUE } from '../modules/jobs/jobs.module';
 import { callAIStructured } from '@cf/shared';
@@ -97,6 +98,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly captionGeneration: CaptionGenerationService,
     private readonly shortsRender: ShortsRenderService,
     private readonly shortsExport: ShortsExportService,
+    private readonly walletService: WalletService,
     private readonly events: EventsGateway,
   ) {
     super();
@@ -109,13 +111,45 @@ export class SupervisorWorker extends WorkerHost {
     await this.prisma.agentJob.update({ where: { id: jobId }, data: { status: 'RUNNING', startedAt: new Date() } });
     this.events.emitJobUpdate(jobId, { status: 'RUNNING', type }, projectId);
 
+    // §5.3 reserve→settle: hold credits before AI runs (opt-in via
+    // BILLING_ENFORCE_CREDITS). Insufficient credits fail the job here,
+    // before any provider spend.
+    const accumulator = newAccumulator();
+    let reservationId: string | null = null;
+    let holdUserId: string | null = null;
+    if (billingEnforced()) {
+      const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { userId: true } });
+      if (project) {
+        holdUserId = project.userId;
+        const estimate = Math.max(1, Number(process.env['JOB_RESERVE_CREDITS']) || 50);
+        try {
+          const reservation = await this.walletService.reserve(holdUserId, estimate, `job:${jobId}`, 'AI_REQUEST', jobId);
+          reservationId = reservation.id;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          await this.prisma.agentJob.update({
+            where: { id: jobId },
+            data: { status: 'FAILED', error: msg, completedAt: new Date() },
+          });
+          this.events.emitJobFailed(jobId, msg, projectId);
+          throw err;
+        }
+      }
+    }
+
     try {
       // §12.2.8 cost attribution: every provider call inside this dispatch —
       // including SHORTS_ANALYZE child stages — inherits this context.
       const result = await runWithAiContext(
-        { jobId, projectId, importedVideoId: payload['importedVideoId'] as string | undefined },
+        { jobId, projectId, importedVideoId: payload['importedVideoId'] as string | undefined, userId: holdUserId ?? undefined, accumulator },
         () => this.dispatch(type, projectId, jobId, payload),
       );
+      // Settle with the REAL cost — may be above or below the estimate (§5.3)
+      if (reservationId) {
+        await this.walletService.settleReservation(reservationId, creditsForCost(accumulator.costUsd), {
+          jobId, jobType: type, costUsd: accumulator.costUsd, calls: accumulator.calls,
+        }).catch((e) => console.warn(`[credits] settle failed for job ${jobId}: ${e instanceof Error ? e.message : String(e)}`));
+      }
       const elapsed = Date.now() - t0;
       // METADATA sets job to WAITING_APPROVAL mid-dispatch — don't overwrite that status,
       // but always persist the result so downstream can read it.
@@ -136,6 +170,10 @@ export class SupervisorWorker extends WorkerHost {
       }
       return result;
     } catch (err) {
+      // §5.3 step 4: failed run → release the hold, debit nothing
+      if (reservationId) {
+        await this.walletService.releaseReservation(reservationId).catch(() => undefined);
+      }
       const msg = err instanceof Error ? err.message : String(err);
       await this.prisma.agentJob.update({
         where: { id: jobId },

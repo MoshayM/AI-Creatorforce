@@ -54,6 +54,19 @@ describe('UsageLedgerService.record', () => {
     });
   });
 
+  it('accumulates run totals when the context carries an accumulator', async () => {
+    const { service } = makeService();
+    const accumulator = { costUsd: 0, tokensIn: 0, tokensOut: 0, calls: 0 };
+    await runWithAiContext({ jobId: 'job-2', accumulator }, async () => {
+      service.record(event);
+      service.record(event);
+    });
+    expect(accumulator.calls).toBe(2);
+    expect(accumulator.tokensIn).toBe(200);
+    expect(accumulator.tokensOut).toBe(100);
+    expect(accumulator.costUsd).toBeCloseTo(0.0021, 10);
+  });
+
   it('survives context nesting across awaits', async () => {
     const { service, created } = makeService();
     await runWithAiContext({ userId: 'user-1' }, async () => {
