@@ -405,7 +405,7 @@ export class CopilotService {
 
       case 'search_video': {
         await this.shorts.assertVideoOwnership(command.importedVideoId, userId);
-        const found = await this.semanticSearch.search(command.importedVideoId, command.query, 5);
+        const found = await this.semanticSearch.search(command.importedVideoId, command.query, 5, userId);
         if (found.needsEmbeddings) {
           return {
             summary: 'This video has no embeddings yet — run embedding generation (or re-run the analysis) and I can search it.',

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import Stripe from 'stripe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
@@ -111,6 +111,9 @@ export class BillingService {
       data: {
         userId,
         gateway: 'STRIPE',
+        // Session id first; replaced by the payment intent on settle — this is
+        // what lets the reconciliation job find orphaned PENDING payments (§13)
+        gatewayPaymentId: session.id,
         amount: amountUsd * 100,
         currency: 'usd',
         status: 'PENDING',
@@ -139,6 +142,28 @@ export class BillingService {
       const session = event.data.object as Stripe.Checkout.Session;
       if (session.metadata?.['kind'] === 'wallet_recharge' && session.payment_status === 'paid') {
         await this.settleRecharge(session);
+      }
+    }
+
+    // §7: a dispute flags the payment and lands in the audit trail for review
+    if (event.type === 'charge.dispute.created') {
+      const dispute = event.data.object as Stripe.Dispute;
+      const intent = typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent?.id;
+      if (intent) {
+        const disputed = await this.prisma.payment.updateMany({
+          where: { gatewayPaymentId: intent },
+          data: { status: 'DISPUTED' },
+        });
+        const payment = await this.prisma.payment.findUnique({ where: { gatewayPaymentId: intent } });
+        await this.prisma.auditLog.create({
+          data: {
+            userId: payment?.userId,
+            action: 'system:dispute-created',
+            target: payment?.id ?? intent,
+            meta: { disputeId: dispute.id, amount: dispute.amount, reason: dispute.reason, matched: disputed.count } as never,
+          },
+        }).catch(() => undefined);
+        this.logger.error(`[dispute] ${dispute.id} on ${intent} (${dispute.reason}) — payment flagged, needs review`);
       }
     }
 
@@ -188,6 +213,106 @@ export class BillingService {
       metadata: { gateway: 'STRIPE', amountMinor: payment.amount, currency: payment.currency },
     });
     this.logger.log(`[recharge] +${credits} credits → user ${userId} (payment ${payment.id})`);
+  }
+
+  /**
+   * Refund with credit claw-back (§7). Full or partial; the claw-back is a
+   * proportional ADJUSTMENT debit clamped to the wallet's current balance
+   * (already-spent credits can't be un-spent — the shortfall is recorded,
+   * history is never deleted). Idempotent at the gateway via refund key.
+   */
+  async refundPayment(paymentId: string, adminId: string, reason: string, amountMinor?: number) {
+    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.gateway !== 'STRIPE') throw new BadRequestException(`Refunds for ${payment.gateway} are not implemented`);
+    if (payment.status !== 'SUCCEEDED' && payment.status !== 'PARTIALLY_REFUNDED') {
+      throw new BadRequestException(`Payment is ${payment.status} — only succeeded payments can be refunded`);
+    }
+    if (!payment.gatewayPaymentId?.startsWith('pi_')) {
+      throw new BadRequestException('Payment has no settled payment intent to refund against');
+    }
+    const refundMinor = amountMinor ?? payment.amount;
+    if (!Number.isInteger(refundMinor) || refundMinor < 1 || refundMinor > payment.amount) {
+      throw new BadRequestException('Refund amount must be between 1 and the original payment amount (minor units)');
+    }
+
+    await this.stripe.refunds.create(
+      { payment_intent: payment.gatewayPaymentId, amount: refundMinor, reason: 'requested_by_customer' },
+      { idempotencyKey: `refund:${payment.id}:${refundMinor}` },
+    );
+
+    // Proportional claw-back, clamped to what the wallet still holds
+    const clawTarget = Math.round(payment.creditsGranted * (refundMinor / payment.amount));
+    const balance = (await this.wallet.getBalance(payment.userId)).balanceCredits;
+    const clawed = Math.min(clawTarget, balance);
+    if (clawed > 0) {
+      await this.wallet.debit(payment.userId, {
+        entryType: 'ADJUSTMENT',
+        amount: clawed,
+        referenceType: 'ADMIN_ACTION',
+        referenceId: payment.id,
+        idempotencyKey: `refund-claw:${payment.id}:${refundMinor}`,
+        metadata: { reason, adminId, refundMinor, clawTarget, shortfall: clawTarget - clawed },
+      });
+    }
+
+    const updated = await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: refundMinor === payment.amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED' },
+    });
+
+    // §9.7: audited synchronously before the caller sees success
+    await this.prisma.auditLog.create({
+      data: {
+        userId: adminId,
+        action: 'admin:refund',
+        target: payment.id,
+        meta: {
+          reason, refundMinor, currency: payment.currency,
+          creditsClawedBack: clawed, clawTarget, shortfall: clawTarget - clawed,
+          before: { status: payment.status }, after: { status: updated.status },
+        } as never,
+      },
+    });
+    this.logger.warn(`[refund] ${payment.id}: ${refundMinor} ${payment.currency} refunded, ${clawed}/${clawTarget} credits clawed back`);
+    return { paymentId: payment.id, status: updated.status, refundedMinor: refundMinor, creditsClawedBack: clawed, shortfall: clawTarget - clawed };
+  }
+
+  /**
+   * §11 gateway-settlement-reconciliation / §13 payment.orphaned recovery:
+   * PENDING Stripe payments older than an hour mean a webhook was missed —
+   * re-check the session directly and settle (idempotently) or fail it.
+   * No-op when Stripe isn't configured.
+   */
+  async reconcilePendingPayments(): Promise<{ checked: number; recovered: number; expired: number }> {
+    if (!process.env['STRIPE_SECRET_KEY']) return { checked: 0, recovered: 0, expired: 0 };
+    const stale = await this.prisma.payment.findMany({
+      where: { gateway: 'STRIPE', status: 'PENDING', createdAt: { lt: new Date(Date.now() - 60 * 60_000) } },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    });
+    let recovered = 0;
+    let expired = 0;
+    for (const p of stale) {
+      if (!p.gatewayPaymentId?.startsWith('cs_')) continue;
+      try {
+        const session = await this.stripe.checkout.sessions.retrieve(p.gatewayPaymentId);
+        if (session.payment_status === 'paid') {
+          this.logger.warn(`[reconcile] payment.orphaned recovered: ${p.id} paid but never settled — settling now`);
+          await this.settleRecharge(session);
+          recovered += 1;
+        } else if (session.status === 'expired') {
+          await this.prisma.payment.update({
+            where: { id: p.id },
+            data: { status: 'FAILED', failureReason: 'checkout session expired' },
+          });
+          expired += 1;
+        }
+      } catch (err) {
+        this.logger.warn(`[reconcile] payment ${p.id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    return { checked: stale.length, recovered, expired };
   }
 
   async getSubscription(userId: string) {

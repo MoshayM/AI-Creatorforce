@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ChannelsModule } from '../channels/channels.module';
+import { WalletModule } from '../wallet/wallet.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { MediaModule } from '../media/media.module';
 import { ApprovalsModule } from '../approvals/approvals.module';
@@ -31,7 +32,7 @@ import { ThumbnailGenerationService } from './thumbnail-generation.service';
 import { ShortsExportService } from './shorts-export.service';
 
 @Module({
-  imports: [ChannelsModule, JobsModule, MediaModule, ApprovalsModule, ComplianceModule, PublishingModule],
+  imports: [ChannelsModule, JobsModule, MediaModule, ApprovalsModule, ComplianceModule, PublishingModule, WalletModule],
   controllers: [ShortsStudioController],
   providers: [
     ShortsStudioService,

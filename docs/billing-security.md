@@ -16,8 +16,9 @@
 | §9.2 RBAC | Permission strings, role→permission map, `PermissionsGuard`; SUPER_ADMIN/OWNER emails from env, never source | ✅ shipped |
 | §10 Admin API | `/admin/billing/revenue`, `/admin/audit-logs`, `/admin/users`, `/admin/wallet/adjust` (audited) | ✅ shipped |
 | §5.3 Reserve→settle | Soft-hold before AI request, settle on completion | ✅ shipped (opt-in via `BILLING_ENFORCE_CREDITS`) |
-| §5.4/§11 Expiry + reconciliation jobs | credit-expiry, ledger-reconciliation, settlement reconciliation | ❌ next slice |
-| §7 Refunds & disputes | Admin refund with credit claw-back; dispute webhooks | ❌ next slice |
+| §11 Reconciliation jobs | ledger-reconciliation, stale-hold sweeper, settlement/orphan recovery | ✅ shipped (interval-based) |
+| §7 Refunds & disputes | Admin refund with clamped credit claw-back; `charge.dispute.created` flags + audits | ✅ shipped |
+| §5.4 Credit expiry | per-lot expiry (bonus/promo TTL) | ❌ needs credit-lot tracking — deferred |
 | §6.6 Mobile IAP | Apple IAP / Google Play Billing adapters | ⏸ deferred until mobile clients exist |
 | Platform spec (§ all) | iOS/Android/desktop shells, domains, DNS/TLS, deep links | ⏸ deferred — no mobile/desktop clients yet |
 
@@ -88,8 +89,31 @@
   it off, usage is still metered and attributed but nothing is held or
   debited — the current zero-credit local deployment is unaffected. Flip to
   `true` once wallets are funded.
-- Known gap: semantic-search query embeddings (fractions of a cent) are
-  metered but not debited — noted for the reconciliation slice.
+- Semantic-search query embeddings are debited too (min 1 credit,
+  fail-closed pre-check, post-hoc debit that never fails the search the
+  provider already ran).
+
+### Reconciliation, refunds & disputes (§7/§11, slice 3)
+
+- **`BillingJobsService`** (interval-based — no cron infra in this
+  local-first deployment; every run is repeat-safe):
+  - *ledger-reconciliation* (24h + on boot): recompute every wallet from the
+    ledger; any drift is a P1 — loud log + `system:ledger-mismatch` audit row.
+  - *stale-hold sweeper* (15 min): expired HELD reservations → RELEASED.
+  - *settlement/orphan recovery* (24h): PENDING Stripe payments >1h old are
+    re-checked against their checkout session (`payments.gatewayPaymentId`
+    stores the session id until the intent replaces it) — paid-but-unsettled
+    payments settle idempotently (§13 `payment.orphaned` compensation),
+    expired sessions fail the payment. Skips cleanly with no Stripe key.
+- **Refunds** (`POST /admin/payments/:id/refund`, `billing:refund`): full or
+  partial via Stripe (gateway-idempotent); credits clawed back
+  proportionally as an ADJUSTMENT debit **clamped to the remaining balance**
+  (spent credits can't be un-spent — the shortfall is recorded, history is
+  never deleted); payment → REFUNDED/PARTIALLY_REFUNDED; synchronously
+  audited with before/after.
+- **Disputes**: `charge.dispute.created` webhook flags the payment DISPUTED
+  and writes a `system:dispute-created` audit row. Account-level recharge
+  freeze deferred (needs a user-status field).
 
 ## Deliberate deviations from the spec docs
 
@@ -115,11 +139,9 @@
 
 ## Next steps
 
-1. Nightly jobs (§11): ledger reconciliation (cache == ledger sum),
-   credit expiry, stale-reservation sweeper, Stripe settlement
-   reconciliation.
-2. Refund endpoint (`billing:refund`) with credit claw-back + dispute
-   webhook handling (§7).
-3. Debit semantic-search query embeddings (currently metered only).
-4. Apple IAP / Google Play Billing adapters behind a
+1. Credit-lot tracking → per-lot expiry job (§5.4 "bonus expires first")
+   and expiry notifications.
+2. Account-level fraud/freeze state (user status field) so disputes can
+   auto-block recharges (§7).
+3. Apple IAP / Google Play Billing adapters behind a
    `PaymentGatewayAdapter` interface when mobile clients exist (§6.6).

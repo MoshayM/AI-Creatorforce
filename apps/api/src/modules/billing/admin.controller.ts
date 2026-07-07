@@ -1,10 +1,17 @@
-import { Body, Controller, Get, Post, Query, UseGuards, BadRequestException } from '@nestjs/common';
-import { IsIn, IsInt, IsString, MinLength } from 'class-validator';
+import { Body, Controller, Get, Param, Post, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import { IsIn, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard, RequirePermissions } from '../../common/guards/permissions.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
+import { BillingService } from './billing.service';
+
+class RefundDto {
+  @IsString() @MinLength(5) reason!: string;
+  /** Minor units; omit for a full refund. */
+  @IsOptional() @IsInt() @Min(1) amountMinor?: number;
+}
 
 class AdjustWalletDto {
   @IsString() userId!: string;
@@ -25,6 +32,7 @@ export class AdminController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
+    private readonly billing: BillingService,
   ) {}
 
   @Get('billing/revenue')
@@ -73,6 +81,16 @@ export class AdminController {
       },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  @Post('payments/:paymentId/refund')
+  @RequirePermissions('billing:refund')
+  async refund(
+    @Param('paymentId') paymentId: string,
+    @Body() dto: RefundDto,
+    @CurrentUser() admin: JwtPayload,
+  ) {
+    return this.billing.refundPayment(paymentId, admin.sub, dto.reason, dto.amountMinor);
   }
 
   @Post('wallet/adjust')

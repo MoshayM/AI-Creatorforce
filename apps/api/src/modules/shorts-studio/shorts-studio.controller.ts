@@ -141,7 +141,7 @@ export class ShortsStudioController {
     await this.shorts.assertVideoOwnership(importedVideoId, user.sub);
     if (!q?.trim()) throw new BadRequestException('Query parameter "q" is required');
     const n = Math.min(Math.max(parseInt(limit ?? '10', 10) || 10, 1), 25);
-    return this.search.search(importedVideoId, q.trim(), n);
+    return this.search.search(importedVideoId, q.trim(), n, user.sub);
   }
 
   @Post('videos/:importedVideoId/generate-embeddings')

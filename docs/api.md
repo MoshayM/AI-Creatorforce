@@ -249,6 +249,7 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | GET | `/admin/audit-logs` | `admin:audit-logs` |
 | GET | `/admin/users` | `admin:users` — roles + wallet/plan |
 | POST | `/admin/wallet/adjust` | `wallet:adjust` — grant/claw back credits with reason; audited with before/after |
+| POST | `/admin/payments/:id/refund` | `billing:refund` — full/partial Stripe refund with proportional credit claw-back (clamped to balance, shortfall recorded); audited |
 
 Roles: `SUPER_ADMIN` > `OWNER` > `MEMBER`; elevated identities come from `SUPER_ADMIN_EMAILS` / `OWNER_EMAILS` env config (never hardcoded). The `credit_ledger` is append-only and idempotent — every balance is reconstructable from it.
 
