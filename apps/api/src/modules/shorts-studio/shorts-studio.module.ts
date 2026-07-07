@@ -18,6 +18,7 @@ import { EmbeddingGenerationService } from './embedding-generation.service';
 import { SemanticSearchService } from './semantic-search.service';
 import { SmallVideoGenerationService } from './small-video-generation.service';
 import { ChurchPackService } from './church-pack.service';
+import { ChapterSyncService } from './chapter-sync.service';
 import { ClipRecommendationService } from './clip-recommendation.service';
 import { ShortsGenerationService } from './shorts-generation.service';
 import { TimelineService } from './timeline.service';
@@ -44,6 +45,7 @@ import { ShortsExportService } from './shorts-export.service';
     SemanticSearchService,
     SmallVideoGenerationService,
     ChurchPackService,
+    ChapterSyncService,
     ClipRecommendationService,
     ShortsGenerationService,
     TimelineService,
@@ -67,6 +69,7 @@ import { ShortsExportService } from './shorts-export.service';
     SemanticSearchService,
     SmallVideoGenerationService,
     ChurchPackService,
+    ChapterSyncService,
     ClipRecommendationService,
     ShortsGenerationService,
     TimelineService,

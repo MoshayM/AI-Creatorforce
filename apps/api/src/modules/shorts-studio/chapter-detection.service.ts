@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { callAIStructured, ChapterDetectionOutputSchema, type ChapterCandidate } from '@cf/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { parseChapterBlock } from './chapter-sync.util';
 
 const CHAPTER_SYSTEM = `You are an expert video editor creating YouTube-style chapters for a long-form video.
 
@@ -94,6 +95,25 @@ export class ChapterDetectionService {
     if (existing > 0) {
       onLog?.(`Chapters already detected (${existing}) — reusing`);
       return { skipped: true, chapters: existing };
+    }
+
+    // §11 deterministic-first: a description that already defines YouTube
+    // chapters IS the chapter list — import it, zero tokens, no LLM.
+    const described = parseChapterBlock(video.description);
+    if (described.length > 0) {
+      await this.prisma.chapter.createMany({
+        data: described.map((c, i) => ({
+          importedVideoId,
+          startMs: c.startMs,
+          endMs: i + 1 < described.length ? described[i + 1]!.startMs : video.durationMs,
+          title: c.title,
+          summary: c.title,
+          confidence: 1,
+          source: 'IMPORTED' as const,
+        })),
+      });
+      onLog?.(`Imported ${described.length} chapters from the YouTube description — zero tokens`);
+      return { skipped: false, chapters: described.length, imported: true };
     }
 
     const topics = await this.prisma.topicSegment.findMany({

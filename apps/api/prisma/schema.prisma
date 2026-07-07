@@ -638,6 +638,8 @@ model ImportedVideo {
   commentCount     BigInt?
   sourceAssetId    String?
   transcriptStatus TranscriptStatus @default(PENDING)
+  /** Last time the chapter block was published into the YouTube description (§11). */
+  chaptersSyncedAt DateTime?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 

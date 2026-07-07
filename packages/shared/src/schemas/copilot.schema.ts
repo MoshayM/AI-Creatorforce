@@ -30,6 +30,8 @@ export const CopilotCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('generate_small_videos'), importedVideoId: z.string() }),
   // Church AI pack (§11): bible refs + discussion questions + devotional per chapter
   z.object({ action: z.literal('generate_church_pack'), importedVideoId: z.string() }),
+  // Publishes the chapter block into the live YouTube description (§11)
+  z.object({ action: z.literal('sync_chapters_to_youtube'), importedVideoId: z.string() }),
   z.object({
     action: z.literal('generate_clips'),
     highlightId: z.string(),
@@ -63,6 +65,8 @@ export const EXPENSIVE_ACTIONS: ReadonlyArray<CopilotCommand['action']> = [
   'approve_content',
   'set_voice_language',
   'generate_church_pack',
+  // Mutates the public video description — always confirm first
+  'sync_chapters_to_youtube',
 ];
 
 export const CopilotDecisionSchema = z.object({

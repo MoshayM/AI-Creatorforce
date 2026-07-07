@@ -140,10 +140,28 @@
 - **UI**: "Church pack" button on the Chapters tab; expanded chapters show
   Scripture, numbered discussion questions, and the devotional.
 
+### YouTube chapter sync (§11, Phase 6 slice 1)
+
+- **Publish**: `POST /videos/:id/sync-chapters` writes the "0:00 Title" block
+  into the live YouTube description via the channel's OAuth (videos.list →
+  upsert block → videos.update, preserving title/category/tags). The local
+  description and `chaptersSyncedAt` are updated to match. Needs ≥3 chapters
+  (YouTube's own render rule).
+- **Import (reverse direction, zero tokens)**: CHAPTER_DETECTION now parses
+  the video description FIRST — a description that already defines valid
+  YouTube chapters (≥3, 0:00 first, ascending) is imported as
+  `source: IMPORTED` rows with no LLM call (§12 deterministic-first).
+- **Copilot**: `sync_chapters_to_youtube`, confirmation-gated — it mutates
+  the public video. **UI**: "Sync to YouTube" button (with confirm) on the
+  Chapters tab.
+- All block handling (`format`/`parse`/`upsert`) is pure and unit-tested,
+  including YouTube's validity rules and replacing an existing block without
+  touching the surrounding description.
+
 ## Next steps (Phase 5/6 remainder)
 
-1. Phase 6: YouTube chapter timestamp sync (chapters ↔ video description) and
-   per-video cost breakdown on Analytics.
+1. Per-video AI cost breakdown on Analytics (needs token_usage → video
+   attribution).
 2. Embedding-grounded copilot answers ("list sermons that mention grace" —
    §11 cross-video query) once cross-video search exists.
 3. Social-content factory (quote cards, carousels, blog/newsletter drafts)

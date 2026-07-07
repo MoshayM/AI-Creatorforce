@@ -356,6 +356,9 @@ export default function ShortsVideoDetailPage() {
   const generateChurchPack = useMutation({
     mutationFn: () => api.shortsStudio.generateChurchPack(importedVideoId),
   });
+  const syncChapters = useMutation({
+    mutationFn: () => api.shortsStudio.syncChapters(importedVideoId).then((r) => r.data as { chapters: number }),
+  });
   const generateSmallVideos = useMutation({
     mutationFn: () => api.shortsStudio.generateSmallVideos(importedVideoId).then((r) => r.data as { created: number; reused: number; skippedTooShort: number }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['shorts-clips', importedVideoId] }),
@@ -650,6 +653,24 @@ export default function ShortsVideoDetailPage() {
                   {generateChurchPack.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookOpen className="w-3.5 h-3.5" />}
                   {generateChurchPack.isSuccess ? 'Church pack queued' : 'Church pack'}
                 </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm('Publish these chapter timestamps into the video’s YouTube description? This edits the live video.')) {
+                      syncChapters.mutate();
+                    }
+                  }}
+                  disabled={syncChapters.isPending || chapters.length < 3}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 rounded-lg text-xs hover:bg-brand-50 disabled:opacity-50"
+                  title={chapters.length < 3 ? 'YouTube needs at least 3 chapters' : 'Publish the chapter block into the YouTube description'}
+                >
+                  {syncChapters.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  {syncChapters.isSuccess ? `Synced ${syncChapters.data.chapters} ✓` : 'Sync to YouTube'}
+                </button>
+                {syncChapters.isError && (
+                  <span className="text-xs text-red-500">
+                    {(syncChapters.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Sync failed'}
+                  </span>
+                )}
               </span>
               <span className="flex items-center gap-3">
                 {generateSmallVideos.data && (

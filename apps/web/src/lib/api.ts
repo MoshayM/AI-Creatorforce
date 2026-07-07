@@ -116,6 +116,8 @@ export const api = {
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/topics`),
     highlights: (importedVideoId: string) =>
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/highlights`),
+    syncChapters: (importedVideoId: string) =>
+      apiClient.post(`/shorts-studio/videos/${importedVideoId}/sync-chapters`),
     generateChurchPack: (importedVideoId: string) =>
       apiClient.post(`/shorts-studio/videos/${importedVideoId}/church-pack`),
     generateSmallVideos: (importedVideoId: string) =>

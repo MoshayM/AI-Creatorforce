@@ -12,6 +12,7 @@ import { ClipRecommendationService } from '../shorts-studio/clip-recommendation.
 import { ShortsGenerationService } from '../shorts-studio/shorts-generation.service';
 import { SemanticSearchService } from '../shorts-studio/semantic-search.service';
 import { SmallVideoGenerationService } from '../shorts-studio/small-video-generation.service';
+import { ChapterSyncService } from '../shorts-studio/chapter-sync.service';
 import { IntentCacheService } from './intent-cache.service';
 
 const COPILOT_SYSTEM = `You are the CreatorForce Copilot — you drive a YouTube content platform for the user by emitting commands.
@@ -43,6 +44,7 @@ Command palette:
 - search_video {importedVideoId, query} — find moments by meaning ("find John 3:16", "where do they talk about grace") and get their timestamps
 - generate_small_videos {importedVideoId} — create one horizontal 1–10 min video candidate per detected chapter (render each afterwards with render_clip)
 - generate_church_pack {importedVideoId} — bible references, discussion questions, and a devotional for every chapter (requires the user's confirmation)
+- sync_chapters_to_youtube {importedVideoId} — publish the chapter timestamps into the video's YouTube description (edits the live video; requires the user's confirmation)
 - generate_clips {highlightId, clipTypes} — create candidate Shorts clips (clipTypes values: YOUTUBE_SHORTS, INSTAGRAM_REELS, TIKTOK, LINKEDIN_CLIPS, FACEBOOK_REELS, PODCAST_HIGHLIGHTS)
 - render_clip {shortClipId} — render a clip to vertical video
 - generate_captions {shortClipId}
@@ -97,6 +99,7 @@ export class CopilotService {
     private readonly generation: ShortsGenerationService,
     private readonly semanticSearch: SemanticSearchService,
     private readonly smallVideos: SmallVideoGenerationService,
+    private readonly chapterSync: ChapterSyncService,
     private readonly intentCache: IntentCacheService,
   ) {}
 
@@ -415,6 +418,15 @@ export class CopilotService {
         return {
           summary: 'Generating the church pack — bible references, discussion questions, and a devotional for every chapter. Check the Chapters tab in a moment.',
           data: { jobId: job.id },
+        };
+      }
+
+      case 'sync_chapters_to_youtube': {
+        await this.shorts.assertVideoOwnership(command.importedVideoId, userId);
+        const synced = await this.chapterSync.syncToYouTube(command.importedVideoId);
+        return {
+          summary: `Done — ${synced.chapters} chapter timestamps are now in the YouTube description. They'll show on the player shortly.`,
+          data: synced,
         };
       }
 

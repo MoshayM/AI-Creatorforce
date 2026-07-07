@@ -15,6 +15,7 @@ import { ThumbnailGenerationService } from './thumbnail-generation.service';
 import { ShortsExportService } from './shorts-export.service';
 import { SemanticSearchService } from './semantic-search.service';
 import { SmallVideoGenerationService } from './small-video-generation.service';
+import { ChapterSyncService } from './chapter-sync.service';
 import { JobsService } from '../jobs/jobs.service';
 
 class ImportVideoDto {
@@ -50,6 +51,7 @@ export class ShortsStudioController {
     private readonly exports: ShortsExportService,
     private readonly search: SemanticSearchService,
     private readonly smallVideos: SmallVideoGenerationService,
+    private readonly chapterSync: ChapterSyncService,
     private readonly jobs: JobsService,
   ) {}
 
@@ -166,6 +168,12 @@ export class ShortsStudioController {
   async generateSmallVideos(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
     await this.shorts.assertVideoOwnership(importedVideoId, user.sub);
     return this.smallVideos.generateFromChapters(importedVideoId);
+  }
+
+  @Post('videos/:importedVideoId/sync-chapters')
+  async syncChapters(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
+    await this.shorts.assertVideoOwnership(importedVideoId, user.sub);
+    return this.chapterSync.syncToYouTube(importedVideoId);
   }
 
   @Patch('chapters/:chapterId')
