@@ -20,7 +20,8 @@ function makeService(opts: {
     },
   } as unknown as PrismaService;
   const billing = { reconcilePendingPayments: jest.fn() } as unknown as BillingService;
-  return { service: new BillingJobsService(prisma, billing), audits, prisma };
+  const wallet = { expireLots: jest.fn().mockResolvedValue(0) } as never;
+  return { service: new BillingJobsService(prisma, billing, wallet), audits, prisma };
 }
 
 describe('BillingJobsService.reconcileLedger — §5.5 cache vs ledger', () => {

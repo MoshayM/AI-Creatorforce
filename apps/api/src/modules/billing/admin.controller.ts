@@ -83,6 +83,32 @@ export class AdminController {
     });
   }
 
+  @Post('users/:userId/recharges-frozen')
+  @RequirePermissions('admin:users')
+  async setRechargesFrozen(
+    @Param('userId') userId: string,
+    @Body() dto: { frozen: boolean; reason?: string },
+    @CurrentUser() admin: JwtPayload,
+  ) {
+    if (typeof dto.frozen !== 'boolean') throw new BadRequestException('frozen must be a boolean');
+    const before = await this.prisma.user.findUnique({ where: { id: userId }, select: { rechargesFrozen: true } });
+    if (!before) throw new BadRequestException('User not found');
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { rechargesFrozen: dto.frozen },
+      select: { id: true, email: true, rechargesFrozen: true },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        userId: admin.sub,
+        action: 'admin:recharges-frozen',
+        target: userId,
+        meta: { reason: dto.reason ?? null, before: before.rechargesFrozen, after: user.rechargesFrozen } as never,
+      },
+    });
+    return user;
+  }
+
   @Post('payments/:paymentId/refund')
   @RequirePermissions('billing:refund')
   async refund(

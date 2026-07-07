@@ -56,6 +56,68 @@ export function billingEnforced(): boolean {
   return (process.env['BILLING_ENFORCE_CREDITS'] ?? 'false').toLowerCase() === 'true';
 }
 
+// ── Credit lots (§5.4: "bonus expires first, purchased expires last") ────────
+
+/** Per-bucket TTL in days; null = never expires. Env-tunable. */
+export function lotTtlDays(bucket: CreditBucket): number | null {
+  const env = (name: string, fallback: number) => {
+    const v = Number(process.env[name]);
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  };
+  switch (bucket) {
+    case 'promotionalCredits': return env('CREDIT_TTL_PROMO_DAYS', 30);
+    case 'bonusCredits': return env('CREDIT_TTL_BONUS_DAYS', 90);
+    case 'referralCredits': return env('CREDIT_TTL_REFERRAL_DAYS', 180);
+    case 'purchasedCredits': return null;
+  }
+}
+
+export interface LotView {
+  id: string;
+  bucket: string;
+  remaining: number;
+  expiresAt: Date | null;
+}
+
+export interface LotTake {
+  lotId: string;
+  bucket: CreditBucket;
+  take: number;
+}
+
+/**
+ * Split a debit across lots: bucket-priority order first (§5.4), then
+ * soonest-expiring lot first within a bucket (never-expiring last). Throws
+ * on insufficient spendable total (expired lots are not spendable even if
+ * the expiry job hasn't swept them yet). Pure — exported for tests.
+ */
+export function planLotDebit(lots: LotView[], amount: number, now = new Date()): LotTake[] {
+  if (!Number.isInteger(amount) || amount <= 0) throw new BadRequestException('Debit amount must be a positive integer');
+  const live = lots.filter((l) => l.remaining > 0 && (l.expiresAt === null || l.expiresAt > now));
+  const priority = new Map(DEBIT_PRIORITY.map((b, i) => [b as string, i]));
+  const ordered = [...live].sort((a, b) => {
+    const p = (priority.get(a.bucket) ?? 99) - (priority.get(b.bucket) ?? 99);
+    if (p !== 0) return p;
+    if (a.expiresAt === null && b.expiresAt === null) return 0;
+    if (a.expiresAt === null) return 1;
+    if (b.expiresAt === null) return -1;
+    return a.expiresAt.getTime() - b.expiresAt.getTime();
+  });
+
+  const total = ordered.reduce((s, l) => s + l.remaining, 0);
+  if (total < amount) throw new BadRequestException('INSUFFICIENT_CREDITS');
+
+  const takes: LotTake[] = [];
+  let remaining = amount;
+  for (const lot of ordered) {
+    if (remaining === 0) break;
+    const take = Math.min(lot.remaining, remaining);
+    takes.push({ lotId: lot.id, bucket: lot.bucket as CreditBucket, take });
+    remaining -= take;
+  }
+  return takes;
+}
+
 export interface LedgerWrite {
   entryType: LedgerEntryType;
   amount: number;
@@ -114,6 +176,7 @@ export class WalletService {
     if (!bucket) throw new BadRequestException(`Entry type ${write.entryType} does not grant credits`);
 
     const wallet = await this.ensureWallet(userId);
+    const ttlDays = lotTtlDays(bucket);
     return this.withIdempotency(write.idempotencyKey, () =>
       this.prisma.$transaction(async (tx) => {
         const updated = await tx.wallet.update({
@@ -122,6 +185,16 @@ export class WalletService {
             balanceCredits: { increment: write.amount },
             [bucket]: { increment: write.amount },
             ...(write.entryType === 'PURCHASE' ? { lifetimePurchased: { increment: write.amount } } : {}),
+          },
+        });
+        // §5.4: every grant is a lot carrying its own expiry
+        const lot = await tx.creditLot.create({
+          data: {
+            walletId: wallet.id,
+            bucket,
+            amount: write.amount,
+            remaining: write.amount,
+            expiresAt: ttlDays === null ? null : new Date(Date.now() + ttlDays * 24 * 60 * 60_000),
           },
         });
         return tx.creditLedger.create({
@@ -133,7 +206,7 @@ export class WalletService {
             referenceType: write.referenceType,
             referenceId: write.referenceId,
             idempotencyKey: write.idempotencyKey,
-            metadata: ({ ...write.metadata, bucket }) as Prisma.InputJsonValue,
+            metadata: ({ ...write.metadata, bucket, lotId: lot.id, lotExpiresAt: lot.expiresAt?.toISOString() ?? null }) as Prisma.InputJsonValue,
           },
         });
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
@@ -145,18 +218,19 @@ export class WalletService {
     const wallet = await this.ensureWallet(userId);
     return this.withIdempotency(write.idempotencyKey, () =>
       this.prisma.$transaction(async (tx) => {
-        // Re-read inside the serializable transaction so concurrent debits
-        // can't both pass the balance check.
-        const fresh = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
-        const split = planDebit(
-          {
-            promotionalCredits: fresh.promotionalCredits,
-            bonusCredits: fresh.bonusCredits,
-            referralCredits: fresh.referralCredits,
-            purchasedCredits: fresh.purchasedCredits,
-          },
-          write.amount,
-        );
+        // Lots are the debit source of truth: re-read inside the serializable
+        // transaction so concurrent debits can't both consume the same lot.
+        const lots = await tx.creditLot.findMany({
+          where: { walletId: wallet.id, remaining: { gt: 0 } },
+          select: { id: true, bucket: true, remaining: true, expiresAt: true },
+        });
+        const takes = planLotDebit(lots, write.amount);
+
+        const split: Record<CreditBucket, number> = { promotionalCredits: 0, bonusCredits: 0, referralCredits: 0, purchasedCredits: 0 };
+        for (const t of takes) {
+          split[t.bucket] += t.take;
+          await tx.creditLot.update({ where: { id: t.lotId }, data: { remaining: { decrement: t.take } } });
+        }
         const updated = await tx.wallet.update({
           where: { id: wallet.id },
           data: {
@@ -177,11 +251,52 @@ export class WalletService {
             referenceType: write.referenceType,
             referenceId: write.referenceId,
             idempotencyKey: write.idempotencyKey,
-            metadata: ({ ...write.metadata, bucketSplit: split }) as Prisma.InputJsonValue,
+            metadata: ({ ...write.metadata, bucketSplit: split, lotSplit: takes }) as unknown as Prisma.InputJsonValue,
           },
         });
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
     );
+  }
+
+  /**
+   * §5.4/§11 credit-expiry-job: post an EXPIRY ledger debit per expired lot
+   * (idempotent on the lot id), zero the lot, and sync the cached counters.
+   * Returns how many lots were expired.
+   */
+  async expireLots(): Promise<number> {
+    const expired = await this.prisma.creditLot.findMany({
+      where: { remaining: { gt: 0 }, expiresAt: { lt: new Date() } },
+      take: 500,
+    });
+    for (const lot of expired) {
+      await this.withIdempotency(`expiry:${lot.id}`, () =>
+        this.prisma.$transaction(async (tx) => {
+          const fresh = await tx.creditLot.findUniqueOrThrow({ where: { id: lot.id } });
+          if (fresh.remaining <= 0) return null;
+          await tx.creditLot.update({ where: { id: lot.id }, data: { remaining: 0 } });
+          const updated = await tx.wallet.update({
+            where: { id: lot.walletId },
+            data: {
+              balanceCredits: { decrement: fresh.remaining },
+              [lot.bucket]: { decrement: fresh.remaining },
+            },
+          });
+          return tx.creditLedger.create({
+            data: {
+              walletId: lot.walletId,
+              entryType: 'EXPIRY',
+              amount: -fresh.remaining,
+              balanceAfter: updated.balanceCredits,
+              referenceType: 'ADMIN_ACTION',
+              referenceId: lot.id,
+              idempotencyKey: `expiry:${lot.id}`,
+              metadata: { bucket: lot.bucket, expiredAt: lot.expiresAt?.toISOString() } as Prisma.InputJsonValue,
+            },
+          });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+      );
+    }
+    return expired.length;
   }
 
   // ── Reserve → settle soft holds (§5.3) ─────────────────────────────────────

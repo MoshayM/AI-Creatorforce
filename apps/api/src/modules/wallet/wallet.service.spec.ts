@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { creditsForCost, planDebit, type BucketBalances } from './wallet.service';
+import { creditsForCost, lotTtlDays, planDebit, planLotDebit, type BucketBalances, type LotView } from './wallet.service';
 
 const buckets = (p: number, b: number, r: number, pur: number): BucketBalances => ({
   promotionalCredits: p,
@@ -41,6 +41,54 @@ describe('planDebit — §5.4 spend priority (promo → bonus → referral → p
     expect(() => planDebit(buckets(10, 0, 0, 0), 0)).toThrow(BadRequestException);
     expect(() => planDebit(buckets(10, 0, 0, 0), -3)).toThrow(BadRequestException);
     expect(() => planDebit(buckets(10, 0, 0, 0), 1.5)).toThrow(BadRequestException);
+  });
+});
+
+describe('planLotDebit — §5.4 lot consumption (bucket priority, soonest-expiry first)', () => {
+  const now = new Date('2026-07-07T00:00:00Z');
+  const lot = (id: string, bucket: string, remaining: number, expiresAt: Date | null): LotView => ({ id, bucket, remaining, expiresAt });
+  const days = (n: number) => new Date(now.getTime() + n * 24 * 60 * 60_000);
+
+  it('consumes cheaper buckets before purchased regardless of expiry', () => {
+    const takes = planLotDebit(
+      [lot('pur', 'purchasedCredits', 100, null), lot('promo', 'promotionalCredits', 10, days(5))],
+      15, now,
+    );
+    expect(takes).toEqual([
+      { lotId: 'promo', bucket: 'promotionalCredits', take: 10 },
+      { lotId: 'pur', bucket: 'purchasedCredits', take: 5 },
+    ]);
+  });
+
+  it('drains the soonest-expiring lot first within a bucket, never-expiring last', () => {
+    const takes = planLotDebit(
+      [
+        lot('b-never', 'bonusCredits', 50, null),
+        lot('b-late', 'bonusCredits', 50, days(30)),
+        lot('b-soon', 'bonusCredits', 50, days(2)),
+      ],
+      120, now,
+    );
+    expect(takes.map((t) => t.lotId)).toEqual(['b-soon', 'b-late', 'b-never']);
+  });
+
+  it('treats already-expired lots as unspendable even before the sweep', () => {
+    expect(() => planLotDebit([lot('dead', 'bonusCredits', 100, days(-1))], 1, now))
+      .toThrow('INSUFFICIENT_CREDITS');
+  });
+
+  it('fails closed when live lots cannot cover the amount', () => {
+    expect(() => planLotDebit([lot('a', 'purchasedCredits', 5, null)], 6, now))
+      .toThrow('INSUFFICIENT_CREDITS');
+  });
+});
+
+describe('lotTtlDays — §5.4 expiry policy', () => {
+  it('purchased credits never expire; promo expires soonest by default', () => {
+    expect(lotTtlDays('purchasedCredits')).toBeNull();
+    expect(lotTtlDays('promotionalCredits')).toBe(30);
+    expect(lotTtlDays('bonusCredits')).toBe(90);
+    expect(lotTtlDays('referralCredits')).toBe(180);
   });
 });
 

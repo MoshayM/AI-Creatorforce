@@ -83,6 +83,10 @@ export class BillingService {
     if (!Number.isInteger(amountUsd) || amountUsd < 1 || amountUsd > 10_000) {
       throw new BadRequestException('Recharge amount must be a whole USD amount between 1 and 10000');
     }
+    // §7: disputed accounts can't recharge pending fraud review — fail closed
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { rechargesFrozen: true } });
+    if (user?.rechargesFrozen) throw new BadRequestException('FRAUD_HOLD');
+
     const existing = await this.prisma.payment.findUnique({ where: { idempotencyKey } });
     if (existing) throw new BadRequestException('This recharge request was already started (idempotency key reuse)');
 
@@ -155,15 +159,19 @@ export class BillingService {
           data: { status: 'DISPUTED' },
         });
         const payment = await this.prisma.payment.findUnique({ where: { gatewayPaymentId: intent } });
+        // §7: freeze further recharges pending investigation
+        if (payment) {
+          await this.prisma.user.update({ where: { id: payment.userId }, data: { rechargesFrozen: true } }).catch(() => undefined);
+        }
         await this.prisma.auditLog.create({
           data: {
             userId: payment?.userId,
             action: 'system:dispute-created',
             target: payment?.id ?? intent,
-            meta: { disputeId: dispute.id, amount: dispute.amount, reason: dispute.reason, matched: disputed.count } as never,
+            meta: { disputeId: dispute.id, amount: dispute.amount, reason: dispute.reason, matched: disputed.count, rechargesFrozen: !!payment } as never,
           },
         }).catch(() => undefined);
-        this.logger.error(`[dispute] ${dispute.id} on ${intent} (${dispute.reason}) — payment flagged, needs review`);
+        this.logger.error(`[dispute] ${dispute.id} on ${intent} (${dispute.reason}) — payment flagged, recharges frozen, needs review`);
       }
     }
 

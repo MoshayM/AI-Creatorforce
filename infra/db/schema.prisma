@@ -28,6 +28,8 @@ model User {
   passwordHash  String?
   emailVerified DateTime?
   role          UserRole  @default(OWNER)
+  /** §7: set by dispute webhooks — blocks new recharges pending fraud review. */
+  rechargesFrozen Boolean @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -707,8 +709,30 @@ model Wallet {
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   entries      CreditLedger[]
   reservations CreditReservation[]
+  lots         CreditLot[]
 
   @@map("wallets")
+}
+
+// Credit lots (billing spec §5.4): every grant is a lot with its own expiry
+// so "bonus expires first, purchased expires last" is enforceable. Debits
+// consume lots in bucket-priority order, soonest-expiring first; the wallet
+// bucket counters are caches over lot remainders.
+model CreditLot {
+  id        String    @id @default(cuid())
+  walletId  String
+  /** CreditBucket name: promotionalCredits | bonusCredits | referralCredits | purchasedCredits */
+  bucket    String
+  amount    Int
+  remaining Int
+  /** null = never expires (purchased credits). */
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, expiresAt])
+  @@map("credit_lots")
 }
 
 enum LedgerEntryType {

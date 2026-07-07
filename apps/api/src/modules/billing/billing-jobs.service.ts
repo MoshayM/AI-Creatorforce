@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { BillingService } from './billing.service';
+import { WalletService } from '../wallet/wallet.service';
 
 const SWEEP_INTERVAL_MS = 15 * 60_000;
 const RECONCILE_INTERVAL_MS = 24 * 60 * 60_000;
@@ -19,6 +20,7 @@ export class BillingJobsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly billing: BillingService,
+    private readonly wallet: WalletService,
   ) {}
 
   onModuleInit() {
@@ -33,6 +35,13 @@ export class BillingJobsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async runReconciliation() {
+    // §5.4 credit-expiry-job runs BEFORE reconciliation so expired lots are
+    // already posted when balances are recomputed
+    const expired = await this.wallet.expireLots().catch((err) => {
+      this.logger.warn(`[expiry] failed: ${err instanceof Error ? err.message : String(err)}`);
+      return 0;
+    });
+    if (expired > 0) this.logger.log(`[expiry] ${expired} lot(s) expired`);
     await this.reconcileLedger();
     const settlements = await this.billing.reconcilePendingPayments().catch((err) => {
       this.logger.warn(`[settlement] failed: ${err instanceof Error ? err.message : String(err)}`);
