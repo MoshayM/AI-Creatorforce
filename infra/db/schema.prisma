@@ -1082,20 +1082,26 @@ model VoiceCommand {
 }
 
 // Token usage ledger — feeds the Analytics AI-usage dashboard (§12.2.8).
+// Attribution columns are loose strings (no FKs) so cost history survives
+// video/job deletion; they're filled from the AsyncLocalStorage AI context.
 model TokenUsage {
-  id        String        @id @default(cuid())
-  userId    String?
-  actionId  String?
-  provider  String
-  model     String
-  tokensIn  Int           @default(0)
-  tokensOut Int           @default(0)
-  costUsd   Float         @default(0)
-  fromCache Boolean       @default(false)
-  createdAt DateTime      @default(now())
+  id              String   @id @default(cuid())
+  userId          String?
+  actionId        String?
+  jobId           String?
+  projectId       String?
+  importedVideoId String?
+  provider        String
+  model           String
+  tokensIn        Int      @default(0)
+  tokensOut       Int      @default(0)
+  costUsd         Float    @default(0)
+  fromCache       Boolean  @default(false)
+  createdAt       DateTime @default(now())
 
   action ActionRecord? @relation(fields: [actionId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
+  @@index([importedVideoId, createdAt])
   @@map("token_usage")
 }

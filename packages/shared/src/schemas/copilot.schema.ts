@@ -34,6 +34,8 @@ export const CopilotCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('sync_chapters_to_youtube'), importedVideoId: z.string() }),
   // Social factory (§10): quote cards + carousel + blog + newsletter, one batched call
   z.object({ action: z.literal('generate_social_content'), importedVideoId: z.string() }),
+  // Deterministic-first (§12): the cost ledger is stored data — zero tokens
+  z.object({ action: z.literal('video_cost'), importedVideoId: z.string() }),
   z.object({
     action: z.literal('generate_clips'),
     highlightId: z.string(),

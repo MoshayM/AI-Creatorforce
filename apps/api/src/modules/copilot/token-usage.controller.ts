@@ -17,7 +17,7 @@ export class TokenUsageController {
   async summary(@CurrentUser() user: JwtPayload, @Query('days') days?: string) {
     const since = new Date(Date.now() - (Math.min(Number(days) || 30, 365)) * 24 * 60 * 60 * 1000);
 
-    const [ledger, byModel, actions] = await Promise.all([
+    const [ledger, byModel, actions, byVideoRaw] = await Promise.all([
       this.prisma.tokenUsage.aggregate({
         where: { createdAt: { gte: since } },
         _sum: { tokensIn: true, tokensOut: true, costUsd: true },
@@ -35,7 +35,23 @@ export class TokenUsageController {
         where: { userId: user.sub, createdAt: { gte: since }, source: { in: ['COPILOT', 'VOICE'] } },
         _count: true,
       }),
+      // Per-video breakdown (§12.2.8) — attribution via the ALS AI context
+      this.prisma.tokenUsage.groupBy({
+        by: ['importedVideoId'],
+        where: { createdAt: { gte: since }, importedVideoId: { not: null } },
+        _sum: { tokensIn: true, tokensOut: true, costUsd: true },
+        _count: true,
+        orderBy: { _sum: { costUsd: 'desc' } },
+        take: 15,
+      }),
     ]);
+
+    const videoTitles = new Map(
+      (await this.prisma.importedVideo.findMany({
+        where: { id: { in: byVideoRaw.map((v) => v.importedVideoId!).filter(Boolean) } },
+        select: { id: true, title: true },
+      })).map((v) => [v.id, v.title]),
+    );
 
     const hits = actions.find((a) => a.fromCache)?._count ?? 0;
     const misses = actions.find((a) => !a.fromCache)?._count ?? 0;
@@ -61,6 +77,14 @@ export class TokenUsageController {
         cacheHits: hits,
         cacheHitRate: hits + misses > 0 ? Number((hits / (hits + misses)).toFixed(3)) : null,
       },
+      byVideo: byVideoRaw.map((v) => ({
+        importedVideoId: v.importedVideoId,
+        title: videoTitles.get(v.importedVideoId!) ?? '(deleted video)',
+        calls: v._count,
+        tokensIn: v._sum.tokensIn ?? 0,
+        tokensOut: v._sum.tokensOut ?? 0,
+        costUsd: Number((v._sum.costUsd ?? 0).toFixed(4)),
+      })),
     };
   }
 }

@@ -14,6 +14,7 @@ import { SemanticSearchService } from '../shorts-studio/semantic-search.service'
 import { SmallVideoGenerationService } from '../shorts-studio/small-video-generation.service';
 import { ChapterSyncService } from '../shorts-studio/chapter-sync.service';
 import { IntentCacheService } from './intent-cache.service';
+import { runWithAiContext } from '../../common/ai-usage.context';
 
 const COPILOT_SYSTEM = `You are the CreatorForce Copilot — you drive a YouTube content platform for the user by emitting commands.
 
@@ -46,6 +47,7 @@ Command palette:
 - generate_church_pack {importedVideoId} — bible references, discussion questions, and a devotional for every chapter (requires the user's confirmation)
 - sync_chapters_to_youtube {importedVideoId} — publish the chapter timestamps into the video's YouTube description (edits the live video; requires the user's confirmation)
 - generate_social_content {importedVideoId} — quote cards, a carousel, a blog post, and a newsletter from the video's analysis (requires the user's confirmation)
+- video_cost {importedVideoId} — how much AI spend this video's analysis and content have used
 - generate_clips {highlightId, clipTypes} — create candidate Shorts clips (clipTypes values: YOUTUBE_SHORTS, INSTAGRAM_REELS, TIKTOK, LINKEDIN_CLIPS, FACEBOOK_REELS, PODCAST_HIGHLIGHTS)
 - render_clip {shortClipId} — render a clip to vertical video
 - generate_captions {shortClipId}
@@ -147,7 +149,7 @@ export class CopilotService {
       const pendingNote = req.pendingCommand
         ? `\n\nPENDING CONFIRMATION: this command awaits the user's yes/no: ${JSON.stringify(req.pendingCommand)}. If their latest message confirms it (yes/haan/ok/go ahead, any language), return EXACTLY that command. If they decline, set command to null and acknowledge.`
         : '';
-      decision = await callAIStructured(
+      decision = await runWithAiContext({ userId }, () => callAIStructured(
         [
           ...req.messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
           {
@@ -161,7 +163,7 @@ export class CopilotService {
           maxTokens: 1024,
           onUsage: (e) => { tokensUsed += e.tokensIn + e.tokensOut; },
         },
-      );
+      ));
       if (!req.pendingCommand) await this.intentCache.maybeStore(lastUserText, decision);
     }
 
@@ -439,6 +441,23 @@ export class CopilotService {
         return {
           summary: 'Creating your social pack — quote cards, a carousel, a blog post, and a newsletter. Check the Social tab in a moment.',
           data: { jobId: job.id },
+        };
+      }
+
+      case 'video_cost': {
+        // Deterministic-first (§12): ledger aggregate, zero LLM tokens
+        await this.shorts.assertVideoOwnership(command.importedVideoId, userId);
+        const agg = await this.prisma.tokenUsage.aggregate({
+          where: { importedVideoId: command.importedVideoId },
+          _sum: { tokensIn: true, tokensOut: true, costUsd: true },
+          _count: true,
+        });
+        const cost = agg._sum.costUsd ?? 0;
+        return {
+          summary: agg._count > 0
+            ? `This video has used about $${cost.toFixed(3)} of AI across ${agg._count} calls (${(agg._sum.tokensIn ?? 0).toLocaleString()} tokens in, ${(agg._sum.tokensOut ?? 0).toLocaleString()} out).`
+            : 'No attributed AI spend for this video yet — cost tracking starts with its next analysis or generation run.',
+          data: { calls: agg._count, tokensIn: agg._sum.tokensIn ?? 0, tokensOut: agg._sum.tokensOut ?? 0, costUsd: Number(cost.toFixed(4)) },
         };
       }
 

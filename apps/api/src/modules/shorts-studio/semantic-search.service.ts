@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { embedTexts } from '@cf/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { runWithAiContext } from '../../common/ai-usage.context';
 
 export interface RankedSegment<T> {
   item: T;
@@ -57,7 +58,8 @@ export class SemanticSearchService {
       return { query, results: [], embeddedSegments: 0, totalSegments, needsEmbeddings: totalSegments > 0 };
     }
 
-    const { embeddings } = await embedTexts([query]);
+    // Query embeddings run outside any job — attribute them to the video here
+    const { embeddings } = await runWithAiContext({ importedVideoId }, () => embedTexts([query]));
     const ranked = rankBySimilarity(
       embeddings[0]!,
       segments.map((s) => ({ item: s, vector: s.embedding })),

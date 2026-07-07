@@ -39,6 +39,7 @@ import { checkDurations, analyzeLoudness } from '../modules/media/quality.util';
 import { validateMediaFile, formatIssues } from '../modules/media/media-validation.util';
 import { buildSrt, buildVtt, fitCuesToDuration } from '../modules/media/subtitle.util';
 import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, type PipelineScope, type PipelineStage } from './pipeline-plan';
+import { runWithAiContext } from '../common/ai-usage.context';
 import { EventsGateway } from '../gateway/events.gateway';
 import { AGENT_QUEUE } from '../modules/jobs/jobs.module';
 import { callAIStructured } from '@cf/shared';
@@ -109,7 +110,12 @@ export class SupervisorWorker extends WorkerHost {
     this.events.emitJobUpdate(jobId, { status: 'RUNNING', type }, projectId);
 
     try {
-      const result = await this.dispatch(type, projectId, jobId, payload);
+      // §12.2.8 cost attribution: every provider call inside this dispatch —
+      // including SHORTS_ANALYZE child stages — inherits this context.
+      const result = await runWithAiContext(
+        { jobId, projectId, importedVideoId: payload['importedVideoId'] as string | undefined },
+        () => this.dispatch(type, projectId, jobId, payload),
+      );
       const elapsed = Date.now() - t0;
       // METADATA sets job to WAITING_APPROVAL mid-dispatch — don't overwrite that status,
       // but always persist the result so downstream can read it.

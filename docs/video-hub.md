@@ -175,11 +175,29 @@
   covered by ClipTypes; this slice completes §10's text artifacts (the
   devotional shipped with the church pack).
 
+### Per-video cost breakdown (§12.2.8, Phase 6 slice 2)
+
+- **Attribution via AsyncLocalStorage** (`common/ai-usage.context.ts`): the
+  supervisor wraps every job dispatch in `{jobId, projectId,
+  importedVideoId}` context, the copilot wraps chat turns in `{userId}`, and
+  semantic search wraps query embeddings in `{importedVideoId}`. The global
+  usage listener reads whatever context is active — zero per-call plumbing,
+  child pipeline stages inherit automatically.
+- **`token_usage`** gained loose (FK-less, history survives deletion)
+  `jobId`/`projectId`/`importedVideoId` columns; `userId` is now actually
+  populated for copilot turns.
+- **Surfaces**: `/token-usage/summary` returns `byVideo` (top 15 by cost);
+  Analytics shows a cost-by-video table under the AI Usage card; copilot
+  `video_cost` answers "how much has this video cost?" at zero tokens
+  (§12 deterministic-first).
+- Rows written before this slice stay unattributed (they predate the
+  context) — only new calls are broken down.
+
 ## Next steps (Phase 6 remainder)
 
-1. Per-video AI cost breakdown on Analytics (needs token_usage → video
-   attribution).
-2. Embedding-grounded copilot answers ("list sermons that mention grace" —
+1. Embedding-grounded copilot answers ("list sermons that mention grace" —
    §11 cross-video query) once cross-video search exists.
-3. Quote-card IMAGE rendering (1080×1080 PNG via the thumbnail/ffmpeg path) —
+2. Quote-card IMAGE rendering (1080×1080 PNG via the thumbnail/ffmpeg path) —
    text data is ready in social_content.
+3. Phase 7 hardening: 4–8 hr video load tests (windowed chapter detection,
+   embedding batch throughput).

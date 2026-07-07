@@ -39,6 +39,7 @@ interface TokenUsageSummary {
   totals: { calls: number; tokensIn: number; tokensOut: number; costUsd: number };
   byModel: Array<{ provider: string; model: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number }>;
   copilot: { turns: number; cacheHits: number; cacheHitRate: number | null };
+  byVideo: Array<{ importedVideoId: string; title: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number }>;
 }
 
 const API = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4007/api';
@@ -164,6 +165,31 @@ export default function AnalyticsPage() {
                   : '—'}
               </p>
             </div>
+          </div>
+        )}
+        {tokenUsage !== 'unavailable' && tokenUsage !== null && (tokenUsage.byVideo ?? []).length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cost by video</p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-400">
+                  <th className="pb-1 font-medium">Video</th>
+                  <th className="pb-1 font-medium text-right">Calls</th>
+                  <th className="pb-1 font-medium text-right">Tokens</th>
+                  <th className="pb-1 font-medium text-right">Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tokenUsage.byVideo.map((v) => (
+                  <tr key={v.importedVideoId} className="border-t border-gray-50">
+                    <td className="py-1.5 text-gray-800 truncate max-w-[280px]" title={v.title}>{v.title}</td>
+                    <td className="py-1.5 text-right text-gray-600">{v.calls}</td>
+                    <td className="py-1.5 text-right text-gray-600">{(v.tokensIn + v.tokensOut).toLocaleString()}</td>
+                    <td className="py-1.5 text-right font-medium text-gray-900">${v.costUsd.toFixed(3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
