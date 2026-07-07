@@ -9,6 +9,7 @@ export const SHORTS_IMPORT_STAGES = [
   'SCENE_DETECTION',
   'TOPIC_SEGMENTATION',
   'HIGHLIGHT_DETECTION',
+  'CHAPTER_DETECTION',
 ] as const;
 
 @Injectable()
@@ -71,11 +72,12 @@ export class ShortsStudioService {
     const latestByType = new Map<string, (typeof jobs)[number]>();
     for (const j of jobs) if (!latestByType.has(j.type)) latestByType.set(j.type, j);
 
-    const [transcriptSegments, scenes, topicSegments, highlights] = await Promise.all([
+    const [transcriptSegments, scenes, topicSegments, highlights, chapters] = await Promise.all([
       this.prisma.transcriptSegment.count({ where: { importedVideoId } }),
       this.prisma.videoScene.count({ where: { importedVideoId } }),
       this.prisma.topicSegment.count({ where: { importedVideoId } }),
       this.prisma.highlight.count({ where: { topicSegment: { importedVideoId } } }),
+      this.prisma.chapter.count({ where: { importedVideoId } }),
     ]);
 
     const satisfiedBy: Record<(typeof SHORTS_IMPORT_STAGES)[number], boolean> = {
@@ -84,13 +86,14 @@ export class ShortsStudioService {
       SCENE_DETECTION: scenes > 0,
       TOPIC_SEGMENTATION: topicSegments > 0,
       HIGHLIGHT_DETECTION: highlights > 0,
+      CHAPTER_DETECTION: chapters > 0,
     };
 
     return {
       importedVideoId,
       transcriptStatus: video.transcriptStatus,
       sourceDownloaded: !!video.sourceAssetId,
-      counts: { transcriptSegments, scenes, topicSegments, highlights },
+      counts: { transcriptSegments, scenes, topicSegments, highlights, chapters },
       pipeline: latestByType.get('SHORTS_ANALYZE') ?? null,
       stages: SHORTS_IMPORT_STAGES.map((type) => ({
         type,
@@ -132,6 +135,36 @@ export class ShortsStudioService {
       where: { topicSegment: { importedVideoId } },
       orderBy: { finalScore: 'desc' },
       include: { topicSegment: true },
+    });
+  }
+
+  async getChapters(importedVideoId: string, userId: string) {
+    await this.assertVideoOwnership(importedVideoId, userId);
+    return this.prisma.chapter.findMany({
+      where: { importedVideoId },
+      orderBy: { startMs: 'asc' },
+    });
+  }
+
+  /** Standalone CHAPTER_DETECTION run — for videos analyzed before chapters shipped. */
+  async enqueueChapterDetection(importedVideoId: string, userId: string) {
+    const video = await this.assertVideoOwnership(importedVideoId, userId);
+    return this.jobs.enqueue(video.projectId, 'CHAPTER_DETECTION', { importedVideoId });
+  }
+
+  /** Manual rename/edit (Ai-video edit.md §11) — flagged so re-detection keeps it. */
+  async updateChapter(chapterId: string, userId: string, patch: { title?: string; summary?: string }) {
+    const chapter = await this.prisma.chapter.findFirst({
+      where: { id: chapterId, importedVideo: { project: { userId } } },
+    });
+    if (!chapter) throw new NotFoundException('Chapter not found');
+    return this.prisma.chapter.update({
+      where: { id: chapterId },
+      data: {
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.summary !== undefined ? { summary: patch.summary } : {}),
+        editedByUser: true,
+      },
     });
   }
 

@@ -13,6 +13,7 @@ import { TranscriptService } from './transcript.service';
 import { SceneDetectionService } from './scene-detection.service';
 import { TopicSegmentationService } from './topic-segmentation.service';
 import { HighlightScoringService } from './highlight-scoring.service';
+import { ChapterDetectionService } from './chapter-detection.service';
 import { ClipRecommendationService } from './clip-recommendation.service';
 import { ShortsGenerationService } from './shorts-generation.service';
 import { TimelineService } from './timeline.service';
@@ -34,6 +35,7 @@ import { ShortsExportService } from './shorts-export.service';
     SceneDetectionService,
     TopicSegmentationService,
     HighlightScoringService,
+    ChapterDetectionService,
     ClipRecommendationService,
     ShortsGenerationService,
     TimelineService,
@@ -52,6 +54,7 @@ import { ShortsExportService } from './shorts-export.service';
     SceneDetectionService,
     TopicSegmentationService,
     HighlightScoringService,
+    ChapterDetectionService,
     ClipRecommendationService,
     ShortsGenerationService,
     TimelineService,

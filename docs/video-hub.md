@@ -13,7 +13,7 @@
 | 2 — Token Governor | `token_usage` ledger populated by a global `setAIUsageListener` hook in the shared aiClient (covers agents + workers + copilot). Phrase→intent Redis cache (`IntentCacheService`) answers repeated commands with zero tokens. Cache-hit rate + cost surfaced on the Analytics page via `GET /token-usage/summary`. | ✅ shipped |
 | 3 — Copilot Panel | Chat + voice panel with confirmation gates, multilingual replies (spoken), hands-free conversation loop, spoken approvals. | ✅ shipped (predates this doc) |
 | 4 — Voice Control | Voice input inside the copilot panel incl. spoken confirmation of gated commands; `voice_commands` history now recorded per spoken turn. Wake-word + standalone Voice Control Bar | ⏳ partial |
-| 5 — Chapters, Small Videos, Social Content, Church AI | New analysis signals (speakers, OCR, embeddings), chapter detection, small-video + social-content factories | ❌ not started |
+| 5 — Chapters, Small Videos, Social Content, Church AI | New analysis signals (speakers, OCR, embeddings), chapter detection, small-video + social-content factories | ⏳ chapter detection shipped |
 | 6 — Analytics dashboard + YouTube chapter sync | AI Usage card shipped; full per-video cost breakdown + chapter sync | ⏳ partial |
 | 7 — Hardening / load tests | 4–8 hr video loads | ❌ not started |
 
@@ -61,10 +61,28 @@
 - Undo ring buffer (§7.4) deferred: `actions` records everything needed to
   build it, but no inverse-operations engine exists yet.
 
-## Next steps (Phase 5 entry points)
+### Chapter detection (§5/§11, Phase 5 slice 1)
 
-1. Chapter detection job (`CHAPTER_DETECTION`) after topic analysis; `chapters`
-   table + Chapters accordion on the analysis page.
-2. Embeddings job + pgvector for NL search ("find John 3:16").
-3. Small-video generation service reusing the Shorts render path with
-   horizontal presets.
+- **`chapters` table** (`Chapter`): contiguous partition of the video —
+  startMs/endMs, title, summary, keyPoints, confidence, `source`
+  (DETECTED | IMPORTED, the latter reserved for Phase 6 YouTube sync),
+  `editedByUser` so re-detection never clobbers a manual rename.
+- **`CHAPTER_DETECTION` job**: final SHORTS_ANALYZE stage. Consumes the stored
+  topic segments (never the raw transcript — §12 token rules) in ONE batched
+  LLM call; boundaries are snapped server-side to real topic starts, first
+  chapter anchored to 0:00, sub-10s chapters merged (YouTube rules). Self-skips
+  when chapters exist. `POST /videos/:id/detect-chapters` runs it standalone
+  for videos analyzed before this shipped.
+- **REST**: `GET /videos/:id/chapters`, `PATCH /chapters/:id` (rename/edit).
+- **Copilot**: `list_chapters` command — deterministic zero-token lookup (§12.1
+  names "chapter list" explicitly).
+- **UI**: Chapters tab on the analysis page — accordion with key points,
+  inline rename, and a Detect-chapters button when empty.
+
+## Next steps (Phase 5 remainder)
+
+1. Embeddings job + pgvector for NL search ("find John 3:16").
+2. Small-video generation service reusing the Shorts render path with
+   horizontal presets (chapter → small video is now a direct mapping).
+3. Church AI intelligence pack (chapter summaries → devotionals, discussion
+   questions) and Phase 6 YouTube chapter timestamp sync.

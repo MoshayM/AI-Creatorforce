@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, BadRequestException } from '@nestjs/common';
-import { IsString, IsArray, IsIn } from 'class-validator';
+import { IsString, IsArray, IsIn, IsOptional } from 'class-validator';
 import type { ClipType } from '@prisma/client';
 import { ApplyCommandsSchema, AssistCapabilitySchema } from '@cf/shared';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -24,6 +24,11 @@ const CLIP_TYPES = ['YOUTUBE_SHORTS', 'INSTAGRAM_REELS', 'TIKTOK', 'LINKEDIN_CLI
 
 class GenerateClipsDto {
   @IsArray() @IsIn(CLIP_TYPES, { each: true }) clipTypes!: ClipType[];
+}
+
+class UpdateChapterDto {
+  @IsOptional() @IsString() title?: string;
+  @IsOptional() @IsString() summary?: string;
 }
 
 // ai.md Section 18 — routes live under /api/v1/shorts-studio (existing global
@@ -114,6 +119,30 @@ export class ShortsStudioController {
   @Get('videos/:importedVideoId/clips')
   async videoClips(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
     return this.shorts.getClipsForVideo(importedVideoId, user.sub);
+  }
+
+  // ── Chapters (Ai-video edit.md §5/§11, Phase 5) ─────────────────────────────
+
+  @Get('videos/:importedVideoId/chapters')
+  async chapters(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
+    return this.shorts.getChapters(importedVideoId, user.sub);
+  }
+
+  @Post('videos/:importedVideoId/detect-chapters')
+  async detectChapters(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
+    return this.shorts.enqueueChapterDetection(importedVideoId, user.sub);
+  }
+
+  @Patch('chapters/:chapterId')
+  async updateChapter(
+    @Param('chapterId') chapterId: string,
+    @Body() dto: UpdateChapterDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (dto.title === undefined && dto.summary === undefined) {
+      throw new BadRequestException('Provide title and/or summary');
+    }
+    return this.shorts.updateChapter(chapterId, user.sub, dto);
   }
 
   // ── Generate (18.3) ─────────────────────────────────────────────────────────

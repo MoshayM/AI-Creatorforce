@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle, ChevronDown, ChevronRight, BookOpen, Check } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Topic {
@@ -15,6 +15,17 @@ interface Topic {
   summary: string;
   confidence: number;
   highlight: { id: string; finalScore: number } | null;
+}
+
+interface Chapter {
+  id: string;
+  startMs: number;
+  endMs: number;
+  title: string;
+  summary: string;
+  keyPoints: string[];
+  confidence: number;
+  editedByUser: boolean;
 }
 
 interface Clip {
@@ -308,15 +319,34 @@ function HighlightCard({ h, open, onToggle }: { h: Highlight; open: boolean; onT
 
 export default function ShortsVideoDetailPage() {
   const { importedVideoId } = useParams<{ importedVideoId: string }>();
-  const [tab, setTab] = useState<'highlights' | 'topics'>('highlights');
+  const qc = useQueryClient();
+  const [tab, setTab] = useState<'highlights' | 'topics' | 'chapters'>('highlights');
   const [openHighlights, setOpenHighlights] = useState<Set<string>>(new Set());
   const [openTopics, setOpenTopics] = useState<Set<string>>(new Set());
+  const [openChapters, setOpenChapters] = useState<Set<string>>(new Set());
+  const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+  const [chapterTitleDraft, setChapterTitleDraft] = useState('');
   const [clipsOpen, setClipsOpen] = useState(true);
   const [openClips, setOpenClips] = useState<Set<string>>(new Set());
 
   const { data: topics = [], isLoading: loadingTopics } = useQuery<Topic[]>({
     queryKey: ['shorts-topics', importedVideoId],
     queryFn: () => api.shortsStudio.topics(importedVideoId).then((r) => r.data as Topic[]),
+  });
+  const { data: chapters = [] } = useQuery<Chapter[]>({
+    queryKey: ['shorts-chapters', importedVideoId],
+    queryFn: () => api.shortsStudio.chapters(importedVideoId).then((r) => r.data as Chapter[]),
+  });
+  const detectChapters = useMutation({
+    mutationFn: () => api.shortsStudio.detectChapters(importedVideoId),
+  });
+  const renameChapter = useMutation({
+    mutationFn: ({ chapterId, title }: { chapterId: string; title: string }) =>
+      api.shortsStudio.updateChapter(chapterId, { title }),
+    onSuccess: () => {
+      setEditingChapterId(null);
+      void qc.invalidateQueries({ queryKey: ['shorts-chapters', importedVideoId] });
+    },
   });
   const { data: highlights = [], isLoading: loadingHighlights } = useQuery<Highlight[]>({
     queryKey: ['shorts-highlights', importedVideoId],
@@ -351,6 +381,12 @@ export default function ShortsVideoDetailPage() {
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg ${tab === 'topics' ? 'bg-white shadow-sm font-semibold text-gray-900' : 'text-gray-500'}`}
           >
             <ListTree className="w-4 h-4" /> Topics ({topics.length})
+          </button>
+          <button
+            onClick={() => setTab('chapters')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg ${tab === 'chapters' ? 'bg-white shadow-sm font-semibold text-gray-900' : 'text-gray-500'}`}
+          >
+            <BookOpen className="w-4 h-4" /> Chapters ({chapters.length})
           </button>
         </div>
       </div>
@@ -531,6 +567,112 @@ export default function ShortsVideoDetailPage() {
                     <p className="text-sm text-gray-600">{t.summary}</p>
                     <p className="text-[11px] text-gray-400 mt-2">
                       {fmt(t.startMs)}–{fmt(t.endMs)} · {Math.round((t.endMs - t.startMs) / 1000)}s · confidence {(t.confidence * 100).toFixed(0)}%
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!loading && tab === 'chapters' && (
+        <div className="space-y-2">
+          {chapters.length === 0 && (
+            <div className="text-center py-16">
+              <p className="text-gray-400 mb-4">No chapters yet.</p>
+              <button
+                onClick={() => detectChapters.mutate()}
+                disabled={detectChapters.isPending || detectChapters.isSuccess || topics.length === 0}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+              >
+                {detectChapters.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
+                {detectChapters.isSuccess ? 'Detecting — check back shortly' : 'Detect chapters'}
+              </button>
+              {topics.length === 0 && (
+                <p className="text-xs text-gray-400 mt-2">Chapters are derived from topics — run Analyze first.</p>
+              )}
+            </div>
+          )}
+          {chapters.length > 0 && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => setOpenChapters((prev) => prev.size === chapters.length ? new Set() : new Set(chapters.map((c) => c.id)))}
+                className="text-xs text-brand-600 hover:underline"
+              >
+                {openChapters.size === chapters.length ? 'Collapse all' : 'Expand all'}
+              </button>
+            </div>
+          )}
+          {chapters.map((c, i) => {
+            const open = openChapters.has(c.id);
+            const editing = editingChapterId === c.id;
+            const toggle = () => setOpenChapters((prev) => {
+              const next = new Set(prev);
+              if (next.has(c.id)) next.delete(c.id); else next.add(c.id);
+              return next;
+            });
+            const saveTitle = () => {
+              const title = chapterTitleDraft.trim();
+              if (title && title !== c.title) renameChapter.mutate({ chapterId: c.id, title });
+              else setEditingChapterId(null);
+            };
+            return (
+              <div key={c.id} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                <div
+                  onClick={editing ? undefined : toggle}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (!editing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(); } }}
+                  className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                >
+                  {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                  <span className="text-xs text-gray-400 font-mono shrink-0 w-24">{fmt(c.startMs)}–{fmt(c.endMs)}</span>
+                  <span className="px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full text-[11px] font-medium shrink-0">Ch. {i + 1}</span>
+                  {editing ? (
+                    <span className="flex items-center gap-1.5 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        autoFocus
+                        value={chapterTitleDraft}
+                        onChange={(e) => setChapterTitleDraft(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditingChapterId(null); }}
+                        className="flex-1 min-w-0 text-sm border border-brand-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                      />
+                      <button onClick={saveTitle} disabled={renameChapter.isPending} className="text-brand-600 hover:text-brand-800 shrink-0">
+                        {renameChapter.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      </button>
+                    </span>
+                  ) : (
+                    <>
+                      <p className="font-medium text-gray-900 truncate text-sm flex-1 min-w-0">
+                        {c.title}
+                        {c.editedByUser && <span className="ml-1.5 text-[10px] text-gray-400" title="Edited by you">✎</span>}
+                      </p>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setEditingChapterId(c.id); setChapterTitleDraft(c.title); }}
+                        className="text-gray-300 hover:text-brand-600 shrink-0"
+                        title="Rename chapter"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
+                  <span className="text-[11px] text-gray-400 shrink-0">{Math.round((c.endMs - c.startMs) / 1000)}s</span>
+                </div>
+                {open && (
+                  <div className="px-4 pb-4 pt-2 border-t border-gray-50">
+                    <p className="text-sm text-gray-600">{c.summary}</p>
+                    {c.keyPoints.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {c.keyPoints.map((kp, j) => (
+                          <li key={j} className="text-xs text-gray-500 flex gap-1.5">
+                            <span className="text-brand-400">•</span> {kp}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <p className="text-[11px] text-gray-400 mt-2">
+                      {fmt(c.startMs)}–{fmt(c.endMs)} · confidence {(c.confidence * 100).toFixed(0)}%
                     </p>
                   </div>
                 )}

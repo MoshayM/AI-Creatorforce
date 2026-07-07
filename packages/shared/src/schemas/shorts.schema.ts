@@ -39,6 +39,26 @@ export const TopicSegmentationOutputSchema = z.object({
 });
 export type TopicSegmentationOutput = z.infer<typeof TopicSegmentationOutputSchema>;
 
+// ── Chapter detection (Ai-video edit.md §5/§11, Phase 5) ─────────────────────
+// Chapters partition the whole video; the model only proposes boundaries
+// (startMs snapped to topic-segment starts) — endMs is derived server-side so
+// chapters are contiguous by construction.
+
+export const ChapterCandidateSchema = z.object({
+  /** Must equal the startMs of one of the topic segments given in the prompt. */
+  startMs: z.number().int().nonnegative(),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  keyPoints: z.array(z.string()).max(5).default([]),
+  confidence: z.number().min(0).max(1),
+});
+export type ChapterCandidate = z.infer<typeof ChapterCandidateSchema>;
+
+export const ChapterDetectionOutputSchema = z.object({
+  chapters: z.array(ChapterCandidateSchema),
+});
+export type ChapterDetectionOutput = z.infer<typeof ChapterDetectionOutputSchema>;
+
 /** The 9 score dimensions, 0–100 each (ai.md Section 5.1). */
 export const HIGHLIGHT_DIMENSIONS = [
   'virality',

@@ -189,6 +189,8 @@ enum JobType {
   SHORTS_RENDER
   SHORTS_EXPORT
   SHORTS_PUBLISH
+  // Video Intelligence (Ai-video edit.md §5, Phase 5)
+  CHAPTER_DETECTION
 }
 
 enum JobStatus {
@@ -643,10 +645,42 @@ model ImportedVideo {
   transcriptSegments TranscriptSegment[]
   scenes             VideoScene[]
   topicSegments      TopicSegment[]
+  chapters           Chapter[]
 
   @@unique([projectId, youtubeVideoId])
   @@index([projectId])
   @@map("imported_videos")
+}
+
+// ── Chapters (Ai-video edit.md §5/§11, Phase 5) ────────────────────────────────
+// YouTube-style chapters derived from the topic-segment analysis graph — one
+// contiguous partition of the video. `source` distinguishes AI-detected rows
+// from chapters imported from YouTube (Phase 6 sync); user edits are flagged so
+// re-detection never overwrites a manual rename.
+
+enum ChapterSource {
+  DETECTED
+  IMPORTED
+}
+
+model Chapter {
+  id              String        @id @default(cuid())
+  importedVideoId String
+  startMs         Int
+  endMs           Int
+  title           String
+  summary         String        @db.Text
+  keyPoints       String[]      @default([])
+  confidence      Float
+  source          ChapterSource @default(DETECTED)
+  editedByUser    Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  importedVideo ImportedVideo @relation(fields: [importedVideoId], references: [id], onDelete: Cascade)
+
+  @@index([importedVideoId, startMs])
+  @@map("chapters")
 }
 
 enum TranscriptStatus {

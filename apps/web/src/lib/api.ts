@@ -116,6 +116,12 @@ export const api = {
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/topics`),
     highlights: (importedVideoId: string) =>
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/highlights`),
+    chapters: (importedVideoId: string) =>
+      apiClient.get(`/shorts-studio/videos/${importedVideoId}/chapters`),
+    detectChapters: (importedVideoId: string) =>
+      apiClient.post(`/shorts-studio/videos/${importedVideoId}/detect-chapters`),
+    updateChapter: (chapterId: string, patch: { title?: string; summary?: string }) =>
+      apiClient.patch(`/shorts-studio/chapters/${chapterId}`, patch),
     recommendations: (importedVideoId: string, limit = 10) =>
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/recommendations?limit=${limit}`),
     generateClips: (highlightId: string, clipTypes: string[]) =>

@@ -25,6 +25,7 @@ import { TranscriptService } from '../modules/shorts-studio/transcript.service';
 import { SceneDetectionService } from '../modules/shorts-studio/scene-detection.service';
 import { TopicSegmentationService } from '../modules/shorts-studio/topic-segmentation.service';
 import { HighlightScoringService } from '../modules/shorts-studio/highlight-scoring.service';
+import { ChapterDetectionService } from '../modules/shorts-studio/chapter-detection.service';
 import { CaptionGenerationService } from '../modules/shorts-studio/caption-generation.service';
 import { ShortsRenderService } from '../modules/shorts-studio/shorts-render.service';
 import { ShortsExportService } from '../modules/shorts-studio/shorts-export.service';
@@ -85,6 +86,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly sceneDetection: SceneDetectionService,
     private readonly topicSegmentation: TopicSegmentationService,
     private readonly highlightScoring: HighlightScoringService,
+    private readonly chapterDetection: ChapterDetectionService,
     private readonly captionGeneration: CaptionGenerationService,
     private readonly shortsRender: ShortsRenderService,
     private readonly shortsExport: ShortsExportService,
@@ -1165,6 +1167,12 @@ export class SupervisorWorker extends WorkerHost {
         const importedVideoId = payload['importedVideoId'] as string;
         if (!importedVideoId) throw new Error('HIGHLIGHT_DETECTION requires payload.importedVideoId');
         return this.highlightScoring.ensureHighlights(importedVideoId, (m) => this.log(jobId, projectId, m));
+      }
+
+      case 'CHAPTER_DETECTION': {
+        const importedVideoId = payload['importedVideoId'] as string;
+        if (!importedVideoId) throw new Error('CHAPTER_DETECTION requires payload.importedVideoId');
+        return this.chapterDetection.ensureChapters(importedVideoId, (m) => this.log(jobId, projectId, m));
       }
 
       case 'CAPTION_GENERATION': {

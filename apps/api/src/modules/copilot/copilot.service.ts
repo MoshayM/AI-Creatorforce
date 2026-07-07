@@ -37,6 +37,7 @@ Command palette:
 - cancel_job {jobId}
 - analyze_video {importedVideoId} — run the Shorts analysis pipeline
 - list_highlights {importedVideoId, limit} — top Shorts moments for an analyzed video
+- list_chapters {importedVideoId} — YouTube-style chapters detected for an analyzed video
 - generate_clips {highlightId, clipTypes} — create candidate Shorts clips (clipTypes values: YOUTUBE_SHORTS, INSTAGRAM_REELS, TIKTOK, LINKEDIN_CLIPS, FACEBOOK_REELS, PODCAST_HIGHLIGHTS)
 - render_clip {shortClipId} — render a clip to vertical video
 - generate_captions {shortClipId}
@@ -342,6 +343,28 @@ export class CopilotService {
         const lines = recs.map((r, i) =>
           `${i + 1}. [${Math.round(r.finalScore)}] ${r.titleSuggestion} (${Math.round(r.durationMs / 1000)}s, highlightId ${r.highlightId})`);
         return { summary: lines.length ? `Top highlights:\n${lines.join('\n')}` : 'No highlights yet — run the analysis first.', data: recs };
+      }
+
+      case 'list_chapters': {
+        // Deterministic-first (§12): stored analysis data, zero LLM tokens
+        await this.shorts.assertVideoOwnership(command.importedVideoId, userId);
+        const chapters = await this.prisma.chapter.findMany({
+          where: { importedVideoId: command.importedVideoId },
+          orderBy: { startMs: 'asc' },
+          select: { id: true, startMs: true, endMs: true, title: true, summary: true },
+        });
+        const stamp = (ms: number) => {
+          const s = Math.floor(ms / 1000);
+          const h = Math.floor(s / 3600);
+          const mm = Math.floor((s % 3600) / 60);
+          const ss = s % 60;
+          return h > 0 ? `${h}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${mm}:${String(ss).padStart(2, '0')}`;
+        };
+        const lines = chapters.map((c, i) => `${i + 1}. [${stamp(c.startMs)}] ${c.title}`);
+        return {
+          summary: lines.length ? `Chapters:\n${lines.join('\n')}` : 'No chapters yet — run the analysis (or chapter detection) first.',
+          data: chapters,
+        };
       }
 
       case 'generate_clips': {
