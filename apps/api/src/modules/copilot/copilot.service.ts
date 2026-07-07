@@ -16,6 +16,7 @@ import { ChapterSyncService } from '../shorts-studio/chapter-sync.service';
 import { IntentCacheService } from './intent-cache.service';
 import { newAccumulator, runWithAiContext } from '../../common/ai-usage.context';
 import { WalletService, billingEnforced, creditsForCost } from '../wallet/wallet.service';
+import { PricingService } from '../ai-ops/pricing.service';
 import { randomUUID } from 'crypto';
 
 const COPILOT_SYSTEM = `You are the CreatorForce Copilot — you drive a YouTube content platform for the user by emitting commands.
@@ -108,6 +109,7 @@ export class CopilotService {
     private readonly chapterSync: ChapterSyncService,
     private readonly intentCache: IntentCacheService,
     private readonly walletService: WalletService,
+    private readonly pricingService: PricingService,
   ) {}
 
   // §8.2 safety: simple per-user rate limit (20 copilot turns/minute)
@@ -157,8 +159,11 @@ export class CopilotService {
       // never get here — zero tokens, zero holds).
       const accumulator = newAccumulator();
       let reservationId: string | null = null;
+      // Phase 5 §7 price lock: rule price quoted here IS the settle amount
+      let lockedPrice: { creditCost: number; ruleId: string } | null = null;
       if (billingEnforced()) {
-        const estimate = Math.max(1, Number(process.env['COPILOT_RESERVE_CREDITS']) || 5);
+        lockedPrice = await this.pricingService.resolvePrice({ action: 'chat' }).catch(() => null);
+        const estimate = lockedPrice?.creditCost ?? Math.max(1, Number(process.env['COPILOT_RESERVE_CREDITS']) || 5);
         const reservation = await this.walletService.reserve(userId, estimate, `copilot:${randomUUID()}`, 'AI_REQUEST');
         reservationId = reservation.id;
       }
@@ -183,8 +188,11 @@ export class CopilotService {
         throw err;
       }
       if (reservationId) {
-        await this.walletService.settleReservation(reservationId, creditsForCost(accumulator.costUsd), { source: 'copilot' })
-          .catch((e) => this.logger.warn(`copilot settle failed: ${e instanceof Error ? e.message : String(e)}`));
+        const settleCredits = lockedPrice ? lockedPrice.creditCost : creditsForCost(accumulator.costUsd);
+        await this.walletService.settleReservation(reservationId, settleCredits, {
+          source: 'copilot',
+          ...(lockedPrice ? { priceLocked: true, pricingRuleId: lockedPrice.ruleId } : {}),
+        }).catch((e) => this.logger.warn(`copilot settle failed: ${e instanceof Error ? e.message : String(e)}`));
       }
       if (!req.pendingCommand) await this.intentCache.maybeStore(lastUserText, decision);
     }

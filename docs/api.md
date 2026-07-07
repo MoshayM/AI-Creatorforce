@@ -253,6 +253,9 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | POST | `/admin/wallet/adjust` | `wallet:adjust` — grant/claw back credits with reason; audited with before/after |
 | POST | `/admin/payments/:id/refund` | `billing:refund` — full/partial Stripe refund with proportional credit claw-back (clamped to balance, shortfall recorded); audited |
 | POST | `/admin/users/:id/recharges-frozen` | `admin:users` — lift/apply the §7 dispute recharge freeze; audited |
+| GET | `/admin/providers` | `admin:providers` — AI provider registry: status, health score, failure rate, current cost rates, recent health events (Phase 5 §5) |
+| GET/POST/PATCH | `/admin/pricing-rules` | `admin:pricing` — credit pricing rules, most-specific-wins; create/update rejected below `MIN_PROFIT_MARGIN` (fail closed); audited. Rule prices are locked at reservation time |
+| POST | `/admin/profit/preview` | `admin:pricing` — margin verdict for a hypothetical `{action, creditCost}` (Phase 5 §8) |
 
 Roles: `SUPER_ADMIN` > `OWNER` > `MEMBER`; elevated identities come from `SUPER_ADMIN_EMAILS` / `OWNER_EMAILS` env config (never hardcoded). The `credit_ledger` is append-only and idempotent — every balance is reconstructable from it.
 

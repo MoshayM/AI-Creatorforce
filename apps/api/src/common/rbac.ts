@@ -13,11 +13,13 @@ export type Permission =
   | 'wallet:adjust'
   | 'admin:users'
   | 'admin:audit-logs'
-  | 'admin:revenue';
+  | 'admin:revenue'
+  | 'admin:providers'
+  | 'admin:pricing';
 
 export const ROLE_PERMISSIONS: Record<UserRole, ReadonlyArray<Permission>> = {
-  SUPER_ADMIN: ['billing:view', 'billing:refund', 'wallet:adjust', 'admin:users', 'admin:audit-logs', 'admin:revenue'],
-  OWNER: ['billing:view', 'admin:revenue'],
+  SUPER_ADMIN: ['billing:view', 'billing:refund', 'wallet:adjust', 'admin:users', 'admin:audit-logs', 'admin:revenue', 'admin:providers', 'admin:pricing'],
+  OWNER: ['billing:view', 'admin:revenue', 'admin:providers'],
   MEMBER: [],
 };
 

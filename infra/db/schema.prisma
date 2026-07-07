@@ -804,6 +804,87 @@ model CreditReservation {
   @@map("credit_reservations")
 }
 
+// ── AI provider registry & pricing (Phase 5 spec §4.1–4.4) ───────────────────
+// The live health/failover state lives in the shared aiClient; these tables
+// persist it for the admin surface + history, and hold the configurable cost
+// and pricing rules the profit guard reads.
+
+enum AiProviderStatus {
+  ACTIVE
+  DEGRADED
+  DISABLED
+}
+
+model AiProvider {
+  id           String           @id @default(cuid())
+  name         String           @unique
+  status       AiProviderStatus @default(ACTIVE)
+  priority     Int              @default(50)
+  qualityScore Float            @default(0.8)
+  failureRate  Float            @default(0)
+  avgHealthScore Float          @default(100)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  healthEvents ProviderHealthEvent[]
+  costRates    ProviderCostRate[]
+
+  @@map("ai_providers")
+}
+
+model ProviderHealthEvent {
+  id                  String   @id @default(cuid())
+  providerId          String
+  event               String
+  score               Float
+  consecutiveFailures Int      @default(0)
+  checkedAt           DateTime @default(now())
+
+  provider AiProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, checkedAt])
+  @@map("provider_health_events")
+}
+
+// Versioned real-cost input to the profit guard (USD per 1M tokens).
+model ProviderCostRate {
+  id            String    @id @default(cuid())
+  providerId    String
+  model         String?
+  inputCostPer1M  Float
+  outputCostPer1M Float
+  currency      String    @default("usd")
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+
+  provider AiProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, effectiveFrom])
+  @@map("provider_cost_rates")
+}
+
+// What the USER is charged, in credits — most-specific rule wins
+// (plan > model > provider > action default), quoted then locked at the
+// wallet reservation (Phase 5 §7).
+model PricingRule {
+  id            String    @id @default(cuid())
+  /** JobType name or 'chat' for copilot turns. */
+  action        String
+  model         String?
+  provider      String?
+  plan          String?
+  creditCost    Int
+  priority      Int       @default(0)
+  isActive      Boolean   @default(true)
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([action, isActive])
+  @@map("pricing_rules")
+}
+
 enum PaymentGateway {
   STRIPE
   RAZORPAY

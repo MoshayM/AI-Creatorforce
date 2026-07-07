@@ -41,6 +41,7 @@ import { buildSrt, buildVtt, fitCuesToDuration } from '../modules/media/subtitle
 import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, type PipelineScope, type PipelineStage } from './pipeline-plan';
 import { newAccumulator, runWithAiContext } from '../common/ai-usage.context';
 import { WalletService, billingEnforced, creditsForCost } from '../modules/wallet/wallet.service';
+import { PricingService } from '../modules/ai-ops/pricing.service';
 import { EventsGateway } from '../gateway/events.gateway';
 import { AGENT_QUEUE } from '../modules/jobs/jobs.module';
 import { callAIStructured } from '@cf/shared';
@@ -99,6 +100,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly shortsRender: ShortsRenderService,
     private readonly shortsExport: ShortsExportService,
     private readonly walletService: WalletService,
+    private readonly pricingService: PricingService,
     private readonly events: EventsGateway,
   ) {
     super();
@@ -117,11 +119,15 @@ export class SupervisorWorker extends WorkerHost {
     const accumulator = newAccumulator();
     let reservationId: string | null = null;
     let holdUserId: string | null = null;
+    // Phase 5 §7: a matching pricing rule QUOTES the price here and LOCKS it —
+    // the settle uses this exact amount, never a mid-flight recalculation.
+    let lockedPrice: { creditCost: number; ruleId: string } | null = null;
     if (billingEnforced()) {
       const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { userId: true } });
       if (project) {
         holdUserId = project.userId;
-        const estimate = Math.max(1, Number(process.env['JOB_RESERVE_CREDITS']) || 50);
+        lockedPrice = await this.pricingService.resolvePrice({ action: type }).catch(() => null);
+        const estimate = lockedPrice?.creditCost ?? Math.max(1, Number(process.env['JOB_RESERVE_CREDITS']) || 50);
         try {
           const reservation = await this.walletService.reserve(holdUserId, estimate, `job:${jobId}`, 'AI_REQUEST', jobId);
           reservationId = reservation.id;
@@ -144,10 +150,12 @@ export class SupervisorWorker extends WorkerHost {
         { jobId, projectId, importedVideoId: payload['importedVideoId'] as string | undefined, userId: holdUserId ?? undefined, accumulator },
         () => this.dispatch(type, projectId, jobId, payload),
       );
-      // Settle with the REAL cost — may be above or below the estimate (§5.3)
+      // Settle: locked rule price when one was quoted (§7), else real cost (§5.3)
       if (reservationId) {
-        await this.walletService.settleReservation(reservationId, creditsForCost(accumulator.costUsd), {
+        const settleCredits = lockedPrice ? lockedPrice.creditCost : creditsForCost(accumulator.costUsd);
+        await this.walletService.settleReservation(reservationId, settleCredits, {
           jobId, jobType: type, costUsd: accumulator.costUsd, calls: accumulator.calls,
+          ...(lockedPrice ? { priceLocked: true, pricingRuleId: lockedPrice.ruleId } : {}),
         }).catch((e) => console.warn(`[credits] settle failed for job ${jobId}: ${e instanceof Error ? e.message : String(e)}`));
       }
       const elapsed = Date.now() - t0;

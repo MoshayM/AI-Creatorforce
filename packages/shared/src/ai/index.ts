@@ -159,6 +159,27 @@ function rankProviders(chain: AIProvider[]): AIProvider[] {
   return [...chain].sort((a, b) => getHealth(b).score - getHealth(a).score);
 }
 
+/** Live health snapshot for persistence/admin (Phase 5 spec §5) — read-only copy. */
+export interface ProviderHealthSnapshot {
+  provider: AIProvider;
+  score: number;
+  available: boolean;
+  consecutiveFailures: number;
+  successCount: number;
+  failureCount: number;
+}
+
+export function getProviderHealthSnapshot(): ProviderHealthSnapshot[] {
+  return [...providerHealth.entries()].map(([provider, h]) => ({
+    provider,
+    score: h.score,
+    available: Date.now() > h.cooldownUntil,
+    consecutiveFailures: h.consecutiveFailures,
+    successCount: h.successCount,
+    failureCount: h.failureCount,
+  }));
+}
+
 // ── Rate Limiter ──────────────────────────────────────────────────────────────
 
 interface RateLimiterState {
@@ -430,6 +451,11 @@ const PROVIDER_COST_PER_1M: Record<AIProvider, { input: number; output: number }
 function estimateCost(provider: AIProvider, tokensIn: number, tokensOut: number): number {
   const rates = PROVIDER_COST_PER_1M[provider];
   return (tokensIn / 1_000_000) * rates.input + (tokensOut / 1_000_000) * rates.output;
+}
+
+/** Built-in cost table (USD per 1M tokens) — seed/fallback for DB-configured rates (Phase 5 §4.3). */
+export function getDefaultCostRates(): Record<AIProvider, { input: number; output: number }> {
+  return { anthropic: { ...PROVIDER_COST_PER_1M.anthropic }, openai: { ...PROVIDER_COST_PER_1M.openai }, gemini: { ...PROVIDER_COST_PER_1M.gemini } };
 }
 
 // ── Raw callAI ────────────────────────────────────────────────────────────────

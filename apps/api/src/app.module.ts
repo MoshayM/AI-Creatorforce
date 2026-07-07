@@ -15,6 +15,7 @@ import { SeoModule } from './modules/seo/seo.module';
 import { AudienceModule } from './modules/audience/audience.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { AiOpsModule } from './modules/ai-ops/ai-ops.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { MusicModule } from './modules/music/music.module';
@@ -59,6 +60,7 @@ import { GatewayModule } from './gateway/gateway.module';
     AudienceModule,
     ApprovalsModule,
     BillingModule,
+    AiOpsModule,
     SettingsModule,
     VoiceModule,
     MusicModule,

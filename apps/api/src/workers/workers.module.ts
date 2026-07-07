@@ -19,6 +19,7 @@ import { AssetsModule } from '../modules/assets/assets.module';
 import { MediaModule } from '../modules/media/media.module';
 import { ShortsStudioModule } from '../modules/shorts-studio/shorts-studio.module';
 import { WalletModule } from '../modules/wallet/wallet.module';
+import { AiOpsModule } from '../modules/ai-ops/ai-ops.module';
 import { GatewayModule } from '../gateway/gateway.module';
 
 @Module({
@@ -42,6 +43,7 @@ import { GatewayModule } from '../gateway/gateway.module';
     MediaModule,
     ShortsStudioModule,
     WalletModule,
+    AiOpsModule,
     GatewayModule,
   ],
   providers: [SupervisorWorker],
