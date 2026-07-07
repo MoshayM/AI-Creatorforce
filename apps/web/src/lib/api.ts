@@ -83,6 +83,16 @@ export const api = {
         cancelUrl: `${window.location.origin}/settings`,
       }),
   },
+  wallet: {
+    balance: () => apiClient.get('/wallet/balance'),
+    transactions: (take = 20) => apiClient.get(`/wallet/transactions?take=${take}`),
+    recharge: (amountUsd: number) =>
+      apiClient.post('/wallet/recharge', {
+        amountUsd,
+        successUrl: `${window.location.origin}/settings?recharged=true`,
+        cancelUrl: `${window.location.origin}/settings`,
+      }, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
+  },
   media: {
     listExports: (projectId: string) =>
       apiClient.get<Array<{ name: string; sizeBytes: number }>>(`/media/exports/${projectId}`),

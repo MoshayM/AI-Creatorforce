@@ -162,12 +162,29 @@ function SettingsContent() {
     queryFn: () => api.billing.getSubscription().then((r) => r.data as Subscription),
   });
 
+  const { data: walletBalance } = useQuery<{
+    balanceCredits: number;
+    buckets: { promotionalCredits: number; bonusCredits: number; referralCredits: number; purchasedCredits: number };
+    lifetimeUsed: number;
+  }>({
+    queryKey: ['wallet-balance'],
+    queryFn: () => api.wallet.balance().then((r) => r.data),
+  });
+  const [rechargeUsd, setRechargeUsd] = useState(10);
+  const rechargeMutation = useMutation({
+    mutationFn: (amountUsd: number) => api.wallet.recharge(amountUsd),
+    onSuccess: (res) => {
+      const data = res.data as { checkoutUrl: string | null };
+      if (data.checkoutUrl) window.location.href = data.checkoutUrl;
+    },
+  });
+
   const { data: me } = useQuery({
     queryKey: ['me'],
     queryFn: () => api.auth.me().then((r) => r.data),
   });
 
-  const isOwner = me?.role === 'OWNER';
+  const isOwner = me?.role === 'OWNER' || me?.role === 'SUPER_ADMIN';
 
   const { data: apiKeys = [] } = useQuery<ApiKeyEntry[]>({
     queryKey: ['settings-api-keys'],
@@ -743,6 +760,44 @@ function SettingsContent() {
           <CreditCard className="w-5 h-5 text-brand-600" />
           Billing
         </h2>
+
+        {/* Wallet (credits are platform-agnostic; recharge via Stripe on web) */}
+        <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 flex flex-wrap items-center gap-4">
+          <div className="flex-1 min-w-[200px]">
+            <p className="text-xs text-gray-500">Credit balance</p>
+            <p className="text-2xl font-bold text-gray-900">{(walletBalance?.balanceCredits ?? 0).toLocaleString()}</p>
+            {walletBalance && walletBalance.balanceCredits > 0 && (
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                {walletBalance.buckets.purchasedCredits.toLocaleString()} purchased
+                {walletBalance.buckets.bonusCredits > 0 && <> · {walletBalance.buckets.bonusCredits.toLocaleString()} bonus</>}
+                {walletBalance.buckets.promotionalCredits > 0 && <> · {walletBalance.buckets.promotionalCredits.toLocaleString()} promo</>}
+                {walletBalance.buckets.referralCredits > 0 && <> · {walletBalance.buckets.referralCredits.toLocaleString()} referral</>}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={rechargeUsd}
+              onChange={(e) => setRechargeUsd(Number(e.target.value))}
+              className="text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white"
+            >
+              {[5, 10, 25, 50, 100].map((usd) => (
+                <option key={usd} value={usd}>${usd}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => rechargeMutation.mutate(rechargeUsd)}
+              disabled={rechargeMutation.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+            >
+              {rechargeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+              Add credits
+            </button>
+          </div>
+          {rechargeMutation.isError && (
+            <p className="w-full text-xs text-red-500">{getErrorMessage(rechargeMutation.error) || 'Recharge failed'}</p>
+          )}
+        </div>
         {sub && (
           <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-4">
             <p className="font-medium text-brand-900">Current plan: {sub.plan}</p>

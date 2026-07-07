@@ -6,7 +6,10 @@ import type { JwtPayload } from '../decorators/current-user.decorator';
 export class OwnerGuard implements CanActivate {
   canActivate(ctx: ExecutionContext): boolean {
     const req = ctx.switchToHttp().getRequest<Request & { user: JwtPayload }>();
-    if (req.user?.role !== 'OWNER') throw new ForbiddenException('Owner access required');
+    // SUPER_ADMIN outranks OWNER (billing spec §9.2)
+    if (req.user?.role !== 'OWNER' && req.user?.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Owner access required');
+    }
     return true;
   }
 }

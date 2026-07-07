@@ -13,6 +13,9 @@ datasource db {
 // ── Users & Auth ──────────────────────────────────────────────────────────────
 
 enum UserRole {
+  // Elevated roles resolve from SUPER_ADMIN_EMAILS / OWNER_EMAILS env config
+  // at login — never hardcoded in source (billing spec §9.2).
+  SUPER_ADMIN
   OWNER
   MEMBER
 }
@@ -33,6 +36,8 @@ model User {
   apiKeys       ApiKey[]
   subscription  Subscription?
   usageLogs     UsageLog[]
+  wallet        Wallet?
+  payments      Payment[]
 
   @@map("users")
 }
@@ -680,6 +685,120 @@ enum SocialContentKind {
   CAROUSEL
   BLOG_POST
   NEWSLETTER
+}
+
+// ── Wallet & Credit Ledger (billing spec §4/§5) ───────────────────────────────
+// Ledger-first: the wallet row is a read cache; the append-only credit_ledger
+// is the single source of truth and every balance is reconstructable from it.
+// Credits are integers, never floats. All mutations go through WalletService.
+
+model Wallet {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  balanceCredits     Int      @default(0)
+  purchasedCredits   Int      @default(0)
+  bonusCredits       Int      @default(0)
+  promotionalCredits Int      @default(0)
+  referralCredits    Int      @default(0)
+  lifetimePurchased  Int      @default(0)
+  lifetimeUsed       Int      @default(0)
+  updatedAt          DateTime @updatedAt
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries CreditLedger[]
+
+  @@map("wallets")
+}
+
+enum LedgerEntryType {
+  PURCHASE
+  BONUS
+  REFERRAL
+  PROMO
+  USAGE_DEBIT
+  REFUND
+  EXPIRY
+  ADJUSTMENT
+}
+
+enum LedgerReferenceType {
+  PAYMENT
+  AI_REQUEST
+  COUPON
+  REFERRAL
+  ADMIN_ACTION
+}
+
+// Append-only: corrections are new ADJUSTMENT rows, never UPDATE/DELETE (§4.3).
+model CreditLedger {
+  id             String              @id @default(cuid())
+  walletId       String
+  entryType      LedgerEntryType
+  /** Positive = credit, negative = debit. */
+  amount         Int
+  /** Wallet balance snapshot after this entry — audit anchor. */
+  balanceAfter   Int
+  referenceType  LedgerReferenceType
+  referenceId    String?
+  idempotencyKey String              @unique
+  metadata       Json                @default("{}")
+  createdAt      DateTime            @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@map("credit_ledger")
+}
+
+enum PaymentGateway {
+  STRIPE
+  RAZORPAY
+  PAYPAL
+  APPLE_IAP
+  GOOGLE_PLAY_BILLING
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  DISPUTED
+}
+
+model Payment {
+  id               String         @id @default(cuid())
+  userId           String
+  gateway          PaymentGateway
+  gatewayPaymentId String?        @unique
+  /** Minor units (cents/paise) — never floats (§4). */
+  amount           Int
+  currency         String         @default("usd")
+  status           PaymentStatus  @default(PENDING)
+  creditsGranted   Int            @default(0)
+  idempotencyKey   String         @unique
+  failureReason    String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("payments")
+}
+
+// Gateway webhook idempotency (§6.2): duplicate deliveries are no-ops.
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  gateway     PaymentGateway
+  eventId     String
+  eventType   String
+  status      String    @default("processed")
+  processedAt DateTime  @default(now())
+
+  @@unique([gateway, eventId])
+  @@map("webhook_events")
 }
 
 model SocialContent {

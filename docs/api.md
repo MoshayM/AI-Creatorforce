@@ -236,4 +236,20 @@ Spec: repo-root `Ai-video edit.md` (§8, §12, §15) — one execution path for 
 | GET | `/intents/:id` | Fetch the ActionRecord audit row for an executed intent (owner-scoped). |
 | GET | `/token-usage/summary` | `?days=30` → total tokens/cost, per-model breakdown (all AI calls in the process, agents included), copilot cache-hit rate (§12.3 target ≥80%), and `byVideo` — top-15 per-video cost rows (§12.2.8). Feeds the Analytics "AI Usage" card + cost-by-video table. |
 
+## 22. Wallet, Recharge & Admin (billing spec)
+
+Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `docs/billing-security.md`. JWT-guarded; admin routes additionally require RBAC permissions (`common/rbac.ts`).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/wallet/balance` | Balance + bucket breakdown (promo/bonus/referral/purchased) |
+| GET | `/wallet/transactions` | Credit-ledger entries (`?take=`) |
+| POST | `/wallet/recharge` | `{ amountUsd, successUrl, cancelUrl }` + mandatory `Idempotency-Key` header → Stripe Checkout URL. Credits granted only by the verified webhook |
+| GET | `/admin/billing/revenue` | `admin:revenue` — gross/credits by gateway |
+| GET | `/admin/audit-logs` | `admin:audit-logs` |
+| GET | `/admin/users` | `admin:users` — roles + wallet/plan |
+| POST | `/admin/wallet/adjust` | `wallet:adjust` — grant/claw back credits with reason; audited with before/after |
+
+Roles: `SUPER_ADMIN` > `OWNER` > `MEMBER`; elevated identities come from `SUPER_ADMIN_EMAILS` / `OWNER_EMAILS` env config (never hardcoded). The `credit_ledger` is append-only and idempotent — every balance is reconstructable from it.
+
 Every turn lands in the `actions` audit table (source `UI`/`COPILOT`/`VOICE`, status, `fromCache`, `tokensUsed`); spoken turns also record `voice_commands` (raw transcript + resolved intent); `copilot_sessions` keeps compressed per-user intent history. The `token_usage` ledger is populated by a global usage hook on the shared aiClient — no AI call goes unmetered. Rows carry `userId`/`jobId`/`projectId`/`importedVideoId` attribution from an AsyncLocalStorage context (`common/ai-usage.context.ts`) set by the supervisor around each job dispatch, by the copilot around each chat turn, and by semantic search around query embeddings — no per-call plumbing.
