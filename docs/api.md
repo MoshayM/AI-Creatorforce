@@ -261,6 +261,9 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | GET/PATCH | `/admin/trial-config` | `admin:trial` — trial credits/expiry + per-feature limits; audited |
 | GET | `/admin/abuse-signals` | `admin:trial` — fingerprint/IP abuse decisions (Phase 6 §6) |
 | POST | `/admin/trial/:userId/approve` | `admin:trial` — grant a PENDING_REVIEW trial after manual review |
+| GET | `/upgrade/recommendations` | Behavior-driven upgrade nudges (frequency-capped); refreshes on read (Phase 6 §8) |
+| POST | `/upgrade/recommendations/:id/dismiss` | Dismiss a nudge (suppresses that reason for 14 days) |
+| GET/POST | `/admin/offers` | `admin:trial` — offers incl. FIRST_RECHARGE; creation is margin-gated (fail closed); grants are double-idempotent (Phase 6 §9) |
 
 Roles: `SUPER_ADMIN` > `OWNER` > `MEMBER`; elevated identities come from `SUPER_ADMIN_EMAILS` / `OWNER_EMAILS` env config (never hardcoded). The `credit_ledger` is append-only and idempotent — every balance is reconstructable from it.
 

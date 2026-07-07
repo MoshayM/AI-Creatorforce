@@ -5,6 +5,8 @@ import { CurrentUser, type JwtPayload } from '../../common/decorators/current-us
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { TrialService } from './trial.service';
 import { TRIAL_FEATURES, TrialLimitsService, type TrialFeature } from './trial-limits.service';
+import { UpgradeEngineService } from './upgrade-engine.service';
+import { OffersService } from './offers.service';
 
 @Controller('trial')
 @UseGuards(JwtAuthGuard)
@@ -25,6 +27,22 @@ export class TrialController {
       isTrialUser: await this.limits.isTrialUser(user.sub),
       limits: await this.limits.effectiveLimits(),
     };
+  }
+}
+
+@Controller('upgrade')
+@UseGuards(JwtAuthGuard)
+export class UpgradeController {
+  constructor(private readonly upgrade: UpgradeEngineService) {}
+
+  @Get('recommendations')
+  async recommendations(@CurrentUser() user: JwtPayload) {
+    return this.upgrade.recommendationsFor(user.sub);
+  }
+
+  @Post('recommendations/:id/dismiss')
+  async dismiss(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.upgrade.dismiss(id, user.sub);
   }
 }
 
@@ -77,5 +95,29 @@ export class TrialAdminController {
   @RequirePermissions('admin:trial')
   async approve(@Param('userId') userId: string, @CurrentUser() admin: JwtPayload) {
     return this.trial.approvePendingTrial(userId, admin.sub);
+  }
+}
+
+@Controller('admin/offers')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+export class OffersAdminController {
+  constructor(private readonly offers: OffersService) {}
+
+  @Get()
+  @RequirePermissions('admin:trial')
+  async list() {
+    return this.offers.listOffers();
+  }
+
+  @Post()
+  @RequirePermissions('admin:trial')
+  async create(
+    @Body() dto: { type: 'FIRST_RECHARGE' | 'WELCOME'; name: string; rewardValue: number; minRechargeMinor?: number; validTo?: string; usageLimit?: number },
+    @CurrentUser() admin: JwtPayload,
+  ) {
+    if (!dto?.name || !Number.isInteger(dto.rewardValue) || dto.rewardValue < 1) {
+      throw new BadRequestException('name and a positive integer rewardValue are required');
+    }
+    return this.offers.createOffer(dto, admin.sub);
   }
 }

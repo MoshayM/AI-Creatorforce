@@ -26,7 +26,7 @@
 | Spec module | Scope | Status |
 |---|---|---|
 | §5–7 Trial system + abuse + restrictions | Trial lot on signup, one-per-identity, fingerprint scoring, feature gating | ✅ shipped |
-| §8–9 Upgrade engine + first-recharge rewards | Behavior-driven nudges; profit-gated bonuses | ❌ after trial |
+| §8–9 Upgrade engine + first-recharge rewards | Behavior-driven nudges; profit-gated bonuses | ✅ shipped |
 | §10 Offers + referrals | Rule-driven offers, referral codes/qualification/fraud | ❌ after trial |
 | §12 Marketplace | `credit_packs`, regional pricing over the existing recharge path | ❌ after offers |
 | §11 Wallet display | Lot breakdown already exists on the settings wallet card; expiry timeline pending | ⏳ partial |
@@ -84,6 +84,25 @@
 - `GET /trial/status` (remaining trial credits, expiry) and
   `GET /trial/limits` for the client; signup accepts an optional
   `deviceFingerprint`.
+
+## What shipped in Phase 6 Wave 2 (upgrade engine + first-recharge rewards)
+
+- **Behavior tracker** (§4.9): `user_behaviour` rebuilt every 30 minutes from
+  tables the platform already writes (copilot/voice actions, analyze/render
+  jobs, clips, trial consumption) — no new event stream needed at this scale.
+- **Upgrade engine** (§8): pure rules mapped to this platform's real
+  features — low/expiring trial → STARTER banner, video-heavy (≥5 analyses
+  or ≥10 renders) → PRO, clip-heavy → STARTER, chat-heavy → PRO. Frequency
+  cap: same reason suppressed 7 days after being shown, 14 after dismissal.
+  `GET /upgrade/recommendations` (refreshes on read), dismiss endpoint.
+- **First-recharge rewards** (§9): `offers`/`offer_redemptions` with the
+  spec's double idempotency (unique redemption key AND ledger key on the
+  payment — a replayed webhook can't double-grant). Highest qualifying
+  `minRechargeMinor` threshold wins; margin gate at offer CREATION and
+  re-checked at grant time with the real amount
+  (`bonus$ ≤ recharge$ × (1 − MIN_PROFIT_MARGIN)`, conservative face-value
+  costing). Reward failures never break the payment webhook.
+  `GET/POST /admin/offers` (`admin:trial`, audited).
 
 ## Deliberate deviations
 

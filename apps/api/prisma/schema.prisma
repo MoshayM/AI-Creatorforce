@@ -880,6 +880,92 @@ model AbuseSignal {
   @@map("abuse_signals")
 }
 
+// ── Growth engine Wave 2 (Phase 6 spec §4.4/4.5/4.9/4.10) ────────────────────
+
+// Denormalized per-user usage profile — kept small for fast rule evaluation.
+model UserBehaviour {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  chatsSent           Int       @default(0)
+  videosAnalyzed      Int       @default(0)
+  clipsGenerated      Int       @default(0)
+  rendersRun          Int       @default(0)
+  jobsTotal           Int       @default(0)
+  lastActiveAt        DateTime?
+  inactiveDays        Int       @default(0)
+  trialCreditsUsedPct Float     @default(0)
+  updatedAt           DateTime  @updatedAt
+
+  @@map("user_behaviour")
+}
+
+model UpgradeRecommendation {
+  id              String    @id @default(cuid())
+  userId          String
+  reasonCode      String
+  recommendedPlan String
+  confidence      Float
+  dismissedAt     DateTime?
+  converted       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@map("upgrade_recommendations")
+}
+
+enum OfferType {
+  WELCOME
+  FIRST_RECHARGE
+  LOYALTY
+  WINBACK
+  UPGRADE
+  LOW_CREDIT
+}
+
+enum OfferRewardType {
+  BONUS_CREDITS
+  FREE_PREMIUM_DAYS
+}
+
+model Offer {
+  id               String          @id @default(cuid())
+  type             OfferType
+  name             String
+  rewardType       OfferRewardType @default(BONUS_CREDITS)
+  rewardValue      Int
+  /** Minor units the recharge must reach to qualify (FIRST_RECHARGE). */
+  minRechargeMinor Int?
+  validFrom        DateTime        @default(now())
+  validTo          DateTime?
+  usageLimit       Int?
+  perUserLimit     Int             @default(1)
+  profitChecked    Boolean         @default(false)
+  status           String          @default("active")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  redemptions OfferRedemption[]
+
+  @@index([type, status])
+  @@map("offers")
+}
+
+// Unique idempotency key = no duplicate bonus, ever (§12 revenue protection).
+model OfferRedemption {
+  id             String   @id @default(cuid())
+  offerId        String
+  userId         String
+  paymentId      String?
+  rewardGranted  Int
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("offer_redemptions")
+}
+
 enum AiProviderStatus {
   ACTIVE
   DEGRADED

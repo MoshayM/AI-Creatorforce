@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, Logger, NotFoundException } from '@nes
 import Stripe from 'stripe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
+import { OffersService } from '../trial/offers.service';
 
 const PLAN_PRICE_IDS: Record<string, string> = {
   STARTER: process.env['STRIPE_STARTER_PRICE_ID'] ?? '',
@@ -22,6 +23,7 @@ export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
+    private readonly offers: OffersService,
   ) {}
 
   private get stripe(): Stripe {
@@ -227,6 +229,10 @@ export class BillingService {
       where: { userId, status: { in: ['ACTIVE', 'EXPIRED'] } },
       data: { status: 'CONVERTED' },
     }).catch(() => undefined);
+
+    // Phase 6 §9: first-recharge reward — idempotent on the payment, margin
+    // re-checked at grant time, and never allowed to fail the webhook
+    await this.offers.applyFirstRechargeReward(userId, payment.id, payment.amount);
   }
 
   /**
