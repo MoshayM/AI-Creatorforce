@@ -20,6 +20,7 @@ import { MediaModule } from '../modules/media/media.module';
 import { ShortsStudioModule } from '../modules/shorts-studio/shorts-studio.module';
 import { WalletModule } from '../modules/wallet/wallet.module';
 import { AiOpsModule } from '../modules/ai-ops/ai-ops.module';
+import { TrialModule } from '../modules/trial/trial.module';
 import { GatewayModule } from '../gateway/gateway.module';
 
 @Module({
@@ -44,6 +45,7 @@ import { GatewayModule } from '../gateway/gateway.module';
     ShortsStudioModule,
     WalletModule,
     AiOpsModule,
+    TrialModule,
     GatewayModule,
   ],
   providers: [SupervisorWorker],

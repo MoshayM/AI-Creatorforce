@@ -5,6 +5,7 @@ import type { User } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { JwtPayload } from '../../common/decorators/current-user.decorator';
 import { resolveElevatedRole } from '../../common/rbac';
+import { TrialService } from '../trial/trial.service';
 
 export interface RegisterDto {
   email: string;
@@ -22,9 +23,10 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly trial: TrialService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, signals: { deviceFingerprint?: string; ip?: string } = {}) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException('Email already registered');
 
@@ -33,6 +35,12 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: { email: dto.email, name: dto.name, passwordHash, role: isFirst ? 'OWNER' : 'MEMBER' },
     });
+
+    // Phase 6 §5: trial grant on signup — abuse-scored, one per identity;
+    // a failure here must never break registration itself
+    await this.trial
+      .grantTrial(user.id, user.email, { ...signals, verificationMethod: 'email' })
+      .catch(() => undefined);
 
     return this.signToken(user.id, user.email);
   }

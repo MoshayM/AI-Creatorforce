@@ -1,7 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import { creditsForCost, lotTtlDays, planDebit, planLotDebit, type BucketBalances, type LotView } from './wallet.service';
 
-const buckets = (p: number, b: number, r: number, pur: number): BucketBalances => ({
+const buckets = (p: number, b: number, r: number, pur: number, trial = 0): BucketBalances => ({
+  trialCredits: trial,
   promotionalCredits: p,
   bonusCredits: b,
   referralCredits: r,
@@ -11,6 +12,7 @@ const buckets = (p: number, b: number, r: number, pur: number): BucketBalances =
 describe('planDebit — §5.4 spend priority (promo → bonus → referral → purchased)', () => {
   it('drains buckets in priority order', () => {
     expect(planDebit(buckets(10, 10, 10, 100), 25)).toEqual({
+      trialCredits: 0,
       promotionalCredits: 10,
       bonusCredits: 10,
       referralCredits: 5,
@@ -18,8 +20,19 @@ describe('planDebit — §5.4 spend priority (promo → bonus → referral → p
     });
   });
 
+  it('consumes trial credits before everything else (Phase 6 §5)', () => {
+    expect(planDebit(buckets(10, 0, 0, 100, 30), 35)).toEqual({
+      trialCredits: 30,
+      promotionalCredits: 5,
+      bonusCredits: 0,
+      referralCredits: 0,
+      purchasedCredits: 0,
+    });
+  });
+
   it('touches purchased credits only after all cheaper buckets are empty', () => {
     expect(planDebit(buckets(0, 0, 0, 50), 20)).toEqual({
+      trialCredits: 0,
       promotionalCredits: 0,
       bonusCredits: 0,
       referralCredits: 0,

@@ -2,8 +2,11 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma, type LedgerEntryType, type LedgerReferenceType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
-/** Credit buckets in SPEND priority order (billing spec §5.4): cheapest-to-platform first. */
-export const DEBIT_PRIORITY = ['promotionalCredits', 'bonusCredits', 'referralCredits', 'purchasedCredits'] as const;
+/**
+ * Credit buckets in SPEND priority order: cheapest-to-platform first
+ * (billing spec §5.4), with trial credits before everything (Phase 6 §5).
+ */
+export const DEBIT_PRIORITY = ['trialCredits', 'promotionalCredits', 'bonusCredits', 'referralCredits', 'purchasedCredits'] as const;
 export type CreditBucket = (typeof DEBIT_PRIORITY)[number];
 
 export type BucketBalances = Record<CreditBucket, number>;
@@ -17,7 +20,7 @@ export function planDebit(buckets: BucketBalances, amount: number): Record<Credi
   const total = DEBIT_PRIORITY.reduce((s, b) => s + buckets[b], 0);
   if (total < amount) throw new BadRequestException('INSUFFICIENT_CREDITS');
 
-  const take: Record<CreditBucket, number> = { promotionalCredits: 0, bonusCredits: 0, referralCredits: 0, purchasedCredits: 0 };
+  const take: Record<CreditBucket, number> = { trialCredits: 0, promotionalCredits: 0, bonusCredits: 0, referralCredits: 0, purchasedCredits: 0 };
   let remaining = amount;
   for (const bucket of DEBIT_PRIORITY) {
     if (remaining === 0) break;
@@ -34,6 +37,7 @@ export const ENTRY_BUCKET: Partial<Record<LedgerEntryType, CreditBucket>> = {
   BONUS: 'bonusCredits',
   REFERRAL: 'referralCredits',
   PROMO: 'promotionalCredits',
+  TRIAL: 'trialCredits',
   REFUND: 'purchasedCredits',
 };
 
@@ -65,6 +69,7 @@ export function lotTtlDays(bucket: CreditBucket): number | null {
     return Number.isFinite(v) && v > 0 ? v : fallback;
   };
   switch (bucket) {
+    case 'trialCredits': return env('TRIAL_EXPIRY_DAYS', 15);
     case 'promotionalCredits': return env('CREDIT_TTL_PROMO_DAYS', 30);
     case 'bonusCredits': return env('CREDIT_TTL_BONUS_DAYS', 90);
     case 'referralCredits': return env('CREDIT_TTL_REFERRAL_DAYS', 180);
@@ -148,6 +153,7 @@ export class WalletService {
     return {
       balanceCredits: w.balanceCredits,
       buckets: {
+        trialCredits: w.trialCredits,
         promotionalCredits: w.promotionalCredits,
         bonusCredits: w.bonusCredits,
         referralCredits: w.referralCredits,
@@ -226,7 +232,7 @@ export class WalletService {
         });
         const takes = planLotDebit(lots, write.amount);
 
-        const split: Record<CreditBucket, number> = { promotionalCredits: 0, bonusCredits: 0, referralCredits: 0, purchasedCredits: 0 };
+        const split: Record<CreditBucket, number> = { trialCredits: 0, promotionalCredits: 0, bonusCredits: 0, referralCredits: 0, purchasedCredits: 0 };
         for (const t of takes) {
           split[t.bucket] += t.take;
           await tx.creditLot.update({ where: { id: t.lotId }, data: { remaining: { decrement: t.take } } });
@@ -235,6 +241,7 @@ export class WalletService {
           where: { id: wallet.id },
           data: {
             balanceCredits: { decrement: write.amount },
+            trialCredits: { decrement: split.trialCredits },
             promotionalCredits: { decrement: split.promotionalCredits },
             bonusCredits: { decrement: split.bonusCredits },
             referralCredits: { decrement: split.referralCredits },

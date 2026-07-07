@@ -40,6 +40,7 @@ model User {
   usageLogs     UsageLog[]
   wallet        Wallet?
   payments      Payment[]
+  trialGrant    TrialGrant?
 
   @@map("users")
 }
@@ -702,6 +703,8 @@ model Wallet {
   bonusCredits       Int      @default(0)
   promotionalCredits Int      @default(0)
   referralCredits    Int      @default(0)
+  /** Phase 6 §5: trial credits are their own bucket, consumed before all others. */
+  trialCredits       Int      @default(0)
   lifetimePurchased  Int      @default(0)
   lifetimeUsed       Int      @default(0)
   updatedAt          DateTime @updatedAt
@@ -740,6 +743,7 @@ enum LedgerEntryType {
   BONUS
   REFERRAL
   PROMO
+  TRIAL
   USAGE_DEBIT
   REFUND
   EXPIRY
@@ -808,6 +812,73 @@ model CreditReservation {
 // The live health/failover state lives in the shared aiClient; these tables
 // persist it for the admin surface + history, and hold the configurable cost
 // and pricing rules the profit guard reads.
+
+// ── Free trial & abuse prevention (Phase 6 spec §4–7) ─────────────────────────
+// Trial credits are ordinary credit lots (bucket=trialCredits, consumed
+// first); trial_grants is the one-per-verified-identity backstop; abuse
+// signals extend the base fraud posture with fingerprint/IP scoring.
+
+enum TrialStatus {
+  ACTIVE
+  EXPIRED
+  CONVERTED
+  REVOKED
+  PENDING_REVIEW
+}
+
+model TrialGrant {
+  id                 String      @id @default(cuid())
+  userId             String      @unique
+  /** Hash of the verified identity (normalized email) — the hard one-trial backstop. */
+  identityKey        String      @unique
+  creditsGranted     Int
+  status             TrialStatus @default(ACTIVE)
+  verificationMethod String      @default("email")
+  deviceFingerprint  String?
+  ipHash             String?
+  grantedAt          DateTime    @default(now())
+  expiresAt          DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([deviceFingerprint])
+  @@map("trial_grants")
+}
+
+// Super-Admin-configurable trial tier (§7): one row per gated feature.
+model TrialLimit {
+  id         String   @id @default(cuid())
+  feature    String   @unique
+  access     String   @default("enabled") // enabled | limited | disabled
+  limitValue Int?
+  updatedAt  DateTime @updatedAt
+
+  @@map("trial_limits")
+}
+
+enum AbuseDecision {
+  ALLOW
+  REVIEW
+  BLOCK
+}
+
+model AbuseSignal {
+  id                String        @id @default(cuid())
+  userId            String
+  deviceFingerprint String?
+  ipHash            String?
+  isVpn             Boolean       @default(false)
+  duplicateDevice   Boolean       @default(false)
+  duplicateIp       Boolean       @default(false)
+  fraudScore        Float
+  riskScore         Float
+  decision          AbuseDecision
+  reviewedBy        String?
+  createdAt         DateTime      @default(now())
+
+  @@index([userId, createdAt])
+  @@map("abuse_signals")
+}
 
 enum AiProviderStatus {
   ACTIVE

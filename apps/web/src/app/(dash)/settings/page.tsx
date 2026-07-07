@@ -164,7 +164,7 @@ function SettingsContent() {
 
   const { data: walletBalance } = useQuery<{
     balanceCredits: number;
-    buckets: { promotionalCredits: number; bonusCredits: number; referralCredits: number; purchasedCredits: number };
+    buckets: { trialCredits: number; promotionalCredits: number; bonusCredits: number; referralCredits: number; purchasedCredits: number };
     lifetimeUsed: number;
   }>({
     queryKey: ['wallet-balance'],
@@ -769,6 +769,7 @@ function SettingsContent() {
             {walletBalance && walletBalance.balanceCredits > 0 && (
               <p className="text-[11px] text-gray-400 mt-0.5">
                 {walletBalance.buckets.purchasedCredits.toLocaleString()} purchased
+                {(walletBalance.buckets.trialCredits ?? 0) > 0 && <> · {walletBalance.buckets.trialCredits.toLocaleString()} trial</>}
                 {walletBalance.buckets.bonusCredits > 0 && <> · {walletBalance.buckets.bonusCredits.toLocaleString()} bonus</>}
                 {walletBalance.buckets.promotionalCredits > 0 && <> · {walletBalance.buckets.promotionalCredits.toLocaleString()} promo</>}
                 {walletBalance.buckets.referralCredits > 0 && <> · {walletBalance.buckets.referralCredits.toLocaleString()} referral</>}

@@ -1,6 +1,7 @@
-import { Controller, Post, Get, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpCode, HttpStatus, UseGuards, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -10,6 +11,8 @@ class RegisterDto {
   @IsEmail() email!: string;
   @IsString() @MinLength(8) password!: string;
   @IsString() @IsOptional() name?: string;
+  /** Client-side device fingerprint for trial abuse scoring (Phase 6 §6). */
+  @IsString() @IsOptional() deviceFingerprint?: string;
 }
 
 class LoginDto {
@@ -23,8 +26,8 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.auth.register(dto);
+  register(@Body() dto: RegisterDto, @Req() req: Request) {
+    return this.auth.register(dto, { deviceFingerprint: dto.deviceFingerprint, ip: req.ip });
   }
 
   @Post('login')

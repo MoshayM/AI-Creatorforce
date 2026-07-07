@@ -42,6 +42,7 @@ import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, type
 import { newAccumulator, runWithAiContext } from '../common/ai-usage.context';
 import { WalletService, billingEnforced, creditsForCost } from '../modules/wallet/wallet.service';
 import { PricingService } from '../modules/ai-ops/pricing.service';
+import { TrialLimitsService } from '../modules/trial/trial-limits.service';
 import { EventsGateway } from '../gateway/events.gateway';
 import { AGENT_QUEUE } from '../modules/jobs/jobs.module';
 import { callAIStructured } from '@cf/shared';
@@ -101,6 +102,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly shortsExport: ShortsExportService,
     private readonly walletService: WalletService,
     private readonly pricingService: PricingService,
+    private readonly trialLimits: TrialLimitsService,
     private readonly events: EventsGateway,
   ) {
     super();
@@ -119,11 +121,28 @@ export class SupervisorWorker extends WorkerHost {
     const accumulator = newAccumulator();
     let reservationId: string | null = null;
     let holdUserId: string | null = null;
+    const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { userId: true } });
+
+    // Phase 6 §7: trial feature gate — server-side, before any spend.
+    // Non-trial users pass through untouched.
+    if (project) {
+      try {
+        await this.trialLimits.assertAllowed(project.userId, 'daily_ai_requests');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await this.prisma.agentJob.update({
+          where: { id: jobId },
+          data: { status: 'FAILED', error: msg, completedAt: new Date() },
+        });
+        this.events.emitJobFailed(jobId, msg, projectId);
+        throw err;
+      }
+    }
+
     // Phase 5 §7: a matching pricing rule QUOTES the price here and LOCKS it —
     // the settle uses this exact amount, never a mid-flight recalculation.
     let lockedPrice: { creditCost: number; ruleId: string } | null = null;
     if (billingEnforced()) {
-      const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { userId: true } });
       if (project) {
         holdUserId = project.userId;
         lockedPrice = await this.pricingService.resolvePrice({ action: type }).catch(() => null);

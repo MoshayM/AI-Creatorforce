@@ -256,6 +256,11 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | GET | `/admin/providers` | `admin:providers` — AI provider registry: status, health score, failure rate, current cost rates, recent health events (Phase 5 §5) |
 | GET/POST/PATCH | `/admin/pricing-rules` | `admin:pricing` — credit pricing rules, most-specific-wins; create/update rejected below `MIN_PROFIT_MARGIN` (fail closed); audited. Rule prices are locked at reservation time |
 | POST | `/admin/profit/preview` | `admin:pricing` — margin verdict for a hypothetical `{action, creditCost}` (Phase 5 §8) |
+| GET | `/trial/status` | Trial grant status, remaining trial credits, expiry (Phase 6 §5) |
+| GET | `/trial/limits` | Effective trial-tier restrictions + whether they apply to me |
+| GET/PATCH | `/admin/trial-config` | `admin:trial` — trial credits/expiry + per-feature limits; audited |
+| GET | `/admin/abuse-signals` | `admin:trial` — fingerprint/IP abuse decisions (Phase 6 §6) |
+| POST | `/admin/trial/:userId/approve` | `admin:trial` — grant a PENDING_REVIEW trial after manual review |
 
 Roles: `SUPER_ADMIN` > `OWNER` > `MEMBER`; elevated identities come from `SUPER_ADMIN_EMAILS` / `OWNER_EMAILS` env config (never hardcoded). The `credit_ledger` is append-only and idempotent — every balance is reconstructable from it.
 

@@ -6,9 +6,11 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { GoogleStrategy } from './google.strategy';
+import { TrialModule } from '../trial/trial.module';
 
 @Module({
   imports: [
+    TrialModule,
     PassportModule,
     // @reason: registerAsync defers env reads until after ConfigModule loads .env —
     // JwtModule.register() runs at decorator time before dotenv, causing sign/verify secret mismatch.

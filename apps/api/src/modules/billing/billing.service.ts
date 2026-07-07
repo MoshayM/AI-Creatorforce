@@ -221,6 +221,12 @@ export class BillingService {
       metadata: { gateway: 'STRIPE', amountMinor: payment.amount, currency: payment.currency },
     });
     this.logger.log(`[recharge] +${credits} credits → user ${userId} (payment ${payment.id})`);
+
+    // Phase 6 §5: first successful recharge converts the trial
+    await this.prisma.trialGrant.updateMany({
+      where: { userId, status: { in: ['ACTIVE', 'EXPIRED'] } },
+      data: { status: 'CONVERTED' },
+    }).catch(() => undefined);
   }
 
   /**
