@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard, RequirePermissions } from '../../common/guards/permissions.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
@@ -7,6 +7,7 @@ import { TrialService } from './trial.service';
 import { TRIAL_FEATURES, TrialLimitsService, type TrialFeature } from './trial-limits.service';
 import { UpgradeEngineService } from './upgrade-engine.service';
 import { OffersService } from './offers.service';
+import { MarketplaceService } from './marketplace.service';
 
 @Controller('trial')
 @UseGuards(JwtAuthGuard)
@@ -27,6 +28,33 @@ export class TrialController {
       isTrialUser: await this.limits.isTrialUser(user.sub),
       limits: await this.limits.effectiveLimits(),
     };
+  }
+}
+
+@Controller('offers')
+@UseGuards(JwtAuthGuard)
+export class OffersController {
+  constructor(private readonly offers: OffersService) {}
+
+  @Get()
+  async mine(@CurrentUser() user: JwtPayload) {
+    return this.offers.offersFor(user.sub);
+  }
+
+  @Post(':id/redeem')
+  async redeem(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.offers.redeem(id, user.sub);
+  }
+}
+
+@Controller('marketplace')
+@UseGuards(JwtAuthGuard)
+export class MarketplaceController {
+  constructor(private readonly marketplace: MarketplaceService) {}
+
+  @Get('packs')
+  async packs(@Query('region') region?: string) {
+    return this.marketplace.listPacks(region);
   }
 }
 
@@ -112,12 +140,41 @@ export class OffersAdminController {
   @Post()
   @RequirePermissions('admin:trial')
   async create(
-    @Body() dto: { type: 'FIRST_RECHARGE' | 'WELCOME'; name: string; rewardValue: number; minRechargeMinor?: number; validTo?: string; usageLimit?: number },
+    @Body() dto: { type: 'FIRST_RECHARGE' | 'WELCOME' | 'LOYALTY' | 'WINBACK' | 'LOW_CREDIT'; name: string; rewardValue: number; minRechargeMinor?: number; validTo?: string; usageLimit?: number; targetRule?: Record<string, number> },
     @CurrentUser() admin: JwtPayload,
   ) {
     if (!dto?.name || !Number.isInteger(dto.rewardValue) || dto.rewardValue < 1) {
       throw new BadRequestException('name and a positive integer rewardValue are required');
     }
     return this.offers.createOffer(dto, admin.sub);
+  }
+}
+
+@Controller('admin/credit-packs')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+export class MarketplaceAdminController {
+  constructor(private readonly marketplace: MarketplaceService, private readonly prisma: PrismaService) {}
+
+  @Get()
+  @RequirePermissions('admin:pricing')
+  async list() {
+    return this.prisma.creditPack.findMany({ orderBy: [{ sortOrder: 'asc' }, { priceMinor: 'asc' }] });
+  }
+
+  @Post()
+  @RequirePermissions('admin:pricing')
+  async create(
+    @Body() dto: { name: string; credits: number; priceMinor: number; currency?: string; region?: string; sortOrder?: number },
+    @CurrentUser() admin: JwtPayload,
+  ) {
+    if (!dto?.name) throw new BadRequestException('name is required');
+    return this.marketplace.createPack(dto, admin.sub);
+  }
+
+  @Patch(':id/active')
+  @RequirePermissions('admin:pricing')
+  async toggle(@Param('id') id: string, @Body() dto: { isActive: boolean }, @CurrentUser() admin: JwtPayload) {
+    if (typeof dto?.isActive !== 'boolean') throw new BadRequestException('isActive must be a boolean');
+    return this.marketplace.setPackActive(id, dto.isActive, admin.sub);
   }
 }

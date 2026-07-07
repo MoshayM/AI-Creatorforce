@@ -27,8 +27,9 @@
 |---|---|---|
 | §5–7 Trial system + abuse + restrictions | Trial lot on signup, one-per-identity, fingerprint scoring, feature gating | ✅ shipped |
 | §8–9 Upgrade engine + first-recharge rewards | Behavior-driven nudges; profit-gated bonuses | ✅ shipped |
-| §10 Offers + referrals | Rule-driven offers, referral codes/qualification/fraud | ❌ after trial |
-| §12 Marketplace | `credit_packs`, regional pricing over the existing recharge path | ❌ after offers |
+| §10.1 Offer engine | Behavior-qualified campaigns, redeem + auto-apply at settle, profit-gated | ✅ shipped |
+| §12 Marketplace | `credit_packs`, regional rows, pack-based recharge over the existing payment path | ✅ shipped |
+| §10.2 Referrals | Codes, qualification gate, fraud, leaderboard | ❌ next (Wave 4) |
 | §11 Wallet display | Lot breakdown already exists on the settings wallet card; expiry timeline pending | ⏳ partial |
 
 ## What shipped in this slice (Phase 5 Wave 1)
@@ -103,6 +104,30 @@
   (`bonus$ ≤ recharge$ × (1 − MIN_PROFIT_MARGIN)`, conservative face-value
   costing). Reward failures never break the payment webhook.
   `GET/POST /admin/offers` (`admin:trial`, audited).
+
+## What shipped in Phase 6 Wave 3 (offer engine + marketplace)
+
+- **Offer engine** (§10.1): offers are admin-created campaigns whose
+  *targeting* is behavior-driven — `offerQualifies` (pure, tested) matches
+  WELCOME/FIRST_RECHARGE (no payments yet), LOYALTY (`lifetimePurchasedMin`),
+  WINBACK (`inactiveDaysMin`), LOW_CREDIT (`maxBalance`) against the user's
+  live context, thresholds via `targetRule`. Two redemption modes:
+  recharge-attached offers auto-apply at webhook settle (best qualifying
+  reward, per-user/global limits, double-idempotent on the payment) and
+  direct-grant offers via `POST /offers/:id/redeem` (idempotent per user).
+  `GET /offers` is the user's Offer Center feed. Profit gates at creation:
+  recharge-attached bonuses fit the margin envelope; direct grants are
+  capped by `MAX_FREE_GRANT_CREDITS` (default 100) — fail closed.
+- **Marketplace** (§12): `credit_packs` with per-region rows;
+  `GET /marketplace/packs?region=` filters; recharge accepts `packId` and
+  runs the standard payment flow (same idempotency, webhook settlement, and
+  offer rewards). Pack creation is margin-gated using the real credit
+  economics — credits redeem at rate×markup, so a $10 pack may carry up to
+  40% bonus credits at defaults (`packWithinMargin`, pure + tested).
+  Admin CRUD under `admin:pricing`, audited.
+- Deviation: the spec's *auto-generation* of offer rows is replaced by
+  admin-created campaigns + behavior-driven qualification + the Wave 2
+  upgrade nudges — same outcomes, no per-user campaign-row explosion.
 
 ## Deliberate deviations
 

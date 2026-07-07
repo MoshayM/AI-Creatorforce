@@ -939,6 +939,8 @@ model Offer {
   validTo          DateTime?
   usageLimit       Int?
   perUserLimit     Int             @default(1)
+  /** Qualification parameters per type, e.g. {"inactiveDaysMin":14} or {"maxBalance":50} (Phase 6 §10.1). */
+  targetRule       Json?
   profitChecked    Boolean         @default(false)
   status           String          @default("active")
   createdAt        DateTime        @default(now())
@@ -964,6 +966,25 @@ model OfferRedemption {
 
   @@index([userId])
   @@map("offer_redemptions")
+}
+
+// Credit marketplace (Phase 6 §12): packs define WHAT can be bought; the
+// existing recharge/payment path does the buying. Regional pricing =
+// multiple rows per region/currency.
+model CreditPack {
+  id         String   @id @default(cuid())
+  name       String
+  credits    Int
+  priceMinor Int
+  currency   String   @default("usd")
+  region     String?
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([isActive, region])
+  @@map("credit_packs")
 }
 
 enum AiProviderStatus {

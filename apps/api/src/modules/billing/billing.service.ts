@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { OffersService } from '../trial/offers.service';
+import { MarketplaceService } from '../trial/marketplace.service';
 
 const PLAN_PRICE_IDS: Record<string, string> = {
   STARTER: process.env['STRIPE_STARTER_PRICE_ID'] ?? '',
@@ -24,6 +25,7 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
     private readonly offers: OffersService,
+    private readonly marketplace: MarketplaceService,
   ) {}
 
   private get stripe(): Stripe {
@@ -128,6 +130,59 @@ export class BillingService {
       },
     });
     return { checkoutUrl: session.url, credits, amountUsd };
+  }
+
+  /**
+   * Marketplace purchase (Phase 6 §12): a pack fixes price AND credits; the
+   * flow is otherwise the standard recharge — same idempotency, same webhook
+   * settlement, same offer rewards.
+   */
+  async createPackRechargeSession(
+    userId: string,
+    email: string,
+    packId: string,
+    idempotencyKey: string,
+    successUrl: string,
+    cancelUrl: string,
+  ) {
+    const pack = await this.marketplace.getPack(packId);
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { rechargesFrozen: true } });
+    if (user?.rechargesFrozen) throw new BadRequestException('FRAUD_HOLD');
+    const existing = await this.prisma.payment.findUnique({ where: { idempotencyKey } });
+    if (existing) throw new BadRequestException('This recharge request was already started (idempotency key reuse)');
+
+    const customerId = await this.getOrCreateCustomer(userId, email);
+    const session = await this.stripe.checkout.sessions.create(
+      {
+        customer: customerId,
+        mode: 'payment',
+        line_items: [{
+          price_data: {
+            currency: pack.currency,
+            unit_amount: pack.priceMinor,
+            product_data: { name: `${pack.name} — ${pack.credits.toLocaleString()} credits` },
+          },
+          quantity: 1,
+        }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: { kind: 'wallet_recharge', userId, credits: String(pack.credits), idempotencyKey, packId: pack.id },
+      },
+      { idempotencyKey },
+    );
+    await this.prisma.payment.create({
+      data: {
+        userId,
+        gateway: 'STRIPE',
+        gatewayPaymentId: session.id,
+        amount: pack.priceMinor,
+        currency: pack.currency,
+        status: 'PENDING',
+        creditsGranted: 0,
+        idempotencyKey,
+      },
+    });
+    return { checkoutUrl: session.url, credits: pack.credits, pack: { id: pack.id, name: pack.name } };
   }
 
   async handleWebhook(payload: Buffer, signature: string) {

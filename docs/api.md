@@ -263,7 +263,11 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | POST | `/admin/trial/:userId/approve` | `admin:trial` — grant a PENDING_REVIEW trial after manual review |
 | GET | `/upgrade/recommendations` | Behavior-driven upgrade nudges (frequency-capped); refreshes on read (Phase 6 §8) |
 | POST | `/upgrade/recommendations/:id/dismiss` | Dismiss a nudge (suppresses that reason for 14 days) |
-| GET/POST | `/admin/offers` | `admin:trial` — offers incl. FIRST_RECHARGE; creation is margin-gated (fail closed); grants are double-idempotent (Phase 6 §9) |
+| GET/POST | `/admin/offers` | `admin:trial` — campaigns (FIRST_RECHARGE/WELCOME/LOYALTY/WINBACK/LOW_CREDIT with `targetRule`); creation margin-gated (fail closed); grants double-idempotent (Phase 6 §9/§10.1) |
+| GET | `/offers` | My Offer Center: active campaigns I qualify for (behavior-targeted) |
+| POST | `/offers/:id/redeem` | Redeem a direct-grant offer (idempotent per user); recharge-attached offers apply automatically at settle |
+| GET | `/marketplace/packs` | Credit packs (`?region=` filters; global packs always included) (Phase 6 §12) |
+| GET/POST/PATCH | `/admin/credit-packs` | `admin:pricing` — packs; creation margin-gated on real credit economics; audited |
 
 Roles: `SUPER_ADMIN` > `OWNER` > `MEMBER`; elevated identities come from `SUPER_ADMIN_EMAILS` / `OWNER_EMAILS` env config (never hardcoded). The `credit_ledger` is append-only and idempotent — every balance is reconstructable from it.
 

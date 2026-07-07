@@ -1,5 +1,6 @@
 import { evaluateUpgradeRules, shouldNudge } from './upgrade-engine.service';
-import { bonusWithinMargin, pickFirstRechargeOffer } from './offers.service';
+import { bonusWithinMargin, offerQualifies, pickFirstRechargeOffer } from './offers.service';
+import { packWithinMargin } from './marketplace.service';
 
 const behaviour = (over: Partial<Parameters<typeof evaluateUpgradeRules>[0]> = {}) => ({
   chatsSent: 0, videosAnalyzed: 0, clipsGenerated: 0, rendersRun: 0, ...over,
@@ -52,6 +53,51 @@ describe('bonusWithinMargin — §9 profit gate', () => {
   it('fails closed on nonsense inputs', () => {
     expect(bonusWithinMargin(0, 10, 100, 0.3)).toBe(false);
     expect(bonusWithinMargin(500, -1, 100, 0.3)).toBe(false);
+  });
+});
+
+describe('offerQualifies — §10.1 behavior targeting', () => {
+  const ctx = (over: Partial<Parameters<typeof offerQualifies>[1]> = {}) => ({
+    hasPaid: false, lifetimePurchased: 0, inactiveDays: 0, balanceCredits: 500, ...over,
+  });
+
+  it('WELCOME/FIRST_RECHARGE only before the first payment', () => {
+    expect(offerQualifies({ type: 'WELCOME' }, ctx())).toBe(true);
+    expect(offerQualifies({ type: 'WELCOME' }, ctx({ hasPaid: true }))).toBe(false);
+  });
+
+  it('WINBACK respects the targetRule inactivity threshold', () => {
+    expect(offerQualifies({ type: 'WINBACK', targetRule: { inactiveDaysMin: 30 } }, ctx({ inactiveDays: 20 }))).toBe(false);
+    expect(offerQualifies({ type: 'WINBACK', targetRule: { inactiveDaysMin: 30 } }, ctx({ inactiveDays: 31 }))).toBe(true);
+    expect(offerQualifies({ type: 'WINBACK' }, ctx({ inactiveDays: 14 }))).toBe(true); // default 14
+  });
+
+  it('LOW_CREDIT triggers on a near-empty wallet, LOYALTY on spend history', () => {
+    expect(offerQualifies({ type: 'LOW_CREDIT' }, ctx({ balanceCredits: 20 }))).toBe(true);
+    expect(offerQualifies({ type: 'LOW_CREDIT' }, ctx({ balanceCredits: 400 }))).toBe(false);
+    expect(offerQualifies({ type: 'LOYALTY' }, ctx({ lifetimePurchased: 2_000 }))).toBe(true);
+    expect(offerQualifies({ type: 'LOYALTY' }, ctx({ lifetimePurchased: 10 }))).toBe(false);
+  });
+
+  it('unknown types fail closed', () => {
+    expect(offerQualifies({ type: 'MYSTERY' }, ctx())).toBe(false);
+  });
+});
+
+describe('packWithinMargin — §12 marketplace profit gate', () => {
+  // rate 100, markup 2, minMargin 0.3: $10 pack → expected cost = credits/200; cap = 1400 credits
+  it('allows up to a 40% bonus at defaults and rejects beyond', () => {
+    expect(packWithinMargin(1000, 1400, 100, 2, 0.3)).toBe(true);
+    expect(packWithinMargin(1000, 1401, 100, 2, 0.3)).toBe(false);
+  });
+
+  it('plain 1:1 packs pass comfortably', () => {
+    expect(packWithinMargin(1000, 1000, 100, 2, 0.3)).toBe(true);
+  });
+
+  it('fails closed on nonsense inputs', () => {
+    expect(packWithinMargin(0, 100, 100, 2, 0.3)).toBe(false);
+    expect(packWithinMargin(1000, 0, 100, 2, 0.3)).toBe(false);
   });
 });
 
