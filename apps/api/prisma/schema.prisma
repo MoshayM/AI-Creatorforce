@@ -193,6 +193,7 @@ enum JobType {
   CHAPTER_DETECTION
   EMBEDDING_GENERATION
   CHURCH_PACK_GENERATION
+  SOCIAL_CONTENT_GENERATION
 }
 
 enum JobStatus {
@@ -650,6 +651,7 @@ model ImportedVideo {
   scenes             VideoScene[]
   topicSegments      TopicSegment[]
   chapters           Chapter[]
+  socialContent      SocialContent[]
 
   @@unique([projectId, youtubeVideoId])
   @@index([projectId])
@@ -665,6 +667,33 @@ model ImportedVideo {
 enum ChapterSource {
   DETECTED
   IMPORTED
+}
+
+// ── Social content factory (Ai-video edit.md §10, Phase 5) ────────────────────
+// Text artifacts derived from the chapter/highlight graph in one batched call.
+// `content` shape per kind: QUOTE_CARD {quote, attribution?, startMs};
+// CAROUSEL {slides:[{heading, body}]}; BLOG_POST {markdown};
+// NEWSLETTER {subject, markdown}.
+
+enum SocialContentKind {
+  QUOTE_CARD
+  CAROUSEL
+  BLOG_POST
+  NEWSLETTER
+}
+
+model SocialContent {
+  id              String            @id @default(cuid())
+  importedVideoId String
+  kind            SocialContentKind
+  title           String
+  content         Json
+  createdAt       DateTime          @default(now())
+
+  importedVideo ImportedVideo @relation(fields: [importedVideoId], references: [id], onDelete: Cascade)
+
+  @@index([importedVideoId, kind])
+  @@map("social_content")
 }
 
 model Chapter {

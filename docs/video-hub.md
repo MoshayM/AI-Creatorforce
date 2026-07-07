@@ -158,11 +158,28 @@
   including YouTube's validity rules and replacing an existing block without
   touching the surrounding description.
 
-## Next steps (Phase 5/6 remainder)
+### Social content factory (§10, Phase 5 slice 5)
+
+- **`social_content` table**: kind (QUOTE_CARD | CAROUSEL | BLOG_POST |
+  NEWSLETTER) + per-kind JSON content; rides `GET /videos/:id/social-content`.
+- **`SOCIAL_CONTENT_GENERATION` job**: the whole text pack in ONE batched
+  call (§12.4) over chapters + top-5 highlights, with the transcript excerpts
+  under those highlights included (timestamp-prefixed) so quote cards are
+  VERBATIM lines with real startMs — never paraphrases. Out-of-range quote
+  timestamps are dropped, not stored. On-demand; self-skips when content
+  exists.
+- **Copilot**: `generate_social_content`, confirmation-gated. **UI**: Social
+  tab — quote-card grid with timestamps, numbered carousel slides, blog +
+  newsletter with copy-to-clipboard on every piece.
+- Video-clip social formats (Reels/TikTok/LinkedIn/Podcast) were already
+  covered by ClipTypes; this slice completes §10's text artifacts (the
+  devotional shipped with the church pack).
+
+## Next steps (Phase 6 remainder)
 
 1. Per-video AI cost breakdown on Analytics (needs token_usage → video
    attribution).
 2. Embedding-grounded copilot answers ("list sermons that mention grace" —
    §11 cross-video query) once cross-video search exists.
-3. Social-content factory (quote cards, carousels, blog/newsletter drafts)
-   from the same chapter/highlight graph.
+3. Quote-card IMAGE rendering (1080×1080 PNG via the thumbnail/ffmpeg path) —
+   text data is ready in social_content.

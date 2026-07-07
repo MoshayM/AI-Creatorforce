@@ -32,6 +32,8 @@ export const CopilotCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('generate_church_pack'), importedVideoId: z.string() }),
   // Publishes the chapter block into the live YouTube description (§11)
   z.object({ action: z.literal('sync_chapters_to_youtube'), importedVideoId: z.string() }),
+  // Social factory (§10): quote cards + carousel + blog + newsletter, one batched call
+  z.object({ action: z.literal('generate_social_content'), importedVideoId: z.string() }),
   z.object({
     action: z.literal('generate_clips'),
     highlightId: z.string(),
@@ -67,6 +69,7 @@ export const EXPENSIVE_ACTIONS: ReadonlyArray<CopilotCommand['action']> = [
   'generate_church_pack',
   // Mutates the public video description — always confirm first
   'sync_chapters_to_youtube',
+  'generate_social_content',
 ];
 
 export const CopilotDecisionSchema = z.object({

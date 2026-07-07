@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle, ChevronDown, ChevronRight, BookOpen, Check, Search } from 'lucide-react';
+import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle, ChevronDown, ChevronRight, BookOpen, Check, Search, Share2, Copy } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Topic {
@@ -29,6 +29,20 @@ interface Chapter {
   bibleRefs: string[];
   discussionQuestions: string[];
   devotional: string | null;
+}
+
+interface SocialPiece {
+  id: string;
+  kind: 'QUOTE_CARD' | 'CAROUSEL' | 'BLOG_POST' | 'NEWSLETTER';
+  title: string;
+  content: {
+    quote?: string;
+    attribution?: string | null;
+    startMs?: number;
+    slides?: Array<{ heading: string; body: string }>;
+    subject?: string;
+    markdown?: string;
+  };
 }
 
 interface SearchResponse {
@@ -332,7 +346,7 @@ function HighlightCard({ h, open, onToggle }: { h: Highlight; open: boolean; onT
 export default function ShortsVideoDetailPage() {
   const { importedVideoId } = useParams<{ importedVideoId: string }>();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<'highlights' | 'topics' | 'chapters' | 'search'>('highlights');
+  const [tab, setTab] = useState<'highlights' | 'topics' | 'chapters' | 'search' | 'social'>('highlights');
   const [searchQuery, setSearchQuery] = useState('');
   const [openHighlights, setOpenHighlights] = useState<Set<string>>(new Set());
   const [openTopics, setOpenTopics] = useState<Set<string>>(new Set());
@@ -352,6 +366,13 @@ export default function ShortsVideoDetailPage() {
   });
   const detectChapters = useMutation({
     mutationFn: () => api.shortsStudio.detectChapters(importedVideoId),
+  });
+  const { data: socialPieces = [] } = useQuery<SocialPiece[]>({
+    queryKey: ['shorts-social', importedVideoId],
+    queryFn: () => api.shortsStudio.socialContent(importedVideoId).then((r) => r.data as SocialPiece[]),
+  });
+  const generateSocial = useMutation({
+    mutationFn: () => api.shortsStudio.generateSocialContent(importedVideoId),
   });
   const generateChurchPack = useMutation({
     mutationFn: () => api.shortsStudio.generateChurchPack(importedVideoId),
@@ -422,6 +443,12 @@ export default function ShortsVideoDetailPage() {
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg ${tab === 'search' ? 'bg-white shadow-sm font-semibold text-gray-900' : 'text-gray-500'}`}
           >
             <Search className="w-4 h-4" /> Search
+          </button>
+          <button
+            onClick={() => setTab('social')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg ${tab === 'social' ? 'bg-white shadow-sm font-semibold text-gray-900' : 'text-gray-500'}`}
+          >
+            <Share2 className="w-4 h-4" /> Social ({socialPieces.length})
           </button>
         </div>
       </div>
@@ -864,6 +891,122 @@ export default function ShortsVideoDetailPage() {
             <p className="text-center text-gray-400 py-12">Type a phrase to jump to the moment it's spoken.</p>
           )}
         </div>
+      )}
+
+      {!loading && tab === 'social' && (
+        <SocialTab
+          pieces={socialPieces}
+          onGenerate={() => generateSocial.mutate()}
+          generating={generateSocial.isPending}
+          queued={generateSocial.isSuccess}
+        />
+      )}
+    </div>
+  );
+}
+
+function SocialTab({ pieces, onGenerate, generating, queued }: {
+  pieces: SocialPiece[];
+  onGenerate: () => void;
+  generating: boolean;
+  queued: boolean;
+}) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copy = (id: string, text: string) => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500);
+    });
+  };
+  const CopyBtn = ({ id, text }: { id: string; text: string }) => (
+    <button
+      onClick={() => copy(id, text)}
+      className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 shrink-0"
+      title="Copy to clipboard"
+    >
+      {copiedId === id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+      {copiedId === id ? 'Copied' : 'Copy'}
+    </button>
+  );
+
+  if (pieces.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-gray-400 mb-4">No social content yet.</p>
+        <button
+          onClick={onGenerate}
+          disabled={generating || queued}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+        >
+          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+          {queued ? 'Generating — check back shortly' : 'Generate social pack'}
+        </button>
+        <p className="text-xs text-gray-400 mt-2">Quote cards, a carousel, a blog post, and a newsletter — one batched AI call.</p>
+      </div>
+    );
+  }
+
+  const quotes = pieces.filter((p) => p.kind === 'QUOTE_CARD');
+  const carousel = pieces.find((p) => p.kind === 'CAROUSEL');
+  const blog = pieces.find((p) => p.kind === 'BLOG_POST');
+  const newsletter = pieces.find((p) => p.kind === 'NEWSLETTER');
+
+  return (
+    <div className="space-y-6">
+      {quotes.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Quote cards</h2>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {quotes.map((q) => (
+              <div key={q.id} className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+                <p className="text-sm text-gray-800 italic">“{q.content.quote}”</p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-[11px] text-gray-400">
+                    {q.content.attribution ? `${q.content.attribution} · ` : ''}{q.content.startMs != null ? fmt(q.content.startMs) : ''}
+                  </p>
+                  <CopyBtn id={q.id} text={q.content.quote ?? ''} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {carousel?.content.slides && (
+        <section className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Carousel — {carousel.title}</h2>
+            <CopyBtn id={carousel.id} text={carousel.content.slides.map((s, i) => `${i + 1}. ${s.heading}\n${s.body}`).join('\n\n')} />
+          </div>
+          <ol className="space-y-2">
+            {carousel.content.slides.map((s, i) => (
+              <li key={i} className="text-sm">
+                <span className="font-medium text-gray-900">{i + 1}. {s.heading}</span>
+                <p className="text-gray-600 text-xs mt-0.5">{s.body}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {blog && (
+        <section className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Blog post — {blog.title}</h2>
+            <CopyBtn id={blog.id} text={blog.content.markdown ?? ''} />
+          </div>
+          <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans max-h-96 overflow-y-auto">{blog.content.markdown}</pre>
+        </section>
+      )}
+
+      {newsletter && (
+        <section className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Newsletter — {newsletter.content.subject}</h2>
+            <CopyBtn id={newsletter.id} text={newsletter.content.markdown ?? ''} />
+          </div>
+          <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans max-h-72 overflow-y-auto">{newsletter.content.markdown}</pre>
+        </section>
       )}
     </div>
   );

@@ -42,6 +42,7 @@ export const JobTypeSchema = z.enum([
   'CHAPTER_DETECTION',
   'EMBEDDING_GENERATION',
   'CHURCH_PACK_GENERATION',
+  'SOCIAL_CONTENT_GENERATION',
 ]);
 export type JobType = z.infer<typeof JobTypeSchema>;
 

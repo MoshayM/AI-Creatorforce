@@ -80,6 +80,37 @@ export const ChurchPackOutputSchema = z.object({
 });
 export type ChurchPackOutput = z.infer<typeof ChurchPackOutputSchema>;
 
+// ── Social content factory (Ai-video edit.md §10, Phase 5) ──────────────────
+// One batched call produces every text artifact; quotes must be verbatim
+// from the transcript excerpts given in the prompt.
+
+export const SocialContentOutputSchema = z.object({
+  quoteCards: z.array(z.object({
+    /** Verbatim (or near-verbatim) quote from the provided transcript excerpts. */
+    quote: z.string().min(1).max(300),
+    /** Speaker/attribution if identifiable, else null. */
+    attribution: z.string().nullable().default(null),
+    /** Where in the video the quote is spoken (ms) — from the excerpt stamps. */
+    startMs: z.number().int().nonnegative(),
+  })).min(1).max(6),
+  carousel: z.object({
+    title: z.string().min(1),
+    slides: z.array(z.object({
+      heading: z.string().min(1).max(80),
+      body: z.string().min(1).max(280),
+    })).min(3).max(10),
+  }),
+  blogPost: z.object({
+    title: z.string().min(1),
+    markdown: z.string().min(1),
+  }),
+  newsletter: z.object({
+    subject: z.string().min(1).max(100),
+    markdown: z.string().min(1),
+  }),
+});
+export type SocialContentOutput = z.infer<typeof SocialContentOutputSchema>;
+
 /** The 9 score dimensions, 0–100 each (ai.md Section 5.1). */
 export const HIGHLIGHT_DIMENSIONS = [
   'virality',

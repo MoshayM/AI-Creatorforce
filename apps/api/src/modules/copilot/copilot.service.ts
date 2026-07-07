@@ -45,6 +45,7 @@ Command palette:
 - generate_small_videos {importedVideoId} — create one horizontal 1–10 min video candidate per detected chapter (render each afterwards with render_clip)
 - generate_church_pack {importedVideoId} — bible references, discussion questions, and a devotional for every chapter (requires the user's confirmation)
 - sync_chapters_to_youtube {importedVideoId} — publish the chapter timestamps into the video's YouTube description (edits the live video; requires the user's confirmation)
+- generate_social_content {importedVideoId} — quote cards, a carousel, a blog post, and a newsletter from the video's analysis (requires the user's confirmation)
 - generate_clips {highlightId, clipTypes} — create candidate Shorts clips (clipTypes values: YOUTUBE_SHORTS, INSTAGRAM_REELS, TIKTOK, LINKEDIN_CLIPS, FACEBOOK_REELS, PODCAST_HIGHLIGHTS)
 - render_clip {shortClipId} — render a clip to vertical video
 - generate_captions {shortClipId}
@@ -427,6 +428,17 @@ export class CopilotService {
         return {
           summary: `Done — ${synced.chapters} chapter timestamps are now in the YouTube description. They'll show on the player shortly.`,
           data: synced,
+        };
+      }
+
+      case 'generate_social_content': {
+        const video = await this.shorts.assertVideoOwnership(command.importedVideoId, userId);
+        const job = await this.jobs.enqueue(video.projectId, 'SOCIAL_CONTENT_GENERATION', {
+          importedVideoId: command.importedVideoId,
+        });
+        return {
+          summary: 'Creating your social pack — quote cards, a carousel, a blog post, and a newsletter. Check the Social tab in a moment.',
+          data: { jobId: job.id },
         };
       }
 

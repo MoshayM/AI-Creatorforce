@@ -16,6 +16,7 @@ import { ShortsExportService } from './shorts-export.service';
 import { SemanticSearchService } from './semantic-search.service';
 import { SmallVideoGenerationService } from './small-video-generation.service';
 import { ChapterSyncService } from './chapter-sync.service';
+import { SocialContentService } from './social-content.service';
 import { JobsService } from '../jobs/jobs.service';
 
 class ImportVideoDto {
@@ -52,6 +53,7 @@ export class ShortsStudioController {
     private readonly search: SemanticSearchService,
     private readonly smallVideos: SmallVideoGenerationService,
     private readonly chapterSync: ChapterSyncService,
+    private readonly social: SocialContentService,
     private readonly jobs: JobsService,
   ) {}
 
@@ -168,6 +170,19 @@ export class ShortsStudioController {
   async generateSmallVideos(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
     await this.shorts.assertVideoOwnership(importedVideoId, user.sub);
     return this.smallVideos.generateFromChapters(importedVideoId);
+  }
+
+  // ── Social content factory (Ai-video edit.md §10, Phase 5) ─────────────────
+
+  @Get('videos/:importedVideoId/social-content')
+  async socialContent(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
+    await this.shorts.assertVideoOwnership(importedVideoId, user.sub);
+    return this.social.listForVideo(importedVideoId);
+  }
+
+  @Post('videos/:importedVideoId/social-content')
+  async generateSocialContent(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
+    return this.shorts.enqueueSocialContent(importedVideoId, user.sub);
   }
 
   @Post('videos/:importedVideoId/sync-chapters')

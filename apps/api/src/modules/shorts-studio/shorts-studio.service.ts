@@ -168,6 +168,12 @@ export class ShortsStudioService {
     return this.jobs.enqueue(video.projectId, 'CHURCH_PACK_GENERATION', { importedVideoId });
   }
 
+  /** Social content factory (§10) — on demand only. */
+  async enqueueSocialContent(importedVideoId: string, userId: string) {
+    const video = await this.assertVideoOwnership(importedVideoId, userId);
+    return this.jobs.enqueue(video.projectId, 'SOCIAL_CONTENT_GENERATION', { importedVideoId });
+  }
+
   /** Manual rename/edit (Ai-video edit.md §11) — flagged so re-detection keeps it. */
   async updateChapter(chapterId: string, userId: string, patch: { title?: string; summary?: string }) {
     const chapter = await this.prisma.chapter.findFirst({
