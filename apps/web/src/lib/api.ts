@@ -116,6 +116,8 @@ export const api = {
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/topics`),
     highlights: (importedVideoId: string) =>
       apiClient.get(`/shorts-studio/videos/${importedVideoId}/highlights`),
+    generateChurchPack: (importedVideoId: string) =>
+      apiClient.post(`/shorts-studio/videos/${importedVideoId}/church-pack`),
     generateSmallVideos: (importedVideoId: string) =>
       apiClient.post(`/shorts-studio/videos/${importedVideoId}/small-videos`),
     searchVideo: (importedVideoId: string, q: string, limit = 10) =>

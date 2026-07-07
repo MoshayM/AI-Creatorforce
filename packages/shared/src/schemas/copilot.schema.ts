@@ -28,6 +28,8 @@ export const CopilotCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('search_video'), importedVideoId: z.string(), query: z.string().min(1).max(200) }),
   // Chapter → small-video candidates: pure DB rows, zero AI (§10/§12.4)
   z.object({ action: z.literal('generate_small_videos'), importedVideoId: z.string() }),
+  // Church AI pack (§11): bible refs + discussion questions + devotional per chapter
+  z.object({ action: z.literal('generate_church_pack'), importedVideoId: z.string() }),
   z.object({
     action: z.literal('generate_clips'),
     highlightId: z.string(),
@@ -60,6 +62,7 @@ export const EXPENSIVE_ACTIONS: ReadonlyArray<CopilotCommand['action']> = [
   'render_clip',
   'approve_content',
   'set_voice_language',
+  'generate_church_pack',
 ];
 
 export const CopilotDecisionSchema = z.object({

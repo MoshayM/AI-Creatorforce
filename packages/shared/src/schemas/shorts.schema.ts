@@ -59,6 +59,27 @@ export const ChapterDetectionOutputSchema = z.object({
 });
 export type ChapterDetectionOutput = z.infer<typeof ChapterDetectionOutputSchema>;
 
+// ── Church AI pack (Ai-video edit.md §11, Phase 5) ───────────────────────────
+// One batched call covers every chapter (§12.4); chapterIndex ties each entry
+// back to the prompt's chapter list.
+
+export const ChapterChurchPackSchema = z.object({
+  /** Index into the chapter list given in the prompt. */
+  chapterIndex: z.number().int().nonnegative(),
+  /** Scripture explicitly cited or clearly alluded to in the chapter; [] if none. */
+  bibleRefs: z.array(z.string()).max(10).default([]),
+  /** Small-group discussion questions grounded in this chapter. */
+  discussionQuestions: z.array(z.string()).min(1).max(5),
+  /** Short (~100–150 word) devotional reflection on the chapter's message. */
+  devotional: z.string().min(1),
+});
+export type ChapterChurchPack = z.infer<typeof ChapterChurchPackSchema>;
+
+export const ChurchPackOutputSchema = z.object({
+  chapters: z.array(ChapterChurchPackSchema),
+});
+export type ChurchPackOutput = z.infer<typeof ChurchPackOutputSchema>;
+
 /** The 9 score dimensions, 0–100 each (ai.md Section 5.1). */
 export const HIGHLIGHT_DIMENSIONS = [
   'virality',

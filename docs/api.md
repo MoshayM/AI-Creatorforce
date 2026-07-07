@@ -199,6 +199,7 @@ Module spec: repo-root `ai.md`. All routes prefixed `/shorts-studio`, JWT-guarde
 | GET | `/shorts-studio/videos/:id/search` | NL search over transcript embeddings (`?q=&limit=`): top matches with timestamps, chapter context, cosine score. One embedding call per query, no LLM |
 | POST | `/shorts-studio/videos/:id/generate-embeddings` | Enqueue standalone EMBEDDING_GENERATION (resumable — only un-embedded segments are sent) |
 | POST | `/shorts-studio/videos/:id/small-videos` | Batched chapter → SMALL_VIDEO candidates (16:9, 1–10 min, zero AI); same clip/timeline/render/export path as Shorts. Chapters under 60s are skipped |
+| POST | `/shorts-studio/videos/:id/church-pack` | Enqueue CHURCH_PACK_GENERATION: bible refs + discussion questions + devotional per chapter, ONE batched LLM call (§11/§12.4). Chapters with a devotional are skipped on re-run; results ride on `GET .../chapters` |
 | POST | `/shorts-studio/highlights/:id/generate-clips` | `{ clipTypes: ClipType[] }` → candidate ShortClip[] + seeded timelines |
 | GET | `/shorts-studio/projects/:projectId/clips` | List ShortClip[] for a project |
 | GET | `/shorts-studio/videos/:id/clips` | List ShortClip[] for one imported video |

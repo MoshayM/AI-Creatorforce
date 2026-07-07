@@ -124,10 +124,26 @@
 - **Copilot**: `generate_small_videos` command; **UI**: Generate button on the
   Chapters tab, small videos appear in the Clips list titled by chapter.
 
-## Next steps (Phase 5 remainder)
+### Church AI pack (§11, Phase 5 slice 4)
 
-1. Church AI intelligence pack (chapter summaries → devotionals, discussion
-   questions) and Phase 6 YouTube chapter timestamp sync.
+- **Chapter extension**: `bibleRefs[]`, `discussionQuestions[]`, `devotional`
+  live on the chapter row — the pack is an overlay on the analysis graph, and
+  `GET /videos/:id/chapters` carries it with no new endpoint.
+- **`CHURCH_PACK_GENERATION` job**: on-demand only (never in the default
+  pipeline). ONE batched call over all chapters (§12.4) using stored
+  titles/summaries/keyPoints — the transcript is never re-read. The prompt
+  forbids invented scripture (empty `bibleRefs` when none is cited) and
+  degrades gracefully for non-faith content (practical reflection instead).
+  Chapters with a devotional are skipped → re-runs fill gaps, never clobber.
+- **Copilot**: `generate_church_pack`, confirmation-gated (EXPENSIVE_ACTIONS —
+  real LLM spend on request).
+- **UI**: "Church pack" button on the Chapters tab; expanded chapters show
+  Scripture, numbered discussion questions, and the devotional.
+
+## Next steps (Phase 5/6 remainder)
+
+1. Phase 6: YouTube chapter timestamp sync (chapters ↔ video description) and
+   per-video cost breakdown on Analytics.
 2. Embedding-grounded copilot answers ("list sermons that mention grace" —
    §11 cross-video query) once cross-video search exists.
 3. Social-content factory (quote cards, carousels, blog/newsletter drafts)

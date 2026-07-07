@@ -41,6 +41,7 @@ export const JobTypeSchema = z.enum([
   // Video Intelligence (Ai-video edit.md §5, Phase 5)
   'CHAPTER_DETECTION',
   'EMBEDDING_GENERATION',
+  'CHURCH_PACK_GENERATION',
 ]);
 export type JobType = z.infer<typeof JobTypeSchema>;
 

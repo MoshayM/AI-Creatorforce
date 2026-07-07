@@ -26,6 +26,9 @@ interface Chapter {
   keyPoints: string[];
   confidence: number;
   editedByUser: boolean;
+  bibleRefs: string[];
+  discussionQuestions: string[];
+  devotional: string | null;
 }
 
 interface SearchResponse {
@@ -350,6 +353,9 @@ export default function ShortsVideoDetailPage() {
   const detectChapters = useMutation({
     mutationFn: () => api.shortsStudio.detectChapters(importedVideoId),
   });
+  const generateChurchPack = useMutation({
+    mutationFn: () => api.shortsStudio.generateChurchPack(importedVideoId),
+  });
   const generateSmallVideos = useMutation({
     mutationFn: () => api.shortsStudio.generateSmallVideos(importedVideoId).then((r) => r.data as { created: number; reused: number; skippedTooShort: number }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['shorts-clips', importedVideoId] }),
@@ -625,15 +631,26 @@ export default function ShortsVideoDetailPage() {
           )}
           {chapters.length > 0 && (
             <div className="flex items-center justify-between">
-              <button
-                onClick={() => generateSmallVideos.mutate()}
-                disabled={generateSmallVideos.isPending}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 disabled:opacity-50"
-                title="One horizontal 1–10 min video candidate per chapter — edit and render from the Clips list"
-              >
-                {generateSmallVideos.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clapperboard className="w-3.5 h-3.5" />}
-                Generate small videos
-              </button>
+              <span className="flex items-center gap-2">
+                <button
+                  onClick={() => generateSmallVideos.mutate()}
+                  disabled={generateSmallVideos.isPending}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 disabled:opacity-50"
+                  title="One horizontal 1–10 min video candidate per chapter — edit and render from the Clips list"
+                >
+                  {generateSmallVideos.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clapperboard className="w-3.5 h-3.5" />}
+                  Generate small videos
+                </button>
+                <button
+                  onClick={() => generateChurchPack.mutate()}
+                  disabled={generateChurchPack.isPending || generateChurchPack.isSuccess}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 rounded-lg text-xs hover:bg-brand-50 disabled:opacity-50"
+                  title="Bible references, discussion questions, and a devotional per chapter"
+                >
+                  {generateChurchPack.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookOpen className="w-3.5 h-3.5" />}
+                  {generateChurchPack.isSuccess ? 'Church pack queued' : 'Church pack'}
+                </button>
+              </span>
               <span className="flex items-center gap-3">
                 {generateSmallVideos.data && (
                   <span className="text-xs text-gray-500">
@@ -716,6 +733,29 @@ export default function ShortsVideoDetailPage() {
                           </li>
                         ))}
                       </ul>
+                    )}
+                    {c.devotional && (
+                      <div className="mt-3 space-y-2 rounded-xl bg-brand-50/50 border border-brand-100 p-3">
+                        {c.bibleRefs.length > 0 && (
+                          <p className="text-xs text-brand-800">
+                            <span className="font-semibold">Scripture:</span> {c.bibleRefs.join(' · ')}
+                          </p>
+                        )}
+                        {c.discussionQuestions.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-brand-800 mb-1">Discussion questions</p>
+                            <ol className="space-y-0.5 list-decimal list-inside">
+                              {c.discussionQuestions.map((q, j) => (
+                                <li key={j} className="text-xs text-gray-600">{q}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-xs font-semibold text-brand-800 mb-1">Devotional</p>
+                          <p className="text-xs text-gray-600 whitespace-pre-wrap">{c.devotional}</p>
+                        </div>
+                      </div>
                     )}
                     <p className="text-[11px] text-gray-400 mt-2">
                       {fmt(c.startMs)}–{fmt(c.endMs)} · confidence {(c.confidence * 100).toFixed(0)}%

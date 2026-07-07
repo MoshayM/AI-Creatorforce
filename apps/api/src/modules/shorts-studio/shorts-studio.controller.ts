@@ -157,6 +157,11 @@ export class ShortsStudioController {
     return this.shorts.enqueueChapterDetection(importedVideoId, user.sub);
   }
 
+  @Post('videos/:importedVideoId/church-pack')
+  async generateChurchPack(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
+    return this.shorts.enqueueChurchPack(importedVideoId, user.sub);
+  }
+
   @Post('videos/:importedVideoId/small-videos')
   async generateSmallVideos(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
     await this.shorts.assertVideoOwnership(importedVideoId, user.sub);

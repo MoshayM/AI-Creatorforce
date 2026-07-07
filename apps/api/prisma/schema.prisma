@@ -192,6 +192,7 @@ enum JobType {
   // Video Intelligence (Ai-video edit.md §5, Phase 5)
   CHAPTER_DETECTION
   EMBEDDING_GENERATION
+  CHURCH_PACK_GENERATION
 }
 
 enum JobStatus {
@@ -675,6 +676,11 @@ model Chapter {
   confidence      Float
   source          ChapterSource @default(DETECTED)
   editedByUser    Boolean       @default(false)
+  // Church AI pack (Ai-video edit.md §11) — filled by CHURCH_PACK_GENERATION,
+  // empty until the pack is requested. devotional set == chapter processed.
+  bibleRefs           String[] @default([])
+  discussionQuestions String[] @default([])
+  devotional          String?  @db.Text
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 

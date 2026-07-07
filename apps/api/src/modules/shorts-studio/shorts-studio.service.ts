@@ -162,6 +162,12 @@ export class ShortsStudioService {
     return this.jobs.enqueue(video.projectId, 'EMBEDDING_GENERATION', { importedVideoId });
   }
 
+  /** Church AI pack (§11) — on demand only, never part of the default pipeline. */
+  async enqueueChurchPack(importedVideoId: string, userId: string) {
+    const video = await this.assertVideoOwnership(importedVideoId, userId);
+    return this.jobs.enqueue(video.projectId, 'CHURCH_PACK_GENERATION', { importedVideoId });
+  }
+
   /** Manual rename/edit (Ai-video edit.md §11) — flagged so re-detection keeps it. */
   async updateChapter(chapterId: string, userId: string, patch: { title?: string; summary?: string }) {
     const chapter = await this.prisma.chapter.findFirst({

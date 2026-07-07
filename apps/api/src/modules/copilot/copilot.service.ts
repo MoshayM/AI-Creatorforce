@@ -42,6 +42,7 @@ Command palette:
 - list_chapters {importedVideoId} — YouTube-style chapters detected for an analyzed video
 - search_video {importedVideoId, query} — find moments by meaning ("find John 3:16", "where do they talk about grace") and get their timestamps
 - generate_small_videos {importedVideoId} — create one horizontal 1–10 min video candidate per detected chapter (render each afterwards with render_clip)
+- generate_church_pack {importedVideoId} — bible references, discussion questions, and a devotional for every chapter (requires the user's confirmation)
 - generate_clips {highlightId, clipTypes} — create candidate Shorts clips (clipTypes values: YOUTUBE_SHORTS, INSTAGRAM_REELS, TIKTOK, LINKEDIN_CLIPS, FACEBOOK_REELS, PODCAST_HIGHLIGHTS)
 - render_clip {shortClipId} — render a clip to vertical video
 - generate_captions {shortClipId}
@@ -403,6 +404,17 @@ export class CopilotService {
             skippedTooShort: result.skippedTooShort,
             clips: result.clips.map((c) => ({ id: c.id, sourceStartMs: c.sourceStartMs, sourceEndMs: c.sourceEndMs })),
           },
+        };
+      }
+
+      case 'generate_church_pack': {
+        const video = await this.shorts.assertVideoOwnership(command.importedVideoId, userId);
+        const job = await this.jobs.enqueue(video.projectId, 'CHURCH_PACK_GENERATION', {
+          importedVideoId: command.importedVideoId,
+        });
+        return {
+          summary: 'Generating the church pack — bible references, discussion questions, and a devotional for every chapter. Check the Chapters tab in a moment.',
+          data: { jobId: job.id },
         };
       }
 
