@@ -938,3 +938,85 @@ model ShortsExportHistory {
   @@index([shortClipId])
   @@map("shorts_export_history")
 }
+
+
+// ── Unified Intent/Action Layer (Ai-video edit.md §8, §14) ─────────────────────
+// One audit trail for every action regardless of input modality (UI click,
+// Copilot chat, voice command) — the doc's single-execution-path principle.
+
+enum ActionSource {
+  UI
+  COPILOT
+  VOICE
+}
+
+enum ActionStatus {
+  EXECUTED
+  NEEDS_CONFIRMATION
+  FAILED
+}
+
+model ActionRecord {
+  id            String       @id @default(cuid())
+  userId        String
+  projectId     String?
+  source        ActionSource
+  intentType    String
+  intentPayload Json         @default("{}")
+  status        ActionStatus
+  fromCache     Boolean      @default(false)
+  tokensUsed    Int          @default(0)
+  error         String?
+  createdAt     DateTime     @default(now())
+
+  tokenUsage TokenUsage[]
+
+  @@index([userId, createdAt])
+  @@index([projectId, createdAt])
+  @@map("actions")
+}
+
+// Compressed conversation memory — intent history + short summary, never raw
+// transcripts (token rule §12.2.6). One row per user for now.
+model CopilotSessionMemory {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  summary       String   @default("")
+  lastIntentIds String[] @default([])
+  updatedAt     DateTime @updatedAt
+
+  @@map("copilot_sessions")
+}
+
+// Spoken-command history — powers the transcript chips and future undo (§14).
+model VoiceCommand {
+  id             String   @id @default(cuid())
+  userId         String
+  projectId      String?
+  rawTranscript  String
+  resolvedIntent Json?
+  executed       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("voice_commands")
+}
+
+// Token usage ledger — feeds the Analytics AI-usage dashboard (§12.2.8).
+model TokenUsage {
+  id        String        @id @default(cuid())
+  userId    String?
+  actionId  String?
+  provider  String
+  model     String
+  tokensIn  Int           @default(0)
+  tokensOut Int           @default(0)
+  costUsd   Float         @default(0)
+  fromCache Boolean       @default(false)
+  createdAt DateTime      @default(now())
+
+  action ActionRecord? @relation(fields: [actionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("token_usage")
+}

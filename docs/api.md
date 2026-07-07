@@ -213,3 +213,17 @@ Module spec: repo-root `ai.md`. All routes prefixed `/shorts-studio`, JWT-guarde
 | GET | `/shorts-studio/clips/:id/publish-status` | Approval + publish job state + youtubeVideoId |
 
 Pipeline stages run as child `AgentJob`s of the `SHORTS_ANALYZE` root and self-skip when their output rows already exist (resume semantics, `ai.md` §16). Requires `yt-dlp` (`YT_DLP_PATH`) for source download; Whisper ASR fallback uses `OPENAI_API_KEY`.
+
+
+## 21. Copilot, Intents & Token Governor
+
+Spec: repo-root `Ai-video edit.md` (§8, §12, §15) — one execution path for UI, chat, and voice; plan/status in `docs/video-hub.md`. All routes JWT-guarded.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/copilot/chat` | Conversational turn: `{ messages, inputMode?: 'text'\|'voice', confirmedCommand?, pendingCommand? }` → `{ reply, language, executed?, needsConfirmation?, fromCache?, tokensUsed? }`. Repeated phrases resolve from the intent cache (zero tokens); confirmation-gated commands (`EXPENSIVE_ACTIONS`) always return `needsConfirmation` first. |
+| POST | `/intents` | Unified UI entry point: `{ command: CopilotCommand, confirmed?: boolean }` → ActionResult `{ intentId, status: 'executed'\|'needs_confirmation', fromCache, tokensUsed, payload }`. Same executor, gates, and audit trail as chat/voice — intent parity by construction. |
+| GET | `/intents/:id` | Fetch the ActionRecord audit row for an executed intent (owner-scoped). |
+| GET | `/token-usage/summary` | `?days=30` → total tokens/cost, per-model breakdown (all AI calls in the process, agents included), copilot cache-hit rate (§12.3 target ≥80%). Feeds the Analytics "AI Usage" card. |
+
+Every turn lands in the `actions` audit table (source `UI`/`COPILOT`/`VOICE`, status, `fromCache`, `tokensUsed`); spoken turns also record `voice_commands` (raw transcript + resolved intent); `copilot_sessions` keeps compressed per-user intent history. The `token_usage` ledger is populated by a global usage hook on the shared aiClient — no AI call goes unmetered.

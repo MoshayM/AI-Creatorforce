@@ -76,5 +76,7 @@ export const CopilotChatRequestSchema = z.object({
   confirmedCommand: CopilotCommandSchema.optional(),
   /** A command awaiting confirmation — lets a spoken "yes" complete it. */
   pendingCommand: CopilotCommandSchema.optional(),
+  /** How the user delivered this turn — drives the actions/voice_commands audit trail. */
+  inputMode: z.enum(['text', 'voice']).default('text'),
 });
 export type CopilotChatRequest = z.infer<typeof CopilotChatRequestSchema>;

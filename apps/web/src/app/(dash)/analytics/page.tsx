@@ -34,6 +34,13 @@ interface GrowthReport {
   optimizationActions: Array<{ priority: 'high' | 'medium' | 'low'; area: string; action: string; expectedImpact: string }>;
 }
 
+interface TokenUsageSummary {
+  sinceDays: number;
+  totals: { calls: number; tokensIn: number; tokensOut: number; costUsd: number };
+  byModel: Array<{ provider: string; model: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number }>;
+  copilot: { turns: number; cacheHits: number; cacheHitRate: number | null };
+}
+
 const API = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4007/api';
 
 async function callApi<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
@@ -68,11 +75,15 @@ export default function AnalyticsPage() {
   const [channels, setChannels] = useState<Array<{ id: string; title: string }>>([]);
   const [analyticsDurationMs, setAnalyticsDurationMs] = useState<number | null>(null);
   const [growthDurationMs, setGrowthDurationMs] = useState<number | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsageSummary | null | 'unavailable'>(null);
 
   useState(() => {
     callApi<Array<{ id: string; title: string }>>('/channels')
       .then(setChannels)
       .catch(() => {});
+    callApi<TokenUsageSummary>('/token-usage/summary')
+      .then(setTokenUsage)
+      .catch(() => setTokenUsage('unavailable'));
   });
 
   async function runAnalytics() {
@@ -118,6 +129,43 @@ export default function AnalyticsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Analytics & Growth</h1>
           <p className="text-sm text-gray-500">AI-powered channel diagnostics and next-video recommendations</p>
         </div>
+      </div>
+
+      {/* AI Usage card */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+        <h2 className="font-semibold text-gray-900 mb-3">AI Usage (30 days)</h2>
+        {tokenUsage === 'unavailable' ? (
+          <p className="text-sm text-gray-400">unavailable</p>
+        ) : tokenUsage === null ? (
+          <p className="text-sm text-gray-400">Loading…</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Total cost</p>
+              <p className="text-lg font-semibold text-gray-900">${tokenUsage.totals.costUsd.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Tokens in</p>
+              <p className="text-lg font-semibold text-gray-900">{tokenUsage.totals.tokensIn.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Tokens out</p>
+              <p className="text-lg font-semibold text-gray-900">{tokenUsage.totals.tokensOut.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Provider calls</p>
+              <p className="text-lg font-semibold text-gray-900">{tokenUsage.totals.calls.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Copilot cache-hit rate</p>
+              <p className="text-lg font-semibold text-gray-900">
+                {tokenUsage.copilot.cacheHitRate != null
+                  ? `${(tokenUsage.copilot.cacheHitRate * 100).toFixed(0)}%`
+                  : '—'}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Channel selector + run */}

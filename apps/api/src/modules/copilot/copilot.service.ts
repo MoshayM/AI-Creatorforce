@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import {
   callAIStructured, CopilotDecisionSchema, JobTypeSchema,
-  type CopilotCommand, type CopilotChatRequest, type JobType,
+  type CopilotCommand, type CopilotChatRequest, type CopilotDecision, type JobType,
   EXPENSIVE_ACTIONS,
 } from '@cf/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -10,6 +10,7 @@ import { ApprovalsService } from '../approvals/approvals.service';
 import { ShortsStudioService } from '../shorts-studio/shorts-studio.service';
 import { ClipRecommendationService } from '../shorts-studio/clip-recommendation.service';
 import { ShortsGenerationService } from '../shorts-studio/shorts-generation.service';
+import { IntentCacheService } from './intent-cache.service';
 
 const COPILOT_SYSTEM = `You are the CreatorForce Copilot — you drive a YouTube content platform for the user by emitting commands.
 
@@ -53,6 +54,19 @@ export interface CopilotResponse {
   language?: string;
   executed?: { action: string; result: unknown };
   needsConfirmation?: CopilotCommand;
+  /** True when the intent was resolved from the phrase cache — zero tokens (§12). */
+  fromCache?: boolean;
+  /** LLM tokens this turn actually consumed (0 on cache hits). */
+  tokensUsed?: number;
+}
+
+type ActionSource = 'UI' | 'COPILOT' | 'VOICE';
+
+interface RecordMeta {
+  source: ActionSource;
+  fromCache: boolean;
+  tokensUsed: number;
+  lastUserText: string;
 }
 
 @Injectable()
@@ -66,6 +80,7 @@ export class CopilotService {
     private readonly shorts: ShortsStudioService,
     private readonly recommendations: ClipRecommendationService,
     private readonly generation: ShortsGenerationService,
+    private readonly intentCache: IntentCacheService,
   ) {}
 
   // §8.2 safety: simple per-user rate limit (20 copilot turns/minute)
@@ -81,50 +96,152 @@ export class CopilotService {
 
   async chat(userId: string, req: CopilotChatRequest): Promise<CopilotResponse> {
     this.assertRateLimit(userId);
+    const source: ActionSource = req.inputMode === 'voice' ? 'VOICE' : 'COPILOT';
+    const lastUserText = [...req.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+
     // Confirmation round-trip: the client re-sends the exact command the user
     // approved — no second LLM call, no reinterpretation.
     if (req.confirmedCommand) {
-      const result = await this.execute(userId, req.confirmedCommand);
+      const result = await this.executeRecorded(userId, req.confirmedCommand, {
+        source, fromCache: false, tokensUsed: 0, lastUserText,
+      });
       return {
         reply: result.summary,
         executed: { action: req.confirmedCommand.action, result: result.data },
       };
     }
 
-    const context = await this.buildContext(userId);
-    const pendingNote = req.pendingCommand
-      ? `\n\nPENDING CONFIRMATION: this command awaits the user's yes/no: ${JSON.stringify(req.pendingCommand)}. If their latest message confirms it (yes/haan/ok/go ahead, any language), return EXACTLY that command. If they decline, set command to null and acknowledge.`
-      : '';
-    const decision = await callAIStructured(
-      [
-        ...req.messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
-        {
-          role: 'user' as const,
-          content: `CONTEXT (current platform state — use these ids):\n${context}${pendingNote}\n\nRespond with JSON: {"reply":"...","language":"...","command":{...}|null}`,
-        },
-      ],
-      CopilotDecisionSchema,
-      { systemPrompt: COPILOT_SYSTEM, maxTokens: 1024 },
-    );
+    // Token Governor (§12): repeated phrases resolve to intents with zero
+    // tokens. Confirmation turns always run live — the gate is never cached.
+    let decision: CopilotDecision | null = null;
+    let fromCache = false;
+    let tokensUsed = 0;
+    if (!req.pendingCommand) {
+      decision = await this.intentCache.get(lastUserText);
+      fromCache = decision !== null;
+    }
 
-    if (!decision.command) return { reply: decision.reply, language: decision.language };
+    if (!decision) {
+      const context = await this.buildContext(userId);
+      const pendingNote = req.pendingCommand
+        ? `\n\nPENDING CONFIRMATION: this command awaits the user's yes/no: ${JSON.stringify(req.pendingCommand)}. If their latest message confirms it (yes/haan/ok/go ahead, any language), return EXACTLY that command. If they decline, set command to null and acknowledge.`
+        : '';
+      decision = await callAIStructured(
+        [
+          ...req.messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+          {
+            role: 'user' as const,
+            content: `CONTEXT (current platform state — use these ids):\n${context}${pendingNote}\n\nRespond with JSON: {"reply":"...","language":"...","command":{...}|null}`,
+          },
+        ],
+        CopilotDecisionSchema,
+        {
+          systemPrompt: COPILOT_SYSTEM,
+          maxTokens: 1024,
+          onUsage: (e) => { tokensUsed += e.tokensIn + e.tokensOut; },
+        },
+      );
+      if (!req.pendingCommand) await this.intentCache.maybeStore(lastUserText, decision);
+    }
+
+    if (!decision.command) {
+      await this.record(userId, 'chat.reply', null, 'EXECUTED', { source, fromCache, tokensUsed, lastUserText }, false);
+      return { reply: decision.reply, language: decision.language, fromCache, tokensUsed };
+    }
 
     // A spoken/typed "yes" to the pending command IS the confirmation —
     // execute directly instead of gating again.
     const confirmsPending =
       req.pendingCommand && JSON.stringify(decision.command) === JSON.stringify(req.pendingCommand);
 
-    // Expensive/destructive commands stop at the confirmation gate (§8.2)
+    // Expensive/destructive commands stop at the confirmation gate (§8.2) —
+    // cache hits included: only the LLM interpretation is reused, never the gate.
     if (!confirmsPending && EXPENSIVE_ACTIONS.includes(decision.command.action)) {
-      return { reply: decision.reply, language: decision.language, needsConfirmation: decision.command };
+      await this.record(userId, decision.command.action, decision.command, 'NEEDS_CONFIRMATION', { source, fromCache, tokensUsed, lastUserText }, false);
+      return { reply: decision.reply, language: decision.language, needsConfirmation: decision.command, fromCache, tokensUsed };
     }
 
-    const result = await this.execute(userId, decision.command);
+    const result = await this.executeRecorded(userId, decision.command, { source, fromCache, tokensUsed, lastUserText });
     return {
       reply: `${decision.reply}\n\n${result.summary}`.trim(),
       language: decision.language,
       executed: { action: decision.command.action, result: result.data },
+      fromCache,
+      tokensUsed,
     };
+  }
+
+  /** Execute a command and land the outcome (success or failure) in the actions audit trail. */
+  async executeRecorded(
+    userId: string,
+    command: CopilotCommand,
+    meta: RecordMeta,
+  ): Promise<{ summary: string; data: unknown; actionId: string | null }> {
+    try {
+      const result = await this.execute(userId, command);
+      const actionId = await this.record(userId, command.action, command, 'EXECUTED', meta, true);
+      return { ...result, actionId };
+    } catch (err) {
+      await this.record(userId, command.action, command, 'FAILED', meta, false, err instanceof Error ? err.message : String(err));
+      throw err;
+    }
+  }
+
+  /**
+   * Unified action audit (Ai-video edit.md §8/§14): every turn — UI, chat, or
+   * voice — lands as an ActionRecord; voice turns also keep their transcript;
+   * session memory stores compressed intent history, never raw conversation.
+   * Recording failures are logged, never surfaced — audit must not break chat.
+   */
+  private async record(
+    userId: string,
+    intentType: string,
+    payload: CopilotCommand | null,
+    status: 'EXECUTED' | 'NEEDS_CONFIRMATION' | 'FAILED',
+    meta: RecordMeta,
+    executed: boolean,
+    error?: string,
+  ): Promise<string | null> {
+    try {
+      const projectId =
+        payload && 'projectId' in payload && typeof payload.projectId === 'string' ? payload.projectId : null;
+      const action = await this.prisma.actionRecord.create({
+        data: {
+          userId,
+          projectId,
+          source: meta.source,
+          intentType,
+          intentPayload: (payload ?? {}) as never,
+          status,
+          fromCache: meta.fromCache,
+          tokensUsed: meta.tokensUsed,
+          error,
+        },
+      });
+      if (meta.source === 'VOICE' && meta.lastUserText) {
+        await this.prisma.voiceCommand.create({
+          data: {
+            userId,
+            projectId,
+            rawTranscript: meta.lastUserText,
+            resolvedIntent: (payload ?? undefined) as never,
+            executed,
+          },
+        });
+      }
+      const existing = await this.prisma.copilotSessionMemory.findUnique({ where: { userId } });
+      const lastIntentIds = [...(existing?.lastIntentIds ?? []), action.id].slice(-20);
+      const summary = [...(existing?.summary ? [existing.summary] : []), intentType].join(' → ').split(' → ').slice(-8).join(' → ');
+      await this.prisma.copilotSessionMemory.upsert({
+        where: { userId },
+        create: { userId, summary, lastIntentIds },
+        update: { summary, lastIntentIds },
+      });
+      return action.id;
+    } catch (err) {
+      this.logger.warn(`action audit write failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
   /** Compact project-state JSON (§3.6 token rules): ids the model may use. */

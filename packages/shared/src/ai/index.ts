@@ -18,6 +18,25 @@ export interface AICallOptions {
   temperature?: number;
   systemPrompt?: string;
   onProgress?: (event: AIProgressEvent) => void;
+  /** Fired after each successful provider call — for per-request token attribution. */
+  onUsage?: (event: AIUsageEvent) => void;
+}
+
+// ── Usage ledger hook (Token Governor — Ai-video edit.md §12.2.8) ─────────────
+
+export interface AIUsageEvent {
+  provider: AIProvider;
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+  costUsd: number;
+}
+
+let usageListener: ((event: AIUsageEvent) => void) | null = null;
+
+/** Global persistence hook fired after EVERY successful provider call (agents, copilot, workers). */
+export function setAIUsageListener(listener: ((event: AIUsageEvent) => void) | null): void {
+  usageListener = listener;
 }
 
 export interface AICallResult {
@@ -415,7 +434,29 @@ function estimateCost(provider: AIProvider, tokensIn: number, tokensOut: number)
 
 // ── Raw callAI ────────────────────────────────────────────────────────────────
 
+function emitUsage(result: AICallResult, opts: AICallOptions): void {
+  const event: AIUsageEvent = {
+    provider: result.provider,
+    model: result.model,
+    tokensIn: result.tokensIn,
+    tokensOut: result.tokensOut,
+    costUsd: estimateCost(result.provider, result.tokensIn, result.tokensOut),
+  };
+  // Ledger hooks must never break the call they observe
+  try { usageListener?.(event); } catch { /* noop */ }
+  try { opts.onUsage?.(event); } catch { /* noop */ }
+}
+
 export async function callAI(
+  messages: AIMessage[],
+  opts: AICallOptions = {},
+): Promise<AICallResult> {
+  const result = await callAIProvider(messages, opts);
+  emitUsage(result, opts);
+  return result;
+}
+
+async function callAIProvider(
   messages: AIMessage[],
   opts: AICallOptions = {},
 ): Promise<AICallResult> {

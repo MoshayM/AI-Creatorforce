@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api';
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  fromCache?: boolean;
 }
 
 interface CopilotResponse {
@@ -13,6 +14,7 @@ interface CopilotResponse {
   language?: string;
   executed?: { action: string; result: unknown };
   needsConfirmation?: Record<string, unknown> & { action: string };
+  fromCache?: boolean;
 }
 
 // Browser SpeechRecognition (client-side STT — no provider cost, graceful fallback)
@@ -96,12 +98,13 @@ export function CopilotPanel() {
     try {
       const res = await apiClient.post('/copilot/chat', {
         messages: nextMessages.slice(-10),
+        inputMode: conversationRef.current ? 'voice' : 'text',
         ...(confirmedCommand ? { confirmedCommand } : {}),
         // Lets a spoken "yes" complete the awaiting confirmation
         ...(!confirmedCommand && pending ? { pendingCommand: pending } : {}),
       });
       const data = res.data as CopilotResponse;
-      setMessages((m) => [...m, { role: 'assistant', content: data.reply }]);
+      setMessages((m) => [...m, { role: 'assistant', content: data.reply, fromCache: data.fromCache }]);
       if (data.needsConfirmation) setPending(data.needsConfirmation);
       if (data.language) setLang(data.language); // STT + TTS follow the user's language
       // Two-way turn-taking: when the user spoke, the bot speaks back and
@@ -215,6 +218,9 @@ export function CopilotPanel() {
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap ${m.role === 'user' ? 'bg-brand-600 text-white rounded-br-sm' : 'bg-gray-100 text-gray-800 rounded-bl-sm'}`}>
                   {m.content}
+                  {m.fromCache && (
+                    <span className="inline-flex items-center gap-0.5 ml-1 text-[10px] text-amber-500" title="Answered from intent cache — zero AI tokens">⚡ instant</span>
+                  )}
                 </div>
               </div>
             ))}
