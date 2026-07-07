@@ -36,14 +36,16 @@ export class ShortsExportService {
   private async buildMetadata(shortClipId: string): Promise<ClipMetadata> {
     const clip = await this.prisma.shortClip.findUniqueOrThrow({
       where: { id: shortClipId },
-      include: { topicSegment: { include: { highlight: true } } },
+      include: { topicSegment: { include: { highlight: true } }, chapter: true },
     });
-    const h = clip.topicSegment.highlight;
-    const hashtags = (h?.keywords ?? []).slice(0, 5).map((k) => `#${k.replace(/\s+/g, '')}`).join(' ');
+    // Metadata follows provenance: highlight/topic for Shorts, chapter for Small Videos
+    const h = clip.topicSegment?.highlight;
+    const keywords = h?.keywords ?? clip.chapter?.keyPoints ?? [];
+    const hashtags = keywords.slice(0, 5).map((k) => `#${k.replace(/\s+/g, '')}`).join(' ');
     return {
-      title: (h?.titleSuggestion ?? clip.topicSegment.title).slice(0, 100),
-      description: [clip.topicSegment.summary, '', hashtags].join('\n').trim(),
-      tags: (h?.keywords ?? []).slice(0, 15),
+      title: (h?.titleSuggestion ?? clip.topicSegment?.title ?? clip.chapter?.title ?? 'Clip').slice(0, 100),
+      description: [clip.topicSegment?.summary ?? clip.chapter?.summary ?? '', '', hashtags].join('\n').trim(),
+      tags: keywords.slice(0, 15),
     };
   }
 

@@ -105,11 +105,30 @@
 - **UI**: Search tab on the analysis page — query box, timestamp-chip results
   with chapter context and match %, generate-embeddings empty state.
 
+### Small videos (§10, Phase 5 slice 3)
+
+- **`SMALL_VIDEO` ClipType** (16:9, ≤10 min preset) flowing through the
+  UNCHANGED ShortClip machinery — timeline editor, captions, render, export,
+  approval, publish all work on small videos for free.
+- **Provenance split on ShortClip**: `topicSegmentId` is now optional and
+  `chapterId` was added — exactly one is set (highlight-based Shorts vs
+  chapter-based Small Videos). Every consumer (captions, export metadata,
+  thumbnails, render labels, AI editing assistant, clip lists) resolves
+  title/summary/keywords/importedVideoId from whichever side exists;
+  chapter `keyPoints` become the export hashtags/tags.
+- **Batched generation** (§12.4): `POST /videos/:id/small-videos` creates one
+  candidate per chapter in one call — zero AI, chapters ARE the analysis
+  graph. Chapters under 60s are skipped (Shorts territory); over-cap chapters
+  are clipped to 10 min from their start. Resumable: existing chapter clips
+  are reused.
+- **Copilot**: `generate_small_videos` command; **UI**: Generate button on the
+  Chapters tab, small videos appear in the Clips list titled by chapter.
+
 ## Next steps (Phase 5 remainder)
 
-1. Small-video generation service reusing the Shorts render path with
-   horizontal presets (chapter → small video is now a direct mapping).
-2. Church AI intelligence pack (chapter summaries → devotionals, discussion
+1. Church AI intelligence pack (chapter summaries → devotionals, discussion
    questions) and Phase 6 YouTube chapter timestamp sync.
-3. Embedding-grounded copilot answers ("list sermons that mention grace" —
+2. Embedding-grounded copilot answers ("list sermons that mention grace" —
    §11 cross-video query) once cross-video search exists.
+3. Social-content factory (quote cards, carousels, blog/newsletter drafts)
+   from the same chapter/highlight graph.

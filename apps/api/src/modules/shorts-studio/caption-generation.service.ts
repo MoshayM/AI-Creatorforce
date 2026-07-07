@@ -27,6 +27,7 @@ export class CaptionGenerationService {
       include: {
         timeline: { include: { tracks: { where: { type: 'VIDEO' }, include: { items: true } }, captions: true } },
         topicSegment: { select: { importedVideoId: true } },
+        chapter: { select: { importedVideoId: true } },
       },
     });
     if (!clip?.timeline) throw new NotFoundException('Clip or timeline not found');
@@ -40,8 +41,10 @@ export class CaptionGenerationService {
     const srcStart = Math.min(...spans.map((s) => s.sourceStartMs));
     const srcEnd = Math.max(...spans.map((s) => s.sourceEndMs));
 
+    const importedVideoId = clip.topicSegment?.importedVideoId ?? clip.chapter?.importedVideoId;
+    if (!importedVideoId) throw new BadRequestException('Clip has no source-video provenance');
     const segments = await this.prisma.transcriptSegment.findMany({
-      where: { importedVideoId: clip.topicSegment.importedVideoId, endMs: { gt: srcStart }, startMs: { lt: srcEnd } },
+      where: { importedVideoId, endMs: { gt: srcStart }, startMs: { lt: srcEnd } },
       orderBy: { startMs: 'asc' },
     });
     if (segments.length === 0) throw new BadRequestException('No transcript for this clip range — run the analysis pipeline first');

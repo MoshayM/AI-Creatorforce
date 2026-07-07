@@ -53,6 +53,7 @@ export class ShortsRenderService {
         },
         renderAsset: { include: { versions: { orderBy: { version: 'desc' }, take: 1 } } },
         topicSegment: { include: { highlight: { select: { titleSuggestion: true } } } },
+        chapter: { select: { title: true } },
       },
     });
     if (!clip?.timeline) throw new NotFoundException('Clip or timeline not found');
@@ -152,7 +153,7 @@ export class ShortsRenderService {
         data: {
           projectId: clip.projectId,
           kind: 'SHORTS_CLIP_RENDER',
-          label: `Shorts render: ${clip.topicSegment.highlight?.titleSuggestion ?? clip.id} (${clip.clipType})`,
+          label: `Shorts render: ${clip.topicSegment?.highlight?.titleSuggestion ?? clip.chapter?.title ?? clip.id} (${clip.clipType})`,
           status: 'READY',
         },
       });

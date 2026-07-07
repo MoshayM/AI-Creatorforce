@@ -26,6 +26,8 @@ export const CopilotCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('list_chapters'), importedVideoId: z.string() }),
   // NL search over stored embeddings — one tiny embedding call, no LLM re-analysis
   z.object({ action: z.literal('search_video'), importedVideoId: z.string(), query: z.string().min(1).max(200) }),
+  // Chapter → small-video candidates: pure DB rows, zero AI (§10/§12.4)
+  z.object({ action: z.literal('generate_small_videos'), importedVideoId: z.string() }),
   z.object({
     action: z.literal('generate_clips'),
     highlightId: z.string(),

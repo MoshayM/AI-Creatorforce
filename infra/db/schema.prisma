@@ -679,6 +679,7 @@ model Chapter {
   updatedAt       DateTime      @updatedAt
 
   importedVideo ImportedVideo @relation(fields: [importedVideoId], references: [id], onDelete: Cascade)
+  clips         ShortClip[]
 
   @@index([importedVideoId, startMs])
   @@map("chapters")
@@ -789,7 +790,10 @@ model Highlight {
 
 model ShortClip {
   id               String          @id @default(cuid())
-  topicSegmentId   String
+  // Provenance: exactly one of topicSegmentId (highlight-based Shorts) or
+  // chapterId (chapter-based Small Videos, Ai-video edit.md §10) is set.
+  topicSegmentId   String?
+  chapterId        String?
   projectId        String
   clipType         ClipType
   status           ShortClipStatus @default(CANDIDATE)
@@ -800,9 +804,10 @@ model ShortClip {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
-  topicSegment TopicSegment @relation(fields: [topicSegmentId], references: [id], onDelete: Cascade)
-  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  renderAsset  Asset?       @relation(fields: [renderAssetId], references: [id])
+  topicSegment TopicSegment? @relation(fields: [topicSegmentId], references: [id], onDelete: Cascade)
+  chapter      Chapter?      @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  renderAsset  Asset?        @relation(fields: [renderAssetId], references: [id])
 
   timeline   ShortsTimeline?
   thumbnails ShortsThumbnail[]
@@ -820,6 +825,8 @@ enum ClipType {
   LINKEDIN_CLIPS
   FACEBOOK_REELS
   PODCAST_HIGHLIGHTS
+  // Horizontal 1–10 min chapter videos (Ai-video edit.md §10, Phase 5)
+  SMALL_VIDEO
 }
 
 enum ShortClipStatus {

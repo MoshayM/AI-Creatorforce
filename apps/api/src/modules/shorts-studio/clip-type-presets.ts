@@ -15,4 +15,6 @@ export const CLIP_TYPE_PRESETS: Record<ClipType, ClipTypePreset> = {
   LINKEDIN_CLIPS: { aspect: '1:1', maxDurationMs: 90_000, safeZone: { bottom: 0, top: 0 } },
   FACEBOOK_REELS: { aspect: '9:16', maxDurationMs: 90_000, safeZone: { bottom: 0.18, top: 0 } },
   PODCAST_HIGHLIGHTS: { aspect: '16:9', maxDurationMs: 120_000, safeZone: { bottom: 0, top: 0 } },
+  // Chapter videos: horizontal, up to 10 min (Ai-video edit.md §10)
+  SMALL_VIDEO: { aspect: '16:9', maxDurationMs: 600_000, safeZone: { bottom: 0, top: 0 } },
 };

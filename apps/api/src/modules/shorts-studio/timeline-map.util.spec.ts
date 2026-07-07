@@ -68,7 +68,8 @@ describe('CLIP_TYPE_PRESETS', () => {
     for (const [type, preset] of Object.entries(CLIP_TYPE_PRESETS)) {
       expect(['9:16', '1:1', '16:9']).toContain(preset.aspect);
       expect(preset.maxDurationMs).toBeGreaterThanOrEqual(60_000);
-      expect(preset.maxDurationMs).toBeLessThanOrEqual(180_000);
+      // Short-form platform caps; SMALL_VIDEO is long-form by design (§10)
+      expect(preset.maxDurationMs).toBeLessThanOrEqual(type === 'SMALL_VIDEO' ? 600_000 : 180_000);
       expect(preset.safeZone.bottom).toBeGreaterThanOrEqual(0);
       expect(preset.safeZone.bottom).toBeLessThan(0.3);
       expect(type).toBeTruthy();
@@ -78,5 +79,10 @@ describe('CLIP_TYPE_PRESETS', () => {
   it('keeps YouTube Shorts within the 60s hard limit', () => {
     expect(CLIP_TYPE_PRESETS.YOUTUBE_SHORTS.maxDurationMs).toBe(60_000);
     expect(CLIP_TYPE_PRESETS.YOUTUBE_SHORTS.aspect).toBe('9:16');
+  });
+
+  it('keeps small videos horizontal and within the 10-minute cap', () => {
+    expect(CLIP_TYPE_PRESETS.SMALL_VIDEO.aspect).toBe('16:9');
+    expect(CLIP_TYPE_PRESETS.SMALL_VIDEO.maxDurationMs).toBe(600_000);
   });
 });

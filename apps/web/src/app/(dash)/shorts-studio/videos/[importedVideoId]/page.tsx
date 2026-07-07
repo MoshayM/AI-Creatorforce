@@ -42,7 +42,8 @@ interface Clip {
   status: string;
   sourceStartMs: number;
   sourceEndMs: number;
-  topicSegment: { title: string; highlight: { titleSuggestion: string; finalScore: number } | null };
+  topicSegment: { title: string; highlight: { titleSuggestion: string; finalScore: number } | null } | null;
+  chapter: { title: string } | null;
   timeline: { id: string; durationMs: number; _count: { captions: number } } | null;
 }
 
@@ -349,6 +350,10 @@ export default function ShortsVideoDetailPage() {
   const detectChapters = useMutation({
     mutationFn: () => api.shortsStudio.detectChapters(importedVideoId),
   });
+  const generateSmallVideos = useMutation({
+    mutationFn: () => api.shortsStudio.generateSmallVideos(importedVideoId).then((r) => r.data as { created: number; reused: number; skippedTooShort: number }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['shorts-clips', importedVideoId] }),
+  });
   const searchVideo = useMutation({
     mutationFn: (q: string) => api.shortsStudio.searchVideo(importedVideoId, q).then((r) => r.data as SearchResponse),
   });
@@ -459,7 +464,7 @@ export default function ShortsVideoDetailPage() {
                     >
                       {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
                       <p className="text-sm font-medium text-gray-900 truncate flex-1 min-w-0">
-                        {c.topicSegment.highlight?.titleSuggestion ?? c.topicSegment.title}
+                        {c.topicSegment?.highlight?.titleSuggestion ?? c.topicSegment?.title ?? c.chapter?.title ?? 'Clip'}
                       </p>
                       <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                         {c.status.replace(/_/g, ' ').toLowerCase()}
@@ -472,8 +477,11 @@ export default function ShortsVideoDetailPage() {
                           <p><span className="text-gray-400">Platform:</span> {c.clipType.replace(/_/g, ' ')}</p>
                           <p><span className="text-gray-400">Source range:</span> {fmt(c.sourceStartMs)}–{fmt(c.sourceEndMs)}</p>
                           <p><span className="text-gray-400">Captions:</span> {c.timeline?._count.captions ? `${c.timeline._count.captions} lines` : 'none yet'}</p>
-                          {c.topicSegment.highlight && (
+                          {c.topicSegment?.highlight && (
                             <p><span className="text-gray-400">Highlight score:</span> {Math.round(c.topicSegment.highlight.finalScore)}</p>
+                          )}
+                          {c.chapter && (
+                            <p><span className="text-gray-400">From chapter:</span> {c.chapter.title}</p>
                           )}
                         </div>
                         <div className="flex gap-2 shrink-0">
@@ -616,13 +624,30 @@ export default function ShortsVideoDetailPage() {
             </div>
           )}
           {chapters.length > 0 && (
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
               <button
-                onClick={() => setOpenChapters((prev) => prev.size === chapters.length ? new Set() : new Set(chapters.map((c) => c.id)))}
-                className="text-xs text-brand-600 hover:underline"
+                onClick={() => generateSmallVideos.mutate()}
+                disabled={generateSmallVideos.isPending}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 disabled:opacity-50"
+                title="One horizontal 1–10 min video candidate per chapter — edit and render from the Clips list"
               >
-                {openChapters.size === chapters.length ? 'Collapse all' : 'Expand all'}
+                {generateSmallVideos.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clapperboard className="w-3.5 h-3.5" />}
+                Generate small videos
               </button>
+              <span className="flex items-center gap-3">
+                {generateSmallVideos.data && (
+                  <span className="text-xs text-gray-500">
+                    {generateSmallVideos.data.created} new · {generateSmallVideos.data.reused} existing
+                    {generateSmallVideos.data.skippedTooShort > 0 && <> · {generateSmallVideos.data.skippedTooShort} too short</>}
+                  </span>
+                )}
+                <button
+                  onClick={() => setOpenChapters((prev) => prev.size === chapters.length ? new Set() : new Set(chapters.map((c) => c.id)))}
+                  className="text-xs text-brand-600 hover:underline"
+                >
+                  {openChapters.size === chapters.length ? 'Collapse all' : 'Expand all'}
+                </button>
+              </span>
             </div>
           )}
           {chapters.map((c, i) => {

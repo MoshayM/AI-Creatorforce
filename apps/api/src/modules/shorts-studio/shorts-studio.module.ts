@@ -16,6 +16,7 @@ import { HighlightScoringService } from './highlight-scoring.service';
 import { ChapterDetectionService } from './chapter-detection.service';
 import { EmbeddingGenerationService } from './embedding-generation.service';
 import { SemanticSearchService } from './semantic-search.service';
+import { SmallVideoGenerationService } from './small-video-generation.service';
 import { ClipRecommendationService } from './clip-recommendation.service';
 import { ShortsGenerationService } from './shorts-generation.service';
 import { TimelineService } from './timeline.service';
@@ -40,6 +41,7 @@ import { ShortsExportService } from './shorts-export.service';
     ChapterDetectionService,
     EmbeddingGenerationService,
     SemanticSearchService,
+    SmallVideoGenerationService,
     ClipRecommendationService,
     ShortsGenerationService,
     TimelineService,
@@ -61,6 +63,7 @@ import { ShortsExportService } from './shorts-export.service';
     ChapterDetectionService,
     EmbeddingGenerationService,
     SemanticSearchService,
+    SmallVideoGenerationService,
     ClipRecommendationService,
     ShortsGenerationService,
     TimelineService,

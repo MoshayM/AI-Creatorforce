@@ -31,13 +31,14 @@ export class AiEditingAssistantService {
       where: { id: timelineId },
       include: {
         tracks: { where: { type: 'VIDEO' }, include: { items: { orderBy: { startMs: 'asc' } } } },
-        shortClip: { include: { topicSegment: { select: { importedVideoId: true } } } },
+        shortClip: { include: { topicSegment: { select: { importedVideoId: true } }, chapter: { select: { importedVideoId: true } } } },
       },
     });
     if (!timeline) throw new NotFoundException('Timeline not found');
     const spans = videoSpans(timeline.tracks.flatMap((t) => t.items));
     if (spans.length === 0) throw new BadRequestException('Timeline has no video items to analyze');
-    const importedVideoId = timeline.shortClip.topicSegment.importedVideoId;
+    const importedVideoId = timeline.shortClip.topicSegment?.importedVideoId ?? timeline.shortClip.chapter?.importedVideoId;
+    if (!importedVideoId) throw new BadRequestException('Clip has no source-video provenance');
 
     let commands: TimelineCommand[];
     switch (capability) {

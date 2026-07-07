@@ -40,6 +40,7 @@ export class ThumbnailGenerationService {
         thumbnails: true,
         timeline: { select: { durationMs: true } },
         topicSegment: { include: { highlight: { select: { titleSuggestion: true } } } },
+        chapter: { select: { title: true } },
       },
     });
     if (!clip?.timeline) throw new NotFoundException('Clip not found');
@@ -49,7 +50,7 @@ export class ThumbnailGenerationService {
     }
 
     const durationMs = clip.timeline.durationMs;
-    const title = clip.topicSegment.highlight?.titleSuggestion ?? '';
+    const title = clip.topicSegment?.highlight?.titleSuggestion ?? clip.chapter?.title ?? '';
     const font = findFont();
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cf-thumb-'));
 

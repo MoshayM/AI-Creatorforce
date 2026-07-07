@@ -4,6 +4,40 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { CLIP_TYPE_PRESETS } from './clip-type-presets';
 
 /**
+ * Nested-create payload for a fresh clip timeline: one VIDEO item spanning the
+ * source range plus empty AUDIO/CAPTION/OVERLAY tracks for the editor. Shared
+ * by highlight-based Shorts and chapter-based Small Videos so both enter the
+ * exact same edit → captions → render → export path.
+ */
+export function seededTimelineCreate(sourceAssetId: string | null, sourceStartMs: number, sourceEndMs: number) {
+  const durationMs = sourceEndMs - sourceStartMs;
+  return {
+    create: {
+      durationMs,
+      tracks: {
+        create: [
+          {
+            type: 'VIDEO' as const,
+            orderIndex: 0,
+            items: {
+              create: [{
+                startMs: 0,
+                endMs: durationMs,
+                sourceAssetId,
+                properties: { sourceStartMs, sourceEndMs } as never,
+              }],
+            },
+          },
+          { type: 'AUDIO' as const, orderIndex: 1 },
+          { type: 'CAPTION' as const, orderIndex: 2 },
+          { type: 'OVERLAY' as const, orderIndex: 3 },
+        ],
+      },
+    },
+  };
+}
+
+/**
  * SHORTS_GENERATION (ai.md Section 15): one candidate ShortClip per
  * highlight × clip type, each with its own ShortsTimeline seeded with a
  * VIDEO track item spanning the source range (clamped to the preset's max
@@ -47,30 +81,7 @@ export class ShortsGenerationService {
           status: 'CANDIDATE',
           sourceStartMs,
           sourceEndMs,
-          timeline: {
-            create: {
-              durationMs,
-              tracks: {
-                create: [
-                  {
-                    type: 'VIDEO',
-                    orderIndex: 0,
-                    items: {
-                      create: [{
-                        startMs: 0,
-                        endMs: durationMs,
-                        sourceAssetId,
-                        properties: { sourceStartMs, sourceEndMs } as never,
-                      }],
-                    },
-                  },
-                  { type: 'AUDIO', orderIndex: 1 },
-                  { type: 'CAPTION', orderIndex: 2 },
-                  { type: 'OVERLAY', orderIndex: 3 },
-                ],
-              },
-            },
-          },
+          timeline: seededTimelineCreate(sourceAssetId, sourceStartMs, sourceEndMs),
         },
         include: { timeline: true },
       });
@@ -86,6 +97,7 @@ export class ShortsGenerationService {
       orderBy: { createdAt: 'desc' },
       include: {
         topicSegment: { select: { title: true, importedVideoId: true, highlight: { select: { titleSuggestion: true, finalScore: true } } } },
+        chapter: { select: { title: true, importedVideoId: true } },
         timeline: { select: { id: true, durationMs: true } },
       },
     });

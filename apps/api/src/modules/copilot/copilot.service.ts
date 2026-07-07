@@ -11,6 +11,7 @@ import { ShortsStudioService } from '../shorts-studio/shorts-studio.service';
 import { ClipRecommendationService } from '../shorts-studio/clip-recommendation.service';
 import { ShortsGenerationService } from '../shorts-studio/shorts-generation.service';
 import { SemanticSearchService } from '../shorts-studio/semantic-search.service';
+import { SmallVideoGenerationService } from '../shorts-studio/small-video-generation.service';
 import { IntentCacheService } from './intent-cache.service';
 
 const COPILOT_SYSTEM = `You are the CreatorForce Copilot — you drive a YouTube content platform for the user by emitting commands.
@@ -40,6 +41,7 @@ Command palette:
 - list_highlights {importedVideoId, limit} — top Shorts moments for an analyzed video
 - list_chapters {importedVideoId} — YouTube-style chapters detected for an analyzed video
 - search_video {importedVideoId, query} — find moments by meaning ("find John 3:16", "where do they talk about grace") and get their timestamps
+- generate_small_videos {importedVideoId} — create one horizontal 1–10 min video candidate per detected chapter (render each afterwards with render_clip)
 - generate_clips {highlightId, clipTypes} — create candidate Shorts clips (clipTypes values: YOUTUBE_SHORTS, INSTAGRAM_REELS, TIKTOK, LINKEDIN_CLIPS, FACEBOOK_REELS, PODCAST_HIGHLIGHTS)
 - render_clip {shortClipId} — render a clip to vertical video
 - generate_captions {shortClipId}
@@ -93,6 +95,7 @@ export class CopilotService {
     private readonly recommendations: ClipRecommendationService,
     private readonly generation: ShortsGenerationService,
     private readonly semanticSearch: SemanticSearchService,
+    private readonly smallVideos: SmallVideoGenerationService,
     private readonly intentCache: IntentCacheService,
   ) {}
 
@@ -386,6 +389,20 @@ export class CopilotService {
         return {
           summary: lines.length ? `Closest moments for "${command.query}":\n${lines.join('\n')}` : `Nothing close to "${command.query}" in this video.`,
           data: found,
+        };
+      }
+
+      case 'generate_small_videos': {
+        await this.shorts.assertVideoOwnership(command.importedVideoId, userId);
+        const result = await this.smallVideos.generateFromChapters(command.importedVideoId);
+        return {
+          summary: `Small videos ready: ${result.created} new, ${result.reused} already existed${result.skippedTooShort ? `, ${result.skippedTooShort} chapter(s) under a minute skipped` : ''}. Say "render" on any of them when you want the files.`,
+          data: {
+            created: result.created,
+            reused: result.reused,
+            skippedTooShort: result.skippedTooShort,
+            clips: result.clips.map((c) => ({ id: c.id, sourceStartMs: c.sourceStartMs, sourceEndMs: c.sourceEndMs })),
+          },
         };
       }
 

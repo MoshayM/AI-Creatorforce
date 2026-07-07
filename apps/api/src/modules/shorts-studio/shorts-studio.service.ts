@@ -222,10 +222,11 @@ export class ShortsStudioService {
   async getClipsForVideo(importedVideoId: string, userId: string) {
     await this.assertVideoOwnership(importedVideoId, userId);
     return this.prisma.shortClip.findMany({
-      where: { topicSegment: { importedVideoId } },
+      where: { OR: [{ topicSegment: { importedVideoId } }, { chapter: { importedVideoId } }] },
       orderBy: { createdAt: 'desc' },
       include: {
         topicSegment: { select: { id: true, title: true, highlight: { select: { id: true, titleSuggestion: true, finalScore: true } } } },
+        chapter: { select: { id: true, title: true } },
         timeline: { select: { id: true, durationMs: true, _count: { select: { captions: true } } } },
       },
     });

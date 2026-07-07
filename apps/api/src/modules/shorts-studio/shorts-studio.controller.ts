@@ -14,6 +14,7 @@ import { AiEditingAssistantService } from './ai-editing-assistant.service';
 import { ThumbnailGenerationService } from './thumbnail-generation.service';
 import { ShortsExportService } from './shorts-export.service';
 import { SemanticSearchService } from './semantic-search.service';
+import { SmallVideoGenerationService } from './small-video-generation.service';
 import { JobsService } from '../jobs/jobs.service';
 
 class ImportVideoDto {
@@ -48,6 +49,7 @@ export class ShortsStudioController {
     private readonly thumbnails: ThumbnailGenerationService,
     private readonly exports: ShortsExportService,
     private readonly search: SemanticSearchService,
+    private readonly smallVideos: SmallVideoGenerationService,
     private readonly jobs: JobsService,
   ) {}
 
@@ -153,6 +155,12 @@ export class ShortsStudioController {
   @Post('videos/:importedVideoId/detect-chapters')
   async detectChapters(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
     return this.shorts.enqueueChapterDetection(importedVideoId, user.sub);
+  }
+
+  @Post('videos/:importedVideoId/small-videos')
+  async generateSmallVideos(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
+    await this.shorts.assertVideoOwnership(importedVideoId, user.sub);
+    return this.smallVideos.generateFromChapters(importedVideoId);
   }
 
   @Patch('chapters/:chapterId')
