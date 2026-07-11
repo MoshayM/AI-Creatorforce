@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import type { Offer } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * A first-recharge bonus keeps margin when the bonus credits' face value
@@ -81,6 +82,7 @@ export class OffersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private creditsPerUsd(): number {
@@ -201,6 +203,13 @@ export class OffersService {
       idempotencyKey,
       metadata: { offerType: offer.type, offerName: offer.name },
     });
+    this.notifications.notify(
+      userId,
+      'bonus.granted',
+      `Bonus: +${offer.rewardValue} credits`,
+      `You redeemed "${offer.name}".`,
+      { offerId: offer.id, credits: offer.rewardValue, offerType: offer.type },
+    ).catch(() => undefined);
     return { redeemed: true, credits: offer.rewardValue };
   }
 
@@ -258,6 +267,13 @@ export class OffersService {
         idempotencyKey,
         metadata: { offerType: 'FIRST_RECHARGE', offerName: offer.name, paymentId },
       });
+      this.notifications.notify(
+        userId,
+        'bonus.granted',
+        `First recharge bonus: +${offer.rewardValue} credits`,
+        `"${offer.name}" bonus applied to your wallet.`,
+        { offerId: offer.id, credits: offer.rewardValue, offerType: 'FIRST_RECHARGE', paymentId },
+      ).catch(() => undefined);
       this.logger.log(`[offer] first-recharge +${offer.rewardValue} bonus → ${userId} (${offer.name})`);
     } catch (err) {
       this.logger.warn(`[offer] first-recharge reward failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);

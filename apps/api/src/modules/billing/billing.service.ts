@@ -4,6 +4,8 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { OffersService } from '../trial/offers.service';
 import { MarketplaceService } from '../trial/marketplace.service';
+import { ReferralService } from '../trial/referral.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const PLAN_PRICE_IDS: Record<string, string> = {
   STARTER: process.env['STRIPE_STARTER_PRICE_ID'] ?? '',
@@ -26,6 +28,8 @@ export class BillingService {
     private readonly wallet: WalletService,
     private readonly offers: OffersService,
     private readonly marketplace: MarketplaceService,
+    private readonly referral: ReferralService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private get stripe(): Stripe {
@@ -277,6 +281,13 @@ export class BillingService {
       idempotencyKey: `stripe:${gatewayPaymentId}`,
       metadata: { gateway: 'STRIPE', amountMinor: payment.amount, currency: payment.currency },
     });
+    this.notifications.notify(
+      userId,
+      'recharge.success',
+      `Wallet recharged: +${credits} credits`,
+      `Your payment of ${(payment.amount / 100).toFixed(2)} ${payment.currency.toUpperCase()} was successful.`,
+      { paymentId: payment.id, credits, amountMinor: payment.amount, currency: payment.currency },
+    ).catch(() => undefined);
     this.logger.log(`[recharge] +${credits} credits → user ${userId} (payment ${payment.id})`);
 
     // Phase 6 §5: first successful recharge converts the trial
@@ -288,6 +299,12 @@ export class BillingService {
     // Phase 6 §9: first-recharge reward — idempotent on the payment, margin
     // re-checked at grant time, and never allowed to fail the webhook
     await this.offers.applyFirstRechargeReward(userId, payment.id, payment.amount);
+
+    // Phase 6 §10.2: referral qualification — called after first recharge succeeds
+    // non-fatal: a referral error must never break the payment webhook
+    await this.referral.qualify(userId, payment.id).catch((err: unknown) => {
+      this.logger.warn(`[referral] qualify failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+    });
   }
 
   /**

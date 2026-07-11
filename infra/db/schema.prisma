@@ -44,6 +44,8 @@ model User {
   accountLinks  AccountLink[]
   authSessions  AuthSession[]
   budget        Budget?
+  referralCode  ReferralCode?
+  notifications Notification[]
 
   @@map("users")
 }
@@ -1690,4 +1692,72 @@ model Budget {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("budgets")
+}
+
+// ── In-App Notifications (Phase 6 spec §15) ───────────────────────────────────
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String    // trial.expiring | trial.exhausted | trial.expired | credits.low | offer.available | referral.reward | bonus.granted | recharge.success
+  title     String
+  body      String?
+  meta      Json      @default("{}")
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+// ── Referral & Invite Program (Phase 6 spec §10.2) ────────────────────────────
+
+model ReferralCode {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  code      String   @unique
+  usesCount Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referrals Referral[]
+
+  @@map("referral_codes")
+}
+
+model Referral {
+  id                String    @id @default(cuid())
+  referrerId        String
+  referredId        String    @unique
+  codeId            String
+  status            String    @default("PENDING") // PENDING|QUALIFIED|REWARDED|FLAGGED
+  milestoneLevel    Int       @default(0)
+  deviceFingerprint String?
+  ipHash            String?
+  flagReason        String?
+  qualifiedAt       DateTime?
+  createdAt         DateTime  @default(now())
+
+  code    ReferralCode    @relation(fields: [codeId], references: [id])
+  rewards ReferralReward[]
+
+  @@index([referrerId, status])
+  @@map("referrals")
+}
+
+model ReferralReward {
+  id             String   @id @default(cuid())
+  referralId     String
+  beneficiaryId  String
+  kind           String   // 'REFERRER' | 'REFERRED' | 'MILESTONE'
+  credits        Int
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  referral Referral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+
+  @@map("referral_rewards")
 }

@@ -1,15 +1,16 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
-import { api, clearTokens, getRefreshToken } from '@/lib/api';
+import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
 const NAV = [
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
   { href: '/library', icon: ListVideo, label: 'Library' },
   { href: '/wallet', icon: Wallet, label: 'Wallet' },
+  { href: '/growth', icon: Gift, label: 'Growth' },
   { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
   { href: '/approvals', icon: CheckSquare, label: 'Approvals' },
   { href: '/brand-kit', icon: Palette, label: 'Brand Kit' },
@@ -28,10 +29,42 @@ function nameFromToken(): string {
   }
 }
 
+/** Format a Date as a relative string, e.g. "3m ago", "2h ago", "5d ago". */
+function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+const BELL_POLL_MS = 60_000;
+
 export default function DashLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [userName, setUserName] = useState('Creator');
+
+  // ── Notifications bell state ───────────────────────────────────────────────
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [bellOpen, setBellOpen] = useState(false);
+  const bellRef = useRef<HTMLDivElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchNotifications = useCallback(async () => {
+    // Only fetch when the tab is visible
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    try {
+      const res = await api.notifications.list({ take: 20 });
+      setNotifications(res.data.items);
+      setUnreadCount(res.data.unreadCount);
+    } catch {
+      // Non-fatal — network errors are swallowed silently
+    }
+  }, []);
 
   useEffect(() => {
     if (!localStorage.getItem('cf_token')) {
@@ -39,7 +72,46 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
       return;
     }
     setUserName(nameFromToken());
-  }, [router]);
+    void fetchNotifications();
+    pollRef.current = setInterval(() => { void fetchNotifications(); }, BELL_POLL_MS);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [router, fetchNotifications]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
+        setBellOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, []);
+
+  async function handleMarkRead(id: string) {
+    try {
+      await api.notifications.markRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, readAt: new Date().toISOString() } : n)),
+      );
+      setUnreadCount((c) => Math.max(0, c - 1));
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  async function handleMarkAllRead() {
+    try {
+      await api.notifications.markAllRead();
+      const now = new Date().toISOString();
+      setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? now })));
+      setUnreadCount(0);
+    } catch {
+      // Non-fatal
+    }
+  }
 
   async function handleLogout() {
     const refreshToken = getRefreshToken() ?? undefined;
@@ -93,8 +165,80 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
         </aside>
 
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Top bar: user chip */}
+          {/* Top bar: notification bell + user chip */}
           <div className="dash-topbar flex items-center justify-end gap-3 px-8 pt-5">
+            {/* ── Notification bell ───────────────────────────────────────────── */}
+            <div className="relative" ref={bellRef}>
+              <button
+                type="button"
+                aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+                aria-haspopup="true"
+                aria-expanded={bellOpen}
+                onClick={() => { setBellOpen((o) => !o); if (!bellOpen) void fetchNotifications(); }}
+                className="relative flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              >
+                <Bell className="w-4 h-4 text-gray-600" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-[#9d6ff0] text-white text-[9px] font-bold leading-none">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {bellOpen && (
+                <div
+                  role="dialog"
+                  aria-label="Notifications"
+                  className="absolute right-0 top-11 z-50 w-80 rounded-2xl bg-white shadow-xl border border-gray-100 overflow-hidden"
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                    <span className="text-sm font-semibold text-gray-800">Notifications</span>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { void handleMarkAllRead(); }}
+                        className="text-[11px] text-[#9d6ff0] hover:underline font-medium focus:outline-none"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  {/* List */}
+                  <ul className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+                    {notifications.length === 0 ? (
+                      <li className="px-4 py-6 text-center text-sm text-gray-400">No notifications yet</li>
+                    ) : (
+                      notifications.map((n) => (
+                        <li key={n.id}>
+                          <button
+                            type="button"
+                            onClick={() => { if (!n.readAt) void handleMarkRead(n.id); }}
+                            className={`w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-50 ${!n.readAt ? 'bg-purple-50/60' : ''}`}
+                          >
+                            <div className="flex items-start gap-2">
+                              {!n.readAt && (
+                                <span className="mt-1.5 flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[#9d6ff0]" aria-hidden="true" />
+                              )}
+                              <div className={!n.readAt ? '' : 'pl-3.5'}>
+                                <p className="text-[13px] font-semibold text-gray-800 leading-snug">{n.title}</p>
+                                {n.body && (
+                                  <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{n.body}</p>
+                                )}
+                                <p className="text-[10px] text-gray-400 mt-1">{relativeTime(n.createdAt)}</p>
+                              </div>
+                            </div>
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* ── User chip ────────────────────────────────────────────────────── */}
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-full bg-gradient-to-b from-[#cbbcf2] to-[#a48fe0] flex items-center justify-center text-white text-sm font-bold uppercase">
                 {userName.charAt(0)}

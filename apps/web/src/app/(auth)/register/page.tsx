@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { User, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { api, setTokens, type OAuthProviders, type OAuthProvider } from '@/lib/api';
@@ -10,8 +10,9 @@ const MOCK_MODE = process.env['NEXT_PUBLIC_USE_MOCK'] === 'true';
 const MOCK_TOKEN = 'mock-jwt-token-for-testing';
 const OWNER_EMAIL = 'ethonanpasumvalki@gmail.com';
 
-export default function RegisterPage() {
+function RegisterInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [form, setForm] = useState({ email: '', password: '', name: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -27,6 +28,12 @@ export default function RegisterPage() {
         setProviders({ google: false, apple: false, facebook: false });
       });
   }, []);
+
+  // Persist referral code from URL to localStorage for later redemption
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) localStorage.setItem('cf.pendingReferralCode', ref);
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +55,11 @@ export default function RegisterPage() {
     try {
       const { data } = await api.auth.register(form.email, form.password, form.name);
       setTokens(data.accessToken, data.refreshToken);
+      const pending = localStorage.getItem('cf.pendingReferralCode');
+      if (pending) {
+        api.referral.redeem(pending).catch(() => {});
+        localStorage.removeItem('cf.pendingReferralCode');
+      }
       router.push('/projects');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
@@ -143,5 +155,13 @@ export default function RegisterPage() {
         onProviderClick={(p) => { void handleSocialRegister(p); }}
       />
     </AuthShell>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterInner />
+    </Suspense>
   );
 }

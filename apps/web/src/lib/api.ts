@@ -191,6 +191,99 @@ export interface WalletTransaction {
   metadata: Record<string, unknown>;
 }
 
+// ── Trial types ───────────────────────────────────────────────────────────────
+
+export type TrialStatus = 'ACTIVE' | 'EXPIRED' | 'CONVERTED' | 'REVOKED' | 'PENDING_REVIEW';
+
+export interface TrialStatusResponse {
+  hasTrial: boolean;
+  status?: TrialStatus;
+  creditsGranted?: number;
+  trialCreditsRemaining?: number;
+  grantedAt?: string;
+  expiresAt?: string;
+}
+
+export interface TrialLimitsResponse {
+  isTrialUser: boolean;
+  limits: Array<{ id: string; feature: string; access: 'enabled' | 'limited' | 'disabled'; limitValue: number | null }>;
+}
+
+// ── Offer types ───────────────────────────────────────────────────────────────
+
+export interface Offer {
+  id: string;
+  type: string;
+  name: string;
+  rewardType: string;
+  rewardValue: number;
+  minRechargeMinor: number | null;
+  validTo: string | null;
+  redeemable: boolean;
+}
+
+// ── Upgrade types ─────────────────────────────────────────────────────────────
+
+export interface UpgradeRecommendation {
+  id: string;
+  reasonCode: string;
+  recommendedPlan: string;
+  confidence: number;
+  createdAt: string;
+}
+
+// ── Referral types ────────────────────────────────────────────────────────────
+
+export interface ReferralEntry {
+  id: string;
+  status: 'PENDING' | 'QUALIFIED' | 'REWARDED' | 'FLAGGED';
+  reward: number;
+  createdAt: string;
+}
+
+export interface ReferralEarnings {
+  code: string;
+  totalCredits: number;
+  qualifiedCount: number;
+  pendingCount: number;
+  flaggedCount: number;
+  referrals: ReferralEntry[];
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  userLabel: string;
+  qualifiedCount: number;
+  totalCredits: number;
+}
+
+// ── Notification types ────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | 'trial.expiring'
+  | 'trial.exhausted'
+  | 'trial.expired'
+  | 'credits.low'
+  | 'offer.available'
+  | 'referral.reward'
+  | 'bonus.granted'
+  | 'recharge.success';
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType | string;
+  title: string;
+  body: string | null;
+  meta: Record<string, unknown>;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationListResponse {
+  items: AppNotification[];
+  unreadCount: number;
+}
+
 // ── Auth provider types ───────────────────────────────────────────────────────
 
 export interface OAuthProviders {
@@ -447,5 +540,36 @@ export const api = {
       ),
     reorderPlaylist: (channelId: string, playlistId: string, itemIds: string[]) =>
       apiClient.patch(`/channels/${channelId}/playlists/${playlistId}/order`, { itemIds }),
+  },
+  trial: {
+    status: () => apiClient.get<TrialStatusResponse>('/trial/status'),
+    limits: () => apiClient.get<TrialLimitsResponse>('/trial/limits'),
+  },
+  offers: {
+    mine: () => apiClient.get<Offer[]>('/offers'),
+    redeem: (id: string) => apiClient.post<{ redeemed: boolean; credits: number }>(`/offers/${id}/redeem`),
+  },
+  upgrade: {
+    recommendations: () => apiClient.get<UpgradeRecommendation[]>('/upgrade/recommendations'),
+    dismiss: (id: string) => apiClient.post<{ dismissed: boolean }>(`/upgrade/recommendations/${id}/dismiss`),
+  },
+  referral: {
+    code: () => apiClient.post<{ code: string }>('/referral/code'),
+    redeem: (code: string) => apiClient.post<{ ok?: boolean }>('/referral/redeem', { code }),
+    earnings: () => apiClient.get<ReferralEarnings>('/referral/earnings'),
+    leaderboard: () => apiClient.get<LeaderboardEntry[]>('/referral/leaderboard'),
+  },
+  notifications: {
+    list: (opts?: { unreadOnly?: boolean; take?: number }) => {
+      const sp = new URLSearchParams();
+      if (opts?.unreadOnly) sp.set('unreadOnly', 'true');
+      if (opts?.take !== undefined) sp.set('take', String(opts.take));
+      const qs = sp.toString();
+      return apiClient.get<NotificationListResponse>(`/notifications${qs ? `?${qs}` : ''}`);
+    },
+    markRead: (id: string) =>
+      apiClient.post(`/notifications/${id}/read`),
+    markAllRead: () =>
+      apiClient.post('/notifications/read-all'),
   },
 };

@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, BadRequestException } from '@nestjs/common';
+import { IsIn, IsString } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard, RequirePermissions } from '../../common/guards/permissions.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
@@ -8,6 +9,7 @@ import { TRIAL_FEATURES, TrialLimitsService, type TrialFeature } from './trial-l
 import { UpgradeEngineService } from './upgrade-engine.service';
 import { OffersService } from './offers.service';
 import { MarketplaceService } from './marketplace.service';
+import { ReferralService } from './referral.service';
 
 @Controller('trial')
 @UseGuards(JwtAuthGuard)
@@ -124,6 +126,32 @@ export class TrialAdminController {
   async approve(@Param('userId') userId: string, @CurrentUser() admin: JwtPayload) {
     return this.trial.approvePendingTrial(userId, admin.sub);
   }
+
+  @Get('analytics/conversion-funnel')
+  @RequirePermissions('admin:trial')
+  async conversionFunnel() {
+    const [signups, trialsTotal, trialActive, trialConverted, firstRechargeGroups, subscriptions] = await Promise.all([
+      this.prisma.user.count(),
+      this.prisma.trialGrant.count(),
+      this.prisma.trialGrant.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.trialGrant.count({ where: { status: 'CONVERTED' } }),
+      this.prisma.payment.groupBy({ by: ['userId'], where: { status: 'SUCCEEDED' } }),
+      this.prisma.subscription.count({ where: { status: 'ACTIVE' } }),
+    ]);
+    const firstRecharges = firstRechargeGroups.length;
+    return {
+      signups,
+      trials: trialsTotal,
+      trialActive,
+      trialConverted,
+      firstRecharges,
+      subscriptions,
+      conversionPct: {
+        trialToRecharge: trialsTotal > 0 ? Number((firstRecharges / trialsTotal * 100).toFixed(1)) : 0,
+        rechargeToSubscription: firstRecharges > 0 ? Number((subscriptions / firstRecharges * 100).toFixed(1)) : 0,
+      },
+    };
+  }
 }
 
 @Controller('admin/offers')
@@ -176,5 +204,75 @@ export class MarketplaceAdminController {
   async toggle(@Param('id') id: string, @Body() dto: { isActive: boolean }, @CurrentUser() admin: JwtPayload) {
     if (typeof dto?.isActive !== 'boolean') throw new BadRequestException('isActive must be a boolean');
     return this.marketplace.setPackActive(id, dto.isActive, admin.sub);
+  }
+}
+
+class RedeemReferralDto {
+  @IsString()
+  code!: string;
+
+  @IsString()
+  deviceFingerprint?: string;
+}
+
+class ReviewReferralDto {
+  @IsIn(['APPROVE', 'REJECT'])
+  decision!: 'APPROVE' | 'REJECT';
+}
+
+@Controller('referral')
+@UseGuards(JwtAuthGuard)
+export class ReferralController {
+  constructor(private readonly referral: ReferralService) {}
+
+  @Post('code')
+  async code(@CurrentUser() user: JwtPayload) {
+    return this.referral.getOrCreateCode(user.sub);
+  }
+
+  @Post('redeem')
+  async redeem(
+    @Body() dto: RedeemReferralDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: import('express').Request,
+  ) {
+    if (!dto?.code) throw new BadRequestException('code is required');
+    const ip = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ?? req.socket.remoteAddress;
+    return this.referral.redeem(user.sub, dto.code, { deviceFingerprint: dto.deviceFingerprint, ip });
+  }
+
+  @Get('earnings')
+  async earnings(@CurrentUser() user: JwtPayload) {
+    return this.referral.earnings(user.sub);
+  }
+
+  @Get('leaderboard')
+  async leaderboard() {
+    return this.referral.leaderboard();
+  }
+}
+
+@Controller('admin/referrals')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+export class ReferralAdminController {
+  constructor(private readonly referral: ReferralService) {}
+
+  @Get()
+  @RequirePermissions('admin:trial')
+  async list(@Query('status') status?: string) {
+    return this.referral.listFlagged(status);
+  }
+
+  @Post(':id/review')
+  @RequirePermissions('admin:trial')
+  async review(
+    @Param('id') id: string,
+    @Body() dto: ReviewReferralDto,
+    @CurrentUser() admin: JwtPayload,
+  ) {
+    if (!dto?.decision || !['APPROVE', 'REJECT'].includes(dto.decision)) {
+      throw new BadRequestException('decision must be APPROVE or REJECT');
+    }
+    return this.referral.review(id, dto.decision, admin.sub);
   }
 }

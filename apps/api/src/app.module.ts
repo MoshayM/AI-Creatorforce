@@ -32,6 +32,7 @@ import { ShortsStudioModule } from './modules/shorts-studio/shorts-studio.module
 import { CopilotModule } from './modules/copilot/copilot.module';
 import { WorkersModule } from './workers/workers.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { GatewayModule } from './gateway/gateway.module';
     CopilotModule,
     WorkersModule,
     GatewayModule,
+    NotificationsModule,
     MetricsModule,
   ],
   providers: [],
