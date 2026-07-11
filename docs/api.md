@@ -56,6 +56,17 @@ See `Docs3/Updates/15_Authentication.md` for flows, linking rules, and session s
 | DELETE | `/channels/:id` | Disconnect & revoke tokens |
 | GET | `/channels/:id` | Channel details + sync status |
 
+### 3.1 Channel Library (synced, cursor-paginated — `Updates/08`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/channels/:id/sync` | Enqueue resumable full-library sync → `{ jobId }` (idempotent per channel) |
+| GET | `/channels/:id/sync-status` | Sync phase + progress (`VIDEOS`/`PLAYLISTS`/`DONE`/`ERROR`, cursors persisted per page) |
+| GET | `/channels/:id/videos?cursor=&q=&type=&sort=` | Keyset-paginated videos → `{ data, nextCursor }` (never OFFSET) |
+| GET | `/channels/:id/playlists?cursor=` | Synced playlists |
+| GET | `/channels/:id/playlists/:pid/items?cursor=` | Playlist items in position order |
+| PATCH | `/channels/:id/playlists/:pid/order` | Persist local reorder `{ itemIds }` |
+
 ## 4. Trend Intelligence
 
 | Method | Path | Purpose |
@@ -280,6 +291,23 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | POST | `/offers/:id/redeem` | Redeem a direct-grant offer (idempotent per user); recharge-attached offers apply automatically at settle |
 | GET | `/marketplace/packs` | Credit packs (`?region=` filters; global packs always included) (Phase 6 §12) |
 | GET/POST/PATCH | `/admin/credit-packs` | `admin:pricing` — packs; creation margin-gated on real credit economics; audited |
+| GET/PUT | `/wallet/budget` | Per-user monthly budget: limit, alert threshold, hard cap. Hard cap enforced fail-closed inside `WalletService.reserve()` (`Updates/10` §Budgets) |
+| GET | `/wallet/usage-summary?days=` | Month/period spend grouped by action intent |
+| POST | `/referral/code` | Get-or-create my referral code (deterministic, 8-char) (Phase 6 §10.2) |
+| POST | `/referral/redeem` | Apply a code once (self/duplicate/inactive rejected); registration auto-applies `?ref=` codes |
+| GET | `/referral/earnings` | My code, totals, per-referral status (PENDING→QUALIFIED on first recharge→REWARDED; FLAGGED withheld on shared-fingerprint fraud) |
+| GET | `/referral/leaderboard` | Top referrers (masked emails) |
+| GET/POST | `/admin/referrals` | `admin:trial` — review queue; `POST /admin/referrals/:id/review` approves (idempotent replay of payout) or rejects |
+| GET | `/notifications` | In-app notifications (`?unreadOnly=`) + unread count; 24h dedupe window (Phase 6 §15) |
+| POST | `/notifications/:id/read` / `/notifications/read-all` | Mark read (204) |
+| GET | `/admin/analytics/conversion-funnel` | `admin:trial` — signups → trials → first recharge → subscription with conversion percentages (Phase 6 §14) |
+| POST | `/admin/routing/simulate` | `admin:pricing` — dry-run provider routing: ranked candidates, est. cost/credits, would-route verdict; no spend (Phase 5 §16) |
+
+AI cost controls (Phase 5 §6/§12): deterministic `callAI` calls and all embeddings are served cache-first from Redis (`AI_RESPONSE_CACHE_ENABLED`, TTLs via `AI_RESPONSE_CACHE_TTL_SECONDS` / `AI_EMBEDDING_CACHE_TTL_SECONDS`); hits cost $0, are attributed via `token_usage.fromCache`, and are counted in `cf_ai_cache_hits_total`.
+
+## 23. Observability & DR (ops)
+
+`GET /metrics` (no `/api` prefix, version-neutral) serves Prometheus metrics (`cf_` prefix); protect with `METRICS_TOKEN` bearer in shared environments. Alert rules, SLOs, and the Grafana overview dashboard live in `infra/monitoring/`; backup/restore scripts and incident runbooks (RTO 1h / RPO 24h) in `infra/dr/`.
 
 Roles: `SUPER_ADMIN` > `OWNER` > `MEMBER`; elevated identities come from `SUPER_ADMIN_EMAILS` / `OWNER_EMAILS` env config (never hardcoded). The `credit_ledger` is append-only and idempotent — every balance is reconstructable from it.
 
