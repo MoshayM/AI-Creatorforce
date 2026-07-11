@@ -1,7 +1,6 @@
-import { Controller, Post, Get, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { VoiceService } from './voice.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import type { Request } from 'express';
 
 @Controller('voice')
 @UseGuards(JwtAuthGuard)

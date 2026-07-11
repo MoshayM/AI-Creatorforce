@@ -19,7 +19,9 @@ export abstract class BaseAgent<TInput, TOutput> {
 
   protected async callStructured<T>(
     messages: AIMessage[],
-    schema: z.ZodSchema<T>,
+    // Input type left open (mirrors callAIStructured) so schemas with
+    // .default()/.transform() infer T from their OUTPUT type.
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     opts?: AICallOptions,
   ): Promise<T> {
     return callAIStructured(messages, schema, { ...opts, systemPrompt: this.systemPrompt });

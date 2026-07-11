@@ -53,7 +53,7 @@ export class AppleAdapter implements OAuthProviderAdapter {
   }
 
   async exchange(args: ExchangeArgs): Promise<OAuthProfile> {
-    const clientSecret = await this.buildClientSecret(args.redirectUri);
+    const clientSecret = await this.buildClientSecret();
 
     // Exchange code for tokens using fetch (no external dep needed for this)
     const body = new URLSearchParams({
@@ -119,7 +119,7 @@ export class AppleAdapter implements OAuthProviderAdapter {
     return { subject: sub, email, emailVerified, name };
   }
 
-  private async buildClientSecret(redirectUri: string): Promise<string> {
+  private async buildClientSecret(): Promise<string> {
     const rawKey = process.env['APPLE_PRIVATE_KEY'] ?? '';
     const teamId = process.env['APPLE_TEAM_ID'] ?? '';
     const clientId = process.env['APPLE_CLIENT_ID'] ?? '';
