@@ -17,6 +17,7 @@ import { IntentCacheService } from './intent-cache.service';
 import { newAccumulator, runWithAiContext } from '../../common/ai-usage.context';
 import { WalletService, billingEnforced, creditsForCost } from '../wallet/wallet.service';
 import { PricingService } from '../ai-ops/pricing.service';
+import { OrgsService } from '../orgs/orgs.service';
 import { randomUUID } from 'crypto';
 
 const COPILOT_SYSTEM = `You are the CreatorForce Copilot — you drive a YouTube content platform for the user by emitting commands.
@@ -110,6 +111,7 @@ export class CopilotService {
     private readonly intentCache: IntentCacheService,
     private readonly walletService: WalletService,
     private readonly pricingService: PricingService,
+    private readonly orgs: OrgsService,
   ) {}
 
   // §8.2 safety: simple per-user rate limit (20 copilot turns/minute)
@@ -161,11 +163,31 @@ export class CopilotService {
       let reservationId: string | null = null;
       // Phase 5 §7 price lock: rule price quoted here IS the settle amount
       let lockedPrice: { creditCost: number; ruleId: string } | null = null;
+      // Phase 5 §10: when set, the hold sits on the org shared wallet and the
+      // team/org budget must be reconciled on settle/release.
+      let orgBilling: { orgId: string; teamId: string | null; reserved: number } | null = null;
       if (billingEnforced()) {
         lockedPrice = await this.pricingService.resolvePrice({ action: 'chat' }).catch(() => null);
         const estimate = lockedPrice?.creditCost ?? Math.max(1, Number(process.env['COPILOT_RESERVE_CREDITS']) || 5);
-        const reservation = await this.walletService.reserve(userId, estimate, `copilot:${randomUUID()}`, 'AI_REQUEST');
-        reservationId = reservation.id;
+        if (req.orgId) {
+          // Org billing: orgSpend gates SPEND role + budget, holds on the org
+          // wallet, and records budget consumption for the reserved amount.
+          const spend = await this.orgs.orgSpend(userId, req.orgId, {
+            amount: estimate,
+            action: 'chat',
+            memberUserId: userId,
+          });
+          if (spend.status === 'NEEDS_APPROVAL') {
+            // Managers were notified inside orgSpend; the turn cannot proceed
+            // until one approves and the user retries.
+            throw new BadRequestException('ORG_APPROVAL_REQUIRED');
+          }
+          reservationId = spend.reservationId;
+          orgBilling = { orgId: req.orgId, teamId: spend.teamId, reserved: estimate };
+        } else {
+          const reservation = await this.walletService.reserve(userId, estimate, `copilot:${randomUUID()}`, 'AI_REQUEST');
+          reservationId = reservation.id;
+        }
       }
       try {
         decision = await runWithAiContext({ userId, accumulator }, () => callAIStructured(
@@ -184,7 +206,15 @@ export class CopilotService {
           },
         ));
       } catch (err) {
-        if (reservationId) await this.walletService.releaseReservation(reservationId).catch(() => undefined);
+        if (reservationId) {
+          await this.walletService.releaseReservation(reservationId).catch(() => undefined);
+          // The hold debited nothing — roll the budget consumption back too.
+          if (orgBilling) {
+            await this.orgs
+              .recordConsumption(orgBilling.orgId, orgBilling.teamId ?? undefined, -orgBilling.reserved)
+              .catch(() => undefined);
+          }
+        }
         throw err;
       }
       if (reservationId) {
@@ -192,7 +222,15 @@ export class CopilotService {
         await this.walletService.settleReservation(reservationId, settleCredits, {
           source: 'copilot',
           ...(lockedPrice ? { priceLocked: true, pricingRuleId: lockedPrice.ruleId } : {}),
+          ...(orgBilling ? { orgId: orgBilling.orgId, memberUserId: userId } : {}),
         }).catch((e) => this.logger.warn(`copilot settle failed: ${e instanceof Error ? e.message : String(e)}`));
+        // Budget consumption was recorded for the reserved estimate — adjust
+        // to what actually settled so the period reflects real spend.
+        if (orgBilling && settleCredits !== orgBilling.reserved) {
+          await this.orgs
+            .recordConsumption(orgBilling.orgId, orgBilling.teamId ?? undefined, settleCredits - orgBilling.reserved)
+            .catch(() => undefined);
+        }
       }
       if (!req.pendingCommand) await this.intentCache.maybeStore(lastUserText, decision);
     }

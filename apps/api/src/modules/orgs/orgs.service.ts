@@ -407,7 +407,9 @@ export class OrgsService {
     actorId: string,
     orgId: string,
     dto: OrgSpendDto,
-  ): Promise<{ status: 'ALLOWED'; reservationId: string } | { status: 'NEEDS_APPROVAL' }> {
+  ): Promise<
+    { status: 'ALLOWED'; reservationId: string; teamId: string | null } | { status: 'NEEDS_APPROVAL' }
+  > {
     // 1. Resolve membership
     const membership = await this.prisma.orgMembership.findUnique({
       where: { orgId_userId: { orgId, userId: dto.memberUserId } },
@@ -461,7 +463,10 @@ export class OrgsService {
 
     // 4a. ALLOW — reserve on the org wallet
     const orgWallet = await this.walletService.ensureOrgWallet(orgId);
-    const idempotencyKey = `org-spend:${orgId}:${dto.memberUserId}:${dto.action}:${Date.now()}`;
+    // Random digits keep the tail numeric (parseOrgSpendKey contract) while
+    // preventing same-millisecond key collisions from reusing a hold.
+    const nonce = Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0');
+    const idempotencyKey = `org-spend:${orgId}:${dto.memberUserId}:${dto.action}:${Date.now()}${nonce}`;
     const reservation = await this.walletService.reserveForWallet(
       orgWallet.id,
       dto.amount,
@@ -502,16 +507,23 @@ export class OrgsService {
     this.logger.log(
       `[orgs] orgSpend ALLOWED org=${orgId} member=${dto.memberUserId} amount=${dto.amount} reservation=${reservation.id}`,
     );
-    return { status: 'ALLOWED', reservationId: reservation.id };
+    return { status: 'ALLOWED', reservationId: reservation.id, teamId: membership.teamId };
   }
 
   /**
-   * Increment consumedCredits on the current budget period.
-   * Called after a successful reservation so the period stays in sync.
+   * Adjust consumedCredits on the current budget period (negative delta =
+   * rollback, e.g. a released hold or a settle below the reserved estimate).
+   *
+   * Resolves the period with the SAME fallback as the spend gate — the
+   * member's team period first, then the org-wide one — so consumption lands
+   * on the period that actually gated the spend. (Previously a team member
+   * gated by the org-wide fallback never had consumption recorded at all.)
    */
   async recordConsumption(orgId: string, teamId: string | undefined, credits: number) {
+    if (credits === 0) return;
     const now = new Date();
-    const period = await this.currentPeriod(orgId, teamId, now);
+    let period = await this.currentPeriod(orgId, teamId, now);
+    if (!period && teamId) period = await this.currentPeriod(orgId, undefined, now);
     if (!period) return;
     await this.prisma.budgetPeriod.update({
       where: { id: period.id },

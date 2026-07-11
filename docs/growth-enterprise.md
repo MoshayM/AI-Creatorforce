@@ -16,7 +16,7 @@
 | §8 Profit protection | Fail-closed margin guard (`MIN_PROFIT_MARGIN`, default 30%): worst-case provider cost vs credit value; gates pricing-rule create/update; `/admin/profit/preview` | ✅ shipped |
 | §6 Smart routing | Health-ranked provider selection + automatic failover + rate limiting | ✅ pre-existing in the shared aiClient (score/cooldown/failover) — registry now persists it; per-request cost-based *model* selection deferred (single model per provider today) |
 | §12 Token optimization | Intent cache, compliance cache, per-stage resume, embedding no-reembed | ✅ pre-existing; response-cache generalization deferred |
-| §10 Org/team billing | Organizations, teams, shared wallets, budgets, manager approval | ✅ shipped (Wave 3) — shared wallet = existing wallet owned by an org; Wave 6 adds usage reports + budget rollover |
+| §10 Org/team billing | Organizations, teams, shared wallets, budgets, manager approval | ✅ shipped (Wave 3) — shared wallet = existing wallet owned by an org; Wave 6 adds usage reports, budget rollover + copilot org billing (`orgId` on /copilot/chat) |
 | §11 BI/forecasting | LTV/CAC/ARPU/MRR, forecasts | ✅ shipped (Wave 4a backend + Wave 6 dashboard UI) |
 | §13 Developer portal | Hashed API keys, webhooks, sandbox | ✅ shipped (Wave 4b) — SDK/OpenAPI-docs autogen + per-key usage analytics deferred |
 | §14 Background jobs | forecast-generation, budget-period-rollover, cache-eviction | ✅ forecast + rollover jobs shipped; cache-eviction satisfied by Redis TTL (see deviations) |
@@ -148,6 +148,18 @@
   attribution parses the orgSpend idempotency-key format the same module
   writes (`parseOrgSpendKey`, pure + tested); usage by removed members
   survives as role `REMOVED`.  `format=csv` streams a text/csv attachment.
+- **Org billing in the copilot spend path** (§10): `POST /copilot/chat`
+  accepts an optional `orgId` — the turn's reserve→settle then runs on the
+  org shared wallet through `orgSpend` (SPEND role + budget gate).  A
+  hard-capped budget rejects with `ORG_BUDGET_EXCEEDED`; members flagged
+  `approvalRequired` above the threshold get `ORG_APPROVAL_REQUIRED` (their
+  managers are notified) and retry after approval.  Budget consumption is
+  recorded at reserve and reconciled at settle/release (delta adjustment /
+  rollback), and the settle ledger metadata carries `orgId` + `memberUserId`.
+  Fixed along the way: consumption now lands on the org-wide fallback period
+  when a team member is gated by it (previously it was never recorded), and
+  the orgSpend idempotency key carries a numeric nonce so same-millisecond
+  turns can't reuse a hold.
 - **Enterprise dashboard UI** (§9): `/admin` page in the web app (nav link
   shown to OWNER/SUPER_ADMIN from the JWT role; the API's permission guard
   is the real gate) rendering the Wave 4a backend: MRR/ARR, ARPU/LTV, churn,
@@ -190,12 +202,14 @@
 
 ## Next steps
 
-1. Wire `OrgsService.orgSpend` into the copilot/supervisor spend path so AI
-   actions can run against an org shared wallet (the gate + budget machinery
-   is built and tested; nothing calls it yet).
-2. Developer portal follow-ups: SDK/OpenAPI-docs autogen + per-key usage
+1. Extend org billing beyond copilot chat: the supervisor/agent-job spend
+   path and voice turns still bill the personal wallet only (same
+   `orgSpend` integration pattern applies).
+2. Web UI for orgs: org/member management pages and a "bill to org" picker
+   in the copilot panel (the API accepts `orgId` today; nothing sends it).
+3. Developer portal follow-ups: SDK/OpenAPI-docs autogen + per-key usage
    analytics (token-usage table already has the data).
-3. Transcript/analysis cache keyed by media content hash (§12) — response +
+4. Transcript/analysis cache keyed by media content hash (§12) — response +
    embedding caches shipped; video/audio re-analysis is still uncached.
-4. Playwright e2e coverage for Phase 5 flows (org creation → budget
+5. Playwright e2e coverage for Phase 5 flows (org creation → budget
    enforcement → approval gating; admin dashboard render).

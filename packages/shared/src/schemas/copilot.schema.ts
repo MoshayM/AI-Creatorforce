@@ -98,5 +98,12 @@ export const CopilotChatRequestSchema = z.object({
   pendingCommand: CopilotCommandSchema.optional(),
   /** How the user delivered this turn — drives the actions/voice_commands audit trail. */
   inputMode: z.enum(['text', 'voice']).default('text'),
+  /**
+   * Bill this turn to an org shared wallet instead of the personal wallet
+   * (Phase 5 §10). The caller must be an org member with SPEND permission;
+   * the turn is gated by the team/org budget and may be rejected with
+   * ORG_BUDGET_EXCEEDED or ORG_APPROVAL_REQUIRED.
+   */
+  orgId: z.string().min(1).optional(),
 });
 export type CopilotChatRequest = z.infer<typeof CopilotChatRequestSchema>;
