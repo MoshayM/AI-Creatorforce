@@ -35,6 +35,7 @@ import { GatewayModule } from './gateway/gateway.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrgsModule } from './modules/orgs/orgs.module';
 import { BiModule } from './modules/bi/bi.module';
+import { DevPortalModule } from './modules/dev-portal/dev-portal.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { BiModule } from './modules/bi/bi.module';
     NotificationsModule,
     OrgsModule,
     BiModule,
+    DevPortalModule,
     MetricsModule,
   ],
   providers: [],
