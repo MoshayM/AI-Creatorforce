@@ -34,6 +34,7 @@ import { WorkersModule } from './workers/workers.module';
 import { GatewayModule } from './gateway/gateway.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrgsModule } from './modules/orgs/orgs.module';
+import { BiModule } from './modules/bi/bi.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { OrgsModule } from './modules/orgs/orgs.module';
     GatewayModule,
     NotificationsModule,
     OrgsModule,
+    BiModule,
     MetricsModule,
   ],
   providers: [],

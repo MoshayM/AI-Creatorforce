@@ -45,7 +45,9 @@ model User {
   authSessions  AuthSession[]
   budget        Budget?
   referralCode  ReferralCode?
-  notifications Notification[]
+  notifications    Notification[]
+  developerKeys    DeveloperKey[]
+  developerWebhooks DeveloperWebhook[]
 
   @@map("users")
 }
@@ -1850,3 +1852,60 @@ model Forecast {
 }
 
 // ── Developer Portal (Phase 5 §4.10/4.11 — Wave L adds models below this line) ─
+
+model DeveloperKey {
+  id              String    @id @default(cuid())
+  userId          String
+  name            String
+  keyPrefix       String    // first 12 chars incl. 'cfk_' — shown in UI for identification
+  keyHash         String    @unique // sha256 of the full key; plaintext shown exactly once
+  scopes          String[]  @default([])
+  rateLimitPerMin Int       @default(60)
+  sandbox         Boolean   @default(false)
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("developer_keys")
+}
+
+model DeveloperWebhook {
+  id            String    @id @default(cuid())
+  userId        String
+  url           String
+  eventTypes    String[]  @default([])
+  // secretEnc: AES-256-GCM encrypted signing secret (base64).
+  // Spec §4.11 says "hash" but signing requires the plaintext — we store
+  // encrypted instead so the delivery worker can reconstruct the HMAC.
+  secretEnc     String
+  status        String    @default("ACTIVE") // ACTIVE|DISABLED
+  failureCount  Int       @default(0)
+  lastSuccessAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  user       User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries DeveloperWebhookDelivery[]
+
+  @@index([userId])
+  @@map("developer_webhooks")
+}
+
+model DeveloperWebhookDelivery {
+  id            String    @id @default(cuid())
+  webhookId     String
+  eventType     String
+  payload       Json
+  attempts      Int       @default(0)
+  status        String    @default("PENDING") // PENDING|DELIVERED|FAILED|DEAD
+  nextAttemptAt DateTime  @default(now())
+  lastError     String?
+  createdAt     DateTime  @default(now())
+
+  webhook DeveloperWebhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@map("developer_webhook_deliveries")
+}
