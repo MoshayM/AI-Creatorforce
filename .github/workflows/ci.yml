@@ -127,6 +127,12 @@ jobs:
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
+      # Performance budget gate (Updates/44): per-route first-load JS ≤ 800 KB
+      # raw, total unique JS ≤ 1500 KB. Baseline 2026-07: 571 KB / 1001 KB.
+      - name: Check bundle budget
+        run: node scripts/check-bundle-budget.mjs
+        working-directory: apps/web
+
   security:
     name: Security Audit
     runs-on: ubuntu-latest
