@@ -602,13 +602,67 @@ model PromptVersion {
   @@map("prompt_versions")
 }
 
+// ── Organizations & Team Billing (Phase 5 Wave 3, §4.5–4.9) ─────────────────
+
+model Organization {
+  id           String   @id @default(cuid())
+  name         String
+  ownerUserId  String
+  billingEmail String?
+  status       String   @default("ACTIVE") // ACTIVE | SUSPENDED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships   OrgMembership[]
+  budgetPeriods BudgetPeriod[]
+  wallet        Wallet?
+
+  @@map("organizations")
+}
+
+model OrgMembership {
+  id               String   @id @default(cuid())
+  orgId            String
+  userId           String
+  teamId           String?
+  role             String   @default("MEMBER") // ORG_ADMIN | TEAM_MANAGER | BILLING_ADMIN | MEMBER
+  approvalRequired Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@map("org_memberships")
+}
+
+model BudgetPeriod {
+  id               String   @id @default(cuid())
+  orgId            String
+  teamId           String?
+  periodStart      DateTime
+  periodEnd        DateTime
+  allocatedCredits Int
+  consumedCredits  Int      @default(0)
+  hardCap          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, teamId, periodStart])
+  @@map("budget_periods")
+}
+
 // ── Teams (Beta) ──────────────────────────────────────────────────────────────
+// orgId is nullable so existing beta teams (no org) keep working unchanged.
 
 model Team {
   id        String         @id @default(cuid())
   name      String
   ownerId   String
   planTier  String         @default("free")
+  /** Phase 5 Wave 3: optional link to an Organization; null = standalone beta team. */
+  orgId     String?
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 
@@ -703,9 +757,14 @@ enum SocialContentKind {
 // is the single source of truth and every balance is reconstructable from it.
 // Credits are integers, never floats. All mutations go through WalletService.
 
+// Phase 5 Wave 3: Wallet is now polymorphic — exactly ONE of userId / orgId must
+// be non-null.  DB CHECK constraint in migration 20260711170000_org_billing.
 model Wallet {
   id                 String   @id @default(cuid())
-  userId             String   @unique
+  /** Null only for org wallets. */
+  userId             String?  @unique
+  /** Null for user wallets; set for org shared wallets. */
+  orgId              String?  @unique
   balanceCredits     Int      @default(0)
   purchasedCredits   Int      @default(0)
   bonusCredits       Int      @default(0)
@@ -717,7 +776,8 @@ model Wallet {
   lifetimeUsed       Int      @default(0)
   updatedAt          DateTime @updatedAt
 
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org          Organization?       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   entries      CreditLedger[]
   reservations CreditReservation[]
   lots         CreditLot[]
@@ -1761,3 +1821,22 @@ model ReferralReward {
 
   @@map("referral_rewards")
 }
+
+// ── BI Forecasts (Phase 5 §4.12 — Wave K adds models below this line) ────────
+
+model Forecast {
+  id                 String   @id @default(cuid())
+  metric             String   // revenue|cost|growth|churn|subscription
+  horizonDays        Int
+  predictedValue     Float
+  confidenceLow      Float
+  confidenceHigh     Float
+  method             String   // moving_average|linear_regression
+  inputPointsCount   Int
+  generatedAt        DateTime @default(now())
+
+  @@index([metric, generatedAt(sort: Desc)])
+  @@map("forecasts")
+}
+
+// ── Developer Portal (Phase 5 §4.10/4.11 — Wave L adds models below this line) ─

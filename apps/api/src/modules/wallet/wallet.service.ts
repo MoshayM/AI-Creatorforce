@@ -151,6 +151,101 @@ export class WalletService {
     return this.prisma.wallet.upsert({ where: { userId }, create: { userId }, update: {} });
   }
 
+  /**
+   * Phase 5 Wave 3: upsert a wallet owned by an Organization (not a user).
+   * Signature is additive — existing ensureWallet(userId) is unchanged.
+   */
+  async ensureOrgWallet(orgId: string) {
+    return this.prisma.wallet.upsert({ where: { orgId }, create: { orgId }, update: {} });
+  }
+
+  /**
+   * Phase 5 Wave 3: reserve credits against a known walletId rather than
+   * resolving through a userId.  Used by OrgsService.orgSpend to hold credits
+   * from the org shared wallet.  Budget enforcement for the org-level budget is
+   * done by OrgsService before calling this method (BudgetPeriod hard-cap
+   * logic lives there, not here — per-user budget enforcement stays in
+   * enforceBeforeReserve which is called only from the userId path below).
+   *
+   * Signature is additive; the existing reserve(userId, ...) is unchanged.
+   */
+  async reserveForWallet(
+    walletId: string,
+    amount: number,
+    idempotencyKey: string,
+    referenceType: string,
+    referenceId?: string,
+  ) {
+    if (!Number.isInteger(amount) || amount <= 0) throw new BadRequestException('Reserve amount must be a positive integer');
+    const existing = await this.prisma.creditReservation.findUnique({ where: { idempotencyKey } });
+    if (existing) return existing;
+
+    return this.prisma.$transaction(async (tx) => {
+      const fresh = await tx.wallet.findUniqueOrThrow({ where: { id: walletId } });
+      const held = await this.heldCredits(tx, walletId);
+      if (fresh.balanceCredits - held < amount) {
+        throw new BadRequestException('INSUFFICIENT_CREDITS');
+      }
+      return tx.creditReservation.create({
+        data: {
+          walletId,
+          amount,
+          referenceType,
+          referenceId,
+          idempotencyKey,
+          expiresAt: new Date(Date.now() + this.holdTtlMs()),
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  /**
+   * Phase 5 Wave 3: debit by walletId (for org wallets that have no userId).
+   * Mirrors debit(userId, ...) but resolves the wallet by id instead.
+   * Additive — existing debit(userId, ...) is unchanged.
+   */
+  async debitWallet(walletId: string, write: LedgerWrite) {
+    return this.withIdempotency(write.idempotencyKey, () =>
+      this.prisma.$transaction(async (tx) => {
+        const lots = await tx.creditLot.findMany({
+          where: { walletId, remaining: { gt: 0 } },
+          select: { id: true, bucket: true, remaining: true, expiresAt: true },
+        });
+        const takes = planLotDebit(lots, write.amount);
+
+        const split: Record<CreditBucket, number> = { trialCredits: 0, promotionalCredits: 0, bonusCredits: 0, referralCredits: 0, purchasedCredits: 0 };
+        for (const t of takes) {
+          split[t.bucket] += t.take;
+          await tx.creditLot.update({ where: { id: t.lotId }, data: { remaining: { decrement: t.take } } });
+        }
+        const updated = await tx.wallet.update({
+          where: { id: walletId },
+          data: {
+            balanceCredits: { decrement: write.amount },
+            trialCredits: { decrement: split.trialCredits },
+            promotionalCredits: { decrement: split.promotionalCredits },
+            bonusCredits: { decrement: split.bonusCredits },
+            referralCredits: { decrement: split.referralCredits },
+            purchasedCredits: { decrement: split.purchasedCredits },
+            lifetimeUsed: { increment: write.amount },
+          },
+        });
+        return tx.creditLedger.create({
+          data: {
+            walletId,
+            entryType: write.entryType,
+            amount: -write.amount,
+            balanceAfter: updated.balanceCredits,
+            referenceType: write.referenceType,
+            referenceId: write.referenceId,
+            idempotencyKey: write.idempotencyKey,
+            metadata: ({ ...write.metadata, bucketSplit: split, lotSplit: takes }) as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
+  }
+
   async getBalance(userId: string) {
     const w = await this.ensureWallet(userId);
     return {
@@ -383,14 +478,20 @@ export class WalletService {
         this.logger.warn(`[settle] reservation ${reservationId}: actual ${actualCredits} exceeds balance — debiting ${debited}`);
       }
       if (debited > 0) {
-        await this.debit(wallet.userId, {
+        const write: LedgerWrite = {
           entryType: 'USAGE_DEBIT',
           amount: debited,
           referenceType: 'AI_REQUEST',
           referenceId: reservation.referenceId ?? reservation.id,
           idempotencyKey: `settle:${reservation.id}`,
           metadata: { ...metadata, reservationId: reservation.id, actualCredits, held: reservation.amount },
-        });
+        };
+        // Phase 5 Wave 3: org wallets have no userId — route through debitWallet.
+        if (wallet.userId) {
+          await this.debit(wallet.userId, write);
+        } else {
+          await this.debitWallet(wallet.id, write);
+        }
       }
     }
     return this.prisma.creditReservation.update({

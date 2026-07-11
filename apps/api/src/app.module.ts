@@ -33,6 +33,7 @@ import { CopilotModule } from './modules/copilot/copilot.module';
 import { WorkersModule } from './workers/workers.module';
 import { GatewayModule } from './gateway/gateway.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { OrgsModule } from './modules/orgs/orgs.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     WorkersModule,
     GatewayModule,
     NotificationsModule,
+    OrgsModule,
     MetricsModule,
   ],
   providers: [],
