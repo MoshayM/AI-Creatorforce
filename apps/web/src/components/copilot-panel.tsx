@@ -14,6 +14,8 @@ interface CopilotResponse {
   language?: string;
   executed?: { action: string; result: unknown };
   needsConfirmation?: Record<string, unknown> & { action: string };
+  /** Credit quote for the action awaiting confirmation; null = cost varies. */
+  estimatedCredits?: number | null;
   fromCache?: boolean;
 }
 
@@ -47,6 +49,7 @@ export function CopilotPanel() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<CopilotResponse['needsConfirmation'] | null>(null);
+  const [pendingEstimate, setPendingEstimate] = useState<number | null>(null);
   const [listening, setListening] = useState(false);
   // Voice replies default ON — the copilot answers aloud in the user's language
   const [speakReplies, setSpeakReplies] = useState(true);
@@ -94,6 +97,7 @@ export function CopilotPanel() {
     if (text) setMessages(nextMessages);
     setInput('');
     setPending(null);
+    setPendingEstimate(null);
     setBusy(true);
     try {
       const res = await apiClient.post('/copilot/chat', {
@@ -105,7 +109,10 @@ export function CopilotPanel() {
       });
       const data = res.data as CopilotResponse;
       setMessages((m) => [...m, { role: 'assistant', content: data.reply, fromCache: data.fromCache }]);
-      if (data.needsConfirmation) setPending(data.needsConfirmation);
+      if (data.needsConfirmation) {
+        setPending(data.needsConfirmation);
+        setPendingEstimate(data.estimatedCredits ?? null);
+      }
       if (data.language) setLang(data.language); // STT + TTS follow the user's language
       // Two-way turn-taking: when the user spoke, the bot speaks back and
       // then reopens the mic for their answer — a real conversation loop.
@@ -226,8 +233,13 @@ export function CopilotPanel() {
             ))}
             {pending && (
               <div className="border border-amber-200 bg-amber-50 rounded-xl p-3 text-sm">
-                <p className="flex items-center gap-1.5 text-amber-800 font-medium text-xs mb-2">
+                <p className="flex items-center gap-1.5 text-amber-800 font-medium text-xs mb-1">
                   <ShieldCheck className="w-4 h-4" /> Confirm: {pending.action.replace(/_/g, ' ')}
+                </p>
+                <p className="text-[11px] text-amber-700 mb-2">
+                  {pendingEstimate !== null
+                    ? `Estimated cost: ${pendingEstimate.toLocaleString()} credits`
+                    : 'Cost depends on usage — charged from your wallet at actual usage'}
                 </p>
                 <div className="flex gap-2">
                   <button

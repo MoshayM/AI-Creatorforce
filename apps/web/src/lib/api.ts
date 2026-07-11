@@ -182,6 +182,23 @@ export interface UsageSummary {
   byAction: Array<{ action: string; credits: number }>;
 }
 
+export interface CreditForecast {
+  windowDays: number;
+  totalDebited: number;
+  dailyBurn: number;
+  balance: number;
+  daysToEmpty: number | null;
+  emptyOn: string | null;
+  projectedMonthEndSpend: number;
+}
+
+export interface CreditRecommendation {
+  type: string;
+  severity: 'info' | 'warning';
+  message: string;
+  meta?: Record<string, unknown>;
+}
+
 export interface WalletTransaction {
   id: string;
   entryType: string;
@@ -418,6 +435,10 @@ export const api = {
     },
     usageSummary: (days = 30) =>
       apiClient.get<UsageSummary>(`/wallet/usage-summary?days=${days}`),
+    forecast: (days = 30) =>
+      apiClient.get<CreditForecast>(`/wallet/forecast?days=${days}`),
+    recommendations: () =>
+      apiClient.get<CreditRecommendation[]>('/wallet/recommendations'),
   },
   media: {
     listExports: (projectId: string) =>

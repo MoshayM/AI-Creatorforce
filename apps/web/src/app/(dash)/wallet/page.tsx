@@ -1,8 +1,8 @@
 'use client';
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Wallet, TrendingDown, PlusCircle, Loader2, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
-import { api, type BudgetState, type UsageSummary, type WalletTransaction } from '@/lib/api';
+import { Wallet, TrendingDown, PlusCircle, Loader2, AlertCircle, CheckCircle, AlertTriangle, CalendarClock, Lightbulb } from 'lucide-react';
+import { api, type BudgetState, type CreditForecast, type CreditRecommendation, type UsageSummary, type WalletTransaction } from '@/lib/api';
 import { getErrorMessage } from '@/lib/getErrorMessage';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -124,8 +124,9 @@ function BudgetCard() {
       {editing && (
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Monthly limit (credits, 0 = no limit)</label>
+            <label htmlFor="wallet-monthly-limit" className="block text-xs text-gray-600 mb-1">Monthly limit (credits, 0 = no limit)</label>
             <input
+              id="wallet-monthly-limit"
               type="number"
               min={0}
               value={limitDraft}
@@ -173,6 +174,93 @@ function BudgetCard() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Forecast card (Updates/10 Phase 2) ────────────────────────────────────────
+
+function ForecastCard() {
+  const { data: forecast, isLoading } = useQuery<CreditForecast>({
+    queryKey: ['wallet-forecast'],
+    queryFn: () => api.wallet.forecast().then((r) => r.data),
+  });
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <CalendarClock className="w-4 h-4 text-brand-600" />
+        <span className="text-sm font-semibold text-gray-800">Forecast</span>
+        <span className="text-xs text-gray-400">last {forecast?.windowDays ?? 30} days average</span>
+      </div>
+
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+
+      {forecast && forecast.dailyBurn === 0 && (
+        <p className="text-sm text-gray-400 italic">No usage in the window yet — nothing to project.</p>
+      )}
+
+      {forecast && forecast.dailyBurn > 0 && (
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-500">Daily burn</p>
+            <p className="text-lg font-bold text-gray-900">{forecast.dailyBurn.toLocaleString()}</p>
+            <p className="text-[11px] text-gray-400">credits/day</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-500">Balance lasts</p>
+            <p className="text-lg font-bold text-gray-900">
+              {forecast.daysToEmpty !== null ? `~${Math.round(forecast.daysToEmpty)}d` : '—'}
+            </p>
+            <p className="text-[11px] text-gray-400">{forecast.emptyOn ? `empty ${forecast.emptyOn}` : 'no burn'}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-500">Month-end spend</p>
+            <p className="text-lg font-bold text-gray-900">{forecast.projectedMonthEndSpend.toLocaleString()}</p>
+            <p className="text-[11px] text-gray-400">projected credits</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Recommendations card (Updates/10 Phase 2) ─────────────────────────────────
+
+function RecommendationsCard() {
+  const { data: recs = [], isLoading } = useQuery<CreditRecommendation[]>({
+    queryKey: ['wallet-recommendations'],
+    queryFn: () => api.wallet.recommendations().then((r) => r.data),
+  });
+
+  if (!isLoading && recs.length === 0) return null; // nothing to say — stay quiet
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Lightbulb className="w-4 h-4 text-brand-600" />
+        <span className="text-sm font-semibold text-gray-800">Optimization Tips</span>
+      </div>
+
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+
+      <ul className="space-y-2">
+        {recs.map((rec) => (
+          <li
+            key={rec.type}
+            className={`flex items-start gap-2 text-sm rounded-lg px-3 py-2 border ${
+              rec.severity === 'warning'
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : 'bg-gray-50 border-gray-200 text-gray-700'
+            }`}
+          >
+            {rec.severity === 'warning'
+              ? <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              : <Lightbulb className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />}
+            <span>{rec.message}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -403,6 +491,15 @@ export default function WalletPage() {
       <section>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Monthly Budget</h2>
         <BudgetCard />
+      </section>
+
+      {/* Forecast + optimization tips */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Forecast &amp; Tips</h2>
+        <div className="space-y-4">
+          <ForecastCard />
+          <RecommendationsCard />
+        </div>
       </section>
 
       {/* Usage summary */}

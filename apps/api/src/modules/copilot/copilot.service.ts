@@ -79,6 +79,12 @@ export interface CopilotResponse {
   language?: string;
   executed?: { action: string; result: unknown };
   needsConfirmation?: CopilotCommand;
+  /**
+   * Credit quote shown WITH the confirmation gate (Updates/49 transparent-AI:
+   * a paid action is accepted against a visible estimate). Resolved from the
+   * pricing rules; null when no rule prices this action (cost varies by usage).
+   */
+  estimatedCredits?: number | null;
   /** True when the intent was resolved from the phrase cache — zero tokens (§12). */
   fromCache?: boolean;
   /** LLM tokens this turn actually consumed (0 on cache hits). */
@@ -249,7 +255,19 @@ export class CopilotService {
     // cache hits included: only the LLM interpretation is reused, never the gate.
     if (!confirmsPending && EXPENSIVE_ACTIONS.includes(decision.command.action)) {
       await this.record(userId, decision.command.action, decision.command, 'NEEDS_CONFIRMATION', { source, fromCache, tokensUsed, lastUserText }, false);
-      return { reply: decision.reply, language: decision.language, needsConfirmation: decision.command, fromCache, tokensUsed };
+      // Quote the action so the confirmation is an acceptance of a visible
+      // estimate (transparent-AI invariant); null → no rule, cost varies.
+      const quote = await this.pricingService
+        .resolvePrice({ action: decision.command.action })
+        .catch(() => null);
+      return {
+        reply: decision.reply,
+        language: decision.language,
+        needsConfirmation: decision.command,
+        estimatedCredits: quote?.creditCost ?? null,
+        fromCache,
+        tokensUsed,
+      };
     }
 
     const result = await this.executeRecorded(userId, decision.command, { source, fromCache, tokensUsed, lastUserText });

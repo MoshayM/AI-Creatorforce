@@ -4,8 +4,8 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 import { WalletService } from '../wallet/wallet.service';
 import { BudgetService } from '../wallet/budget.service';
+import { CreditInsightsService } from '../wallet/credit-insights.service';
 import { BillingService } from './billing.service';
-import { PrismaService } from '../../common/prisma/prisma.service';
 
 class RechargeDto {
   /** Custom amount; ignored when packId is set. */
@@ -30,7 +30,7 @@ export class WalletController {
     private readonly wallet: WalletService,
     private readonly billing: BillingService,
     private readonly budgetService: BudgetService,
-    private readonly prisma: PrismaService,
+    private readonly insights: CreditInsightsService,
   ) {}
 
   @Get('balance')
@@ -106,35 +106,31 @@ export class WalletController {
     const lookbackDays = Math.min(Math.max(1, parseInt(days ?? '30', 10) || 30), 365);
     const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60_000);
 
-    // Fetch raw rows with action join — userId nullable on TokenUsage, filter directly
-    const rows = await this.prisma.tokenUsage.findMany({
-      where: { userId: user.sub, createdAt: { gte: since } },
-      select: {
-        costUsd: true,
-        action: { select: { intentType: true } },
-      },
-    });
-
-    // Group by intentType (action attribution) when present; fall back to 'other'
-    const byAction = new Map<string, number>();
-    let totalCostUsd = 0;
-
-    for (const row of rows) {
-      totalCostUsd += row.costUsd;
-      const key = row.action?.intentType ?? 'other';
-      byAction.set(key, (byAction.get(key) ?? 0) + row.costUsd);
-    }
-
-    // Convert USD to credits using the same formula as creditsForCost
-    const rate = Math.max(1, Math.round(Number(process.env['CREDITS_PER_USD']) || 100));
-    const markup = Math.max(1, Number(process.env['AI_CREDIT_MARKUP']) || 2);
-    const toCredits = (usd: number) => Math.ceil(usd * rate * markup);
-
+    const byAction = await this.insights.usageByAction(user.sub, since);
     return {
-      totalSpent: toCredits(totalCostUsd),
-      byAction: Array.from(byAction.entries())
-        .map(([action, usd]) => ({ action, credits: toCredits(usd) }))
-        .sort((a, b) => b.credits - a.credits),
+      totalSpent: byAction.reduce((s, a) => s + a.credits, 0),
+      byAction,
     };
+  }
+
+  // ── Credit intelligence (Updates/10 Phase 2) ─────────────────────────────────
+
+  /**
+   * GET /wallet/forecast?days=30 — window-average burn projection:
+   * daily burn, days-to-empty, and projected month-end spend.
+   */
+  @Get('forecast')
+  async forecast(@CurrentUser() user: JwtPayload, @Query('days') days?: string) {
+    const windowDays = Math.min(Math.max(7, parseInt(days ?? '30', 10) || 30), 90);
+    return this.insights.forecast(user.sub, windowDays);
+  }
+
+  /**
+   * GET /wallet/recommendations — rule-based optimization tips (budget pace,
+   * low balance, expiring lots, dominant action, cache-hit rate).
+   */
+  @Get('recommendations')
+  async recommendations(@CurrentUser() user: JwtPayload) {
+    return this.insights.recommendations(user.sub);
   }
 }
