@@ -232,7 +232,6 @@ export default function ShortsStudioPage() {
                         >
                           {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
                           {v.thumbnailUrl && (
-                            // eslint-disable-next-line @next/next/no-img-element
                             <img src={v.thumbnailUrl} alt="" className="w-16 h-9 object-cover rounded-md shrink-0" />
                           )}
                           <div className="min-w-0 flex-1">
@@ -338,7 +337,6 @@ export default function ShortsStudioPage() {
                       >
                         {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
                         {v.thumbnailUrl && (
-                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={v.thumbnailUrl} alt="" className="w-16 h-9 object-cover rounded-md shrink-0" />
                         )}
                         <div className="min-w-0 flex-1">
@@ -350,7 +348,6 @@ export default function ShortsStudioPage() {
                       {open && (
                         <div className="px-4 pb-4 pt-2 border-t border-gray-50 flex items-start gap-4 flex-wrap">
                           {v.thumbnailUrl && (
-                            // eslint-disable-next-line @next/next/no-img-element
                             <img src={v.thumbnailUrl} alt="" className="w-48 rounded-lg shrink-0" />
                           )}
                           <div className="flex-1 min-w-[220px]">

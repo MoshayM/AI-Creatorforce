@@ -51,7 +51,6 @@ function ThumbCard({ thumb, onPick }: { thumb: Thumb; onPick: () => void }) {
       className={`relative rounded-xl overflow-hidden border-2 transition-colors ${thumb.isPrimary ? 'border-brand-500 ring-2 ring-brand-200' : 'border-transparent hover:border-gray-200'}`}
     >
       {url
-        // eslint-disable-next-line @next/next/no-img-element
         ? <img src={url} alt="Thumbnail option" className="w-full aspect-[9/16] object-cover" />
         : <div className="w-full aspect-[9/16] bg-gray-100 flex items-center justify-center"><Loader2 className="w-4 h-4 animate-spin text-gray-300" /></div>}
       {thumb.isPrimary && (
