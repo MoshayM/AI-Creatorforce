@@ -89,8 +89,9 @@ export default function AssetsPage() {
 
       {/* Project selector */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Select Project</label>
+        <label htmlFor="assets-project" className="block text-sm font-medium text-gray-700 mb-2">Select Project</label>
         <select
+          id="assets-project"
           value={selectedProject}
           onChange={e => setSelectedProject(e.target.value)}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"

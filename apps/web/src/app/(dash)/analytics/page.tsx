@@ -196,10 +196,11 @@ export default function AnalyticsPage() {
 
       {/* Channel selector + run */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 no-print">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Select Channel</label>
+        <label htmlFor="analytics-channel" className="block text-sm font-medium text-gray-700 mb-2">Select Channel</label>
         <div className="flex gap-3">
           {channels.length > 0 ? (
             <select
+              id="analytics-channel"
               value={channelId}
               onChange={e => setChannelId(e.target.value)}
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
@@ -211,6 +212,7 @@ export default function AnalyticsPage() {
             </select>
           ) : (
             <input
+              id="analytics-channel"
               type="text"
               value={channelId}
               onChange={e => setChannelId(e.target.value)}

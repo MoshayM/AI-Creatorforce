@@ -122,7 +122,7 @@ export default function BrandKitPage() {
 
       {/* Channel selector */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Channel</label>
+        <span className="block text-sm font-medium text-gray-700 mb-2">Channel</span>
         <div className="flex gap-2">
           {channels.map(ch => (
             <button
@@ -185,16 +185,16 @@ export default function BrandKitPage() {
             <h2 className="font-semibold text-gray-900 mb-4">Visual Style</h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Font Style</label>
-                <input type="text" value={fontStyle} onChange={e => setFontStyle(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                <label htmlFor="brand-font-style" className="block text-xs text-gray-500 mb-1">Font Style</label>
+                <input id="brand-font-style" type="text" value={fontStyle} onChange={e => setFontStyle(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Visual Mood</label>
-                <input type="text" value={visualMood} onChange={e => setVisualMood(e.target.value)} placeholder="e.g. professional, clean, modern" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                <label htmlFor="brand-visual-mood" className="block text-xs text-gray-500 mb-1">Visual Mood</label>
+                <input id="brand-visual-mood" type="text" value={visualMood} onChange={e => setVisualMood(e.target.value)} placeholder="e.g. professional, clean, modern" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Thumbnail Style</label>
-                <input type="text" value={thumbnailStyle} onChange={e => setThumbnailStyle(e.target.value)} placeholder="e.g. Bold text overlay, reaction shot" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                <label htmlFor="brand-thumbnail-style" className="block text-xs text-gray-500 mb-1">Thumbnail Style</label>
+                <input id="brand-thumbnail-style" type="text" value={thumbnailStyle} onChange={e => setThumbnailStyle(e.target.value)} placeholder="e.g. Bold text overlay, reaction shot" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
           </div>

@@ -61,6 +61,7 @@ function ShortsExportReview({ result }: { result: ShortsExportResult }) {
     <div className="flex gap-4 bg-gray-50 rounded-lg p-4 mb-4">
       <div className="w-32 shrink-0">
         {videoUrl ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption -- AI-generated preview; caption track not produced
           <video src={videoUrl} controls className="w-full rounded-lg aspect-[9/16] object-cover bg-black" />
         ) : (
           <div className="w-full rounded-lg aspect-[9/16] bg-gray-200 flex items-center justify-center">

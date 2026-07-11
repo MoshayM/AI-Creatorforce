@@ -99,7 +99,7 @@ export default function ProjectsPage() {
           <div className="space-y-4">
             {/* Content Type Selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Content Type</label>
+              <span className="block text-sm font-medium text-gray-700 mb-2">Content Type</span>
               <div className="grid grid-cols-3 gap-3">
                 {CONTENT_TYPES.map((ct) => (
                   <button

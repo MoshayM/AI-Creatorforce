@@ -639,6 +639,9 @@ export default function ProjectDetailPage() {
                   <div
                     className={`flex items-center justify-between gap-3 -mx-2 px-2 py-1 rounded-lg ${rowToggleKey ? 'cursor-pointer hover:bg-gray-50' : ''}`}
                     onClick={rowToggleKey ? () => toggle(rowToggleKey) : undefined}
+                    role={rowToggleKey ? 'button' : undefined}
+                    tabIndex={rowToggleKey ? 0 : undefined}
+                    onKeyDown={rowToggleKey ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(rowToggleKey); } } : undefined}
                   >
                     <div>
                       <p className="font-medium text-gray-800 text-sm">

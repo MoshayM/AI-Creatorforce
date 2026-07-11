@@ -562,6 +562,7 @@ export default function TimelineEditorPage() {
           {/* Player */}
           <div className="bg-black rounded-2xl overflow-hidden flex items-center justify-center relative" style={{ height: 320 }}>
             {videoUrl ? (
+              // eslint-disable-next-line jsx-a11y/media-has-caption -- AI-generated preview; caption track not produced
               <video ref={videoRef} src={videoUrl} className="h-full" onEnded={() => setPlaying(false)} />
             ) : (
               <p className="text-gray-500 text-sm">Preview unavailable — source video not downloaded</p>
@@ -597,6 +598,7 @@ export default function TimelineEditorPage() {
           <div ref={scrollRef} className="mt-3 overflow-x-auto border border-gray-100 rounded-xl bg-gray-50/60">
             <div className="relative" style={{ width: widthPx }}>
               {/* Ruler */}
+              {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- pointer-drag editor surface */}
               <div className="h-7 border-b border-gray-200 relative cursor-pointer bg-white" onMouseDown={startPlayheadDrag}>
                 {ticks.map((s) => (
                   <span key={s} className="absolute top-1 text-[10px] text-gray-400 font-mono" style={{ left: s * pxPerSec + 2 }}>
@@ -606,6 +608,7 @@ export default function TimelineEditorPage() {
               </div>
               {/* Tracks */}
               {timeline.tracks.map((track) => (
+                // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- pointer-drag editor surface
                 <div key={track.id} className="relative border-b border-gray-100" style={{ height: TRACK_H }} onMouseDown={() => setSelectedId(null)}>
                   <span className="absolute left-1 top-1 text-[9px] uppercase tracking-wide text-gray-300 z-0">{track.type}</span>
                   {track.type === 'CAPTION'
@@ -620,6 +623,7 @@ export default function TimelineEditorPage() {
                       </div>
                     ))
                     : track.items.map((item) => (
+                      // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- pointer-drag editor surface
                       <div
                         key={item.id}
                         onMouseDown={(e) => startDrag('move', item, e)}
@@ -627,7 +631,9 @@ export default function TimelineEditorPage() {
                         style={{ left: (item.startMs / 1000) * pxPerSec, width: Math.max(6, ((item.endMs - item.startMs) / 1000) * pxPerSec) }}
                       >
                         <span className="text-[9px] text-white/90 pl-2 whitespace-nowrap">{fmt(item.endMs - item.startMs)}</span>
+                        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- pointer-drag editor surface */}
                         <div onMouseDown={(e) => startDrag('trim-l', item, e)} className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize bg-white/40 rounded-l-lg" />
+                        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- pointer-drag editor surface */}
                         <div onMouseDown={(e) => startDrag('trim-r', item, e)} className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize bg-white/40 rounded-r-lg" />
                       </div>
                     ))}

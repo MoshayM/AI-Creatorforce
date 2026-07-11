@@ -741,9 +741,10 @@ export default function ShortsVideoDetailPage() {
                   <span className="text-xs text-gray-400 font-mono shrink-0 w-24">{fmt(c.startMs)}–{fmt(c.endMs)}</span>
                   <span className="px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full text-[11px] font-medium shrink-0">Ch. {i + 1}</span>
                   {editing ? (
+                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- wrapper exists only to stop click propagation to the row toggle
                     <span className="flex items-center gap-1.5 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
                       <input
-                        autoFocus
+                        ref={(el) => el?.focus()}
                         value={chapterTitleDraft}
                         onChange={(e) => setChapterTitleDraft(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditingChapterId(null); }}

@@ -188,7 +188,9 @@ function MediaPlayer({ versionId, kind }: { versionId: string; kind: 'audio' | '
     );
   }
   return kind === 'audio'
+    // eslint-disable-next-line jsx-a11y/media-has-caption -- AI-generated preview; caption track not produced
     ? <audio controls src={url} className="w-full h-9" />
+    // eslint-disable-next-line jsx-a11y/media-has-caption -- AI-generated preview; caption track not produced
     : <video controls src={url} className="w-full rounded-xl max-h-56 bg-black" />;
 }
 
@@ -220,6 +222,9 @@ function Tile({
       <div
         className={`flex items-start gap-3 ${expandable ? 'cursor-pointer' : ''}`}
         onClick={expandable ? onToggle : undefined}
+        role={expandable ? 'button' : undefined}
+        tabIndex={expandable ? 0 : undefined}
+        onKeyDown={expandable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } } : undefined}
       >
         <div className="w-11 h-11 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-600 shrink-0">
           {icon}
@@ -693,8 +698,9 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
     return (
       <div className="space-y-3">
         <div>
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Script topic</label>
+          <label htmlFor="studio-script-topic" className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Script topic</label>
           <input
+            id="studio-script-topic"
             value={effectiveTopic}
             onChange={(e) => chooseTopic(e.target.value)}
             placeholder="Pick a topic in Suggestion or type one here"

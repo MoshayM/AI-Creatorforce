@@ -256,6 +256,7 @@ export default function ClipExportPage() {
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Preview</h2>
           <div className="bg-black rounded-2xl overflow-hidden aspect-[9/16] max-h-[560px] flex items-center justify-center">
             {videoUrl
+              // eslint-disable-next-line jsx-a11y/media-has-caption -- AI-generated preview; caption track not produced
               ? <video src={videoUrl} controls className="h-full w-full object-contain" />
               : <p className="text-gray-500 text-sm px-6 text-center">{rendering ? 'Rendering in progress…' : 'The rendered clip will appear here'}</p>}
           </div>
