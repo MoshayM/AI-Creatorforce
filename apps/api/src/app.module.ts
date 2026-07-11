@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChannelsModule } from './modules/channels/channels.module';
 import { ProjectsModule } from './modules/projects/projects.module';
@@ -77,6 +78,7 @@ import { GatewayModule } from './gateway/gateway.module';
     CopilotModule,
     WorkersModule,
     GatewayModule,
+    MetricsModule,
   ],
   providers: [],
 })

@@ -1,7 +1,8 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { setAIUsageListener, type AIUsageEvent } from '@cf/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { currentAiContext } from '../../common/ai-usage.context';
+import { MetricsService } from '../metrics/metrics.service';
 
 /**
  * Token usage ledger (Ai-video edit.md §12.2.8): every provider call in this
@@ -14,7 +15,11 @@ import { currentAiContext } from '../../common/ai-usage.context';
 export class UsageLedgerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(UsageLedgerService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Optional: MetricsModule may not be loaded in tests that only import CopilotModule.
+    @Optional() private readonly metricsService: MetricsService | null,
+  ) {}
 
   onModuleInit() {
     setAIUsageListener((event) => this.record(event));
@@ -33,6 +38,8 @@ export class UsageLedgerService implements OnModuleInit, OnModuleDestroy {
       ctx.accumulator.tokensOut += event.tokensOut;
       ctx.accumulator.calls += 1;
     }
+    // Feed Prometheus counters from the same listener — no second registration.
+    this.metricsService?.recordAiUsage(event.provider, event.model, event.tokensIn, event.tokensOut, event.costUsd);
     void this.prisma.tokenUsage
       .create({
         data: {

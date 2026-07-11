@@ -56,6 +56,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { createHash } from 'crypto';
 import { ChannelSyncService } from '../modules/channels/channel-sync.service';
+import { MetricsService } from '../modules/metrics/metrics.service';
 
 interface JobPayload {
   jobId: string;
@@ -106,6 +107,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly trialLimits: TrialLimitsService,
     private readonly events: EventsGateway,
     private readonly channelSync: ChannelSyncService,
+    private readonly metrics: MetricsService,
   ) {
     super();
   }
@@ -196,6 +198,7 @@ export class SupervisorWorker extends WorkerHost {
           data: { status: 'COMPLETED', result: result as never, completedAt: new Date() },
         });
         this.events.emitJobComplete(jobId, { result, elapsedMs: elapsed }, projectId);
+        this.metrics.recordJob(type, 'completed', elapsed);
       }
       return result;
     } catch (err) {
@@ -218,6 +221,7 @@ export class SupervisorWorker extends WorkerHost {
       }
       this.events.emitJobLog(jobId, projectId, `Agent error: ${msg.slice(0, 120)}`);
       this.events.emitJobFailed(jobId, msg, projectId);
+      this.metrics.recordJob(type, 'failed', Date.now() - t0);
       // Do NOT rethrow — state is persisted in PostgreSQL; rethrowing causes BullMQ to
       // re-queue the job (we set attempts:1 but this is the safety valve) and triggers
       // Redis stream errors on old Redis 5.x. Our AI client handles its own retries.
@@ -624,7 +628,7 @@ export class SupervisorWorker extends WorkerHost {
         const brandKit = channel3?.brandKit;
 
         const result = await callAIStructured(
-          [{ role: 'user', content: `Create AI first-cut timeline for "${script.title}". Format: 16:9. Sections: ${JSON.stringify(script.sections.map((s, i) => ({ heading: s.heading, durationSecs: s.durationEstimateSecs })))}. Assets: ${JSON.stringify(availableAssets.slice(0, 20))}. Brand: ${JSON.stringify(brandKit ?? {})}. Project: ${projectId}. Generate multi-track timeline: voice, video, music, subtitle, overlay tracks. Required top-level fields: label, fps (30), resolution {width, height}, totalDurationMs, tracks. Each track: index (0-based), kind, label, clips. Each clip: id, kind, startMs, durationMs, trackIndex, label; assetId ONLY when it matches a provided asset id (omit otherwise, never invent).` }],
+          [{ role: 'user', content: `Create AI first-cut timeline for "${script.title}". Format: 16:9. Sections: ${JSON.stringify(script.sections.map((s) => ({ heading: s.heading, durationSecs: s.durationEstimateSecs })))}. Assets: ${JSON.stringify(availableAssets.slice(0, 20))}. Brand: ${JSON.stringify(brandKit ?? {})}. Project: ${projectId}. Generate multi-track timeline: voice, video, music, subtitle, overlay tracks. Required top-level fields: label, fps (30), resolution {width, height}, totalDurationMs, tracks. Each track: index (0-based), kind, label, clips. Each clip: id, kind, startMs, durationMs, trackIndex, label; assetId ONLY when it matches a provided asset id (omit otherwise, never invent).` }],
           EditPlanOutputSchema,
           { systemPrompt: EDIT_PROMPT, maxTokens: 6000 },
         );
@@ -635,7 +639,6 @@ export class SupervisorWorker extends WorkerHost {
         this.log(jobId, projectId, 'First-cut timeline ready ✓', `${clipCount} clips assembled`);
 
         // Save as draft timeline
-        const totalDurationMs = (result as { totalDurationMs?: number }).totalDurationMs ?? script.estimatedDurationMins * 60000;
         const tracks = (result as { tracks?: unknown }).tracks;
         await this.prisma.timeline.upsert({
           where: { id: `draft-${projectId}` },

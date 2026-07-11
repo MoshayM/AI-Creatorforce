@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { SupervisorWorker } from './supervisor.worker';
+import { MetricsModule } from '../modules/metrics/metrics.module';
 import { ContentModule } from '../modules/content/content.module';
 import { ComplianceModule } from '../modules/compliance/compliance.module';
 import { MetadataModule } from '../modules/metadata/metadata.module';
@@ -49,6 +50,7 @@ import { ChannelsModule } from '../modules/channels/channels.module';
     TrialModule,
     GatewayModule,
     ChannelsModule,
+    MetricsModule,
   ],
   providers: [SupervisorWorker],
 })

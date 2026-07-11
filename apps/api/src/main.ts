@@ -23,7 +23,9 @@ async function bootstrap() {
     credentials: true,
   });
 
-  app.setGlobalPrefix('api');
+  // /metrics must not carry the /api prefix so Prometheus can scrape it
+  // without knowing the app versioning scheme.
+  app.setGlobalPrefix('api', { exclude: ['metrics'] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   app.useGlobalFilters(new AllExceptionsFilter());

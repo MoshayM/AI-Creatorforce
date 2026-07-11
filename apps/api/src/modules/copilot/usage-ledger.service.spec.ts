@@ -21,7 +21,7 @@ function makeService() {
       }),
     },
   } as unknown as PrismaService;
-  return { service: new UsageLedgerService(prisma), created };
+  return { service: new UsageLedgerService(prisma, null), created };
 }
 
 describe('UsageLedgerService.record', () => {
