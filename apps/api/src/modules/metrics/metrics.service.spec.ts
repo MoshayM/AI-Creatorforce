@@ -75,4 +75,19 @@ describe('MetricsService', () => {
     // collectDefaultMetrics registers process_cpu_seconds_total etc. with prefix cf_
     expect(output).toContain('cf_process_');
   });
+
+  it('should register cf_ai_cache_hits_total counter', async () => {
+    const output = await service.registry.metrics();
+    expect(output).toContain('cf_ai_cache_hits_total');
+  });
+
+  it('recordAiCacheHit increments cf_ai_cache_hits_total with the correct kind label', async () => {
+    service.recordAiCacheHit('response');
+    service.recordAiCacheHit('response');
+    service.recordAiCacheHit('embedding');
+    const output = await service.registry.metrics();
+    expect(output).toContain('kind="response"');
+    expect(output).toContain('kind="embedding"');
+    expect(output).toContain('cf_ai_cache_hits_total');
+  });
 });

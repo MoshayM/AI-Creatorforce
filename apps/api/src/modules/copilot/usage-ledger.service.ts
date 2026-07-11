@@ -40,6 +40,10 @@ export class UsageLedgerService implements OnModuleInit, OnModuleDestroy {
     }
     // Feed Prometheus counters from the same listener — no second registration.
     this.metricsService?.recordAiUsage(event.provider, event.model, event.tokensIn, event.tokensOut, event.costUsd);
+    // Cache-hit attribution: dedicated counter so dashboards can track pure-margin requests.
+    if (event.fromCache && event.cacheKind) {
+      this.metricsService?.recordAiCacheHit(event.cacheKind);
+    }
     void this.prisma.tokenUsage
       .create({
         data: {
@@ -48,6 +52,7 @@ export class UsageLedgerService implements OnModuleInit, OnModuleDestroy {
           tokensIn: event.tokensIn,
           tokensOut: event.tokensOut,
           costUsd: event.costUsd,
+          fromCache: event.fromCache ?? false,
           userId: ctx?.userId ?? null,
           jobId: ctx?.jobId ?? null,
           projectId: ctx?.projectId ?? null,

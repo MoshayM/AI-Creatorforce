@@ -7,6 +7,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { ProviderRegistryService } from './provider-registry.service';
 import { PricingService } from './pricing.service';
 import { ProfitGuardService } from './profit-guard.service';
+import { simulateRouting } from '@cf/shared';
 
 class CreatePricingRuleDto {
   @IsString() action!: string;
@@ -29,6 +30,13 @@ class PatchRuleDto {
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsInt() @Min(1) creditCost?: number;
   @IsOptional() @IsInt() priority?: number;
+}
+
+class RoutingSimulateDto {
+  @IsString() action!: string;
+  @IsOptional() @IsString() model?: string;
+  @IsOptional() @IsInt() @Min(0) estimatedTokensIn?: number;
+  @IsOptional() @IsInt() @Min(0) estimatedTokensOut?: number;
 }
 
 /** Phase 5 §16 admin surface: providers, pricing rules (profit-gated), margin preview. */
@@ -101,5 +109,41 @@ export class AiOpsController {
   @RequirePermissions('admin:pricing')
   async profitPreview(@Body() dto: ProfitPreviewDto) {
     return this.profit.check(dto);
+  }
+
+  /**
+   * Phase 5 §16 — dry-run routing simulation.
+   * Returns routing candidates for a given action without making any provider
+   * call or spending credits.  Includes credit-cost estimate from the pricing
+   * service if a rule exists.
+   */
+  @Post('routing/simulate')
+  @RequirePermissions('admin:pricing')
+  async routingSimulate(@Body() dto: RoutingSimulateDto, @CurrentUser() admin: JwtPayload) {
+    const tokensIn = dto.estimatedTokensIn ?? 3_000;
+    const tokensOut = dto.estimatedTokensOut ?? 1_000;
+
+    const candidates = simulateRouting(dto.action, tokensIn, tokensOut);
+
+    // Resolve credit price for context — read-only, no spend
+    const priceRule = await this.pricing.resolvePrice({ action: dto.action, model: dto.model ?? null });
+
+    // Audit-log the dry-run so admin actions remain traceable
+    await this.prisma.auditLog.create({
+      data: {
+        userId: admin.sub,
+        action: 'admin:routing-simulate',
+        target: dto.action,
+        meta: { dto, candidates } as never,
+      },
+    });
+
+    return {
+      candidates: candidates.map((c) => ({
+        ...c,
+        estCredits: priceRule?.creditCost ?? null,
+      })),
+      resolvedPricingRule: priceRule,
+    };
   }
 }

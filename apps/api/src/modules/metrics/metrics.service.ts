@@ -16,6 +16,7 @@ export class MetricsService implements OnModuleInit {
   readonly jobDuration: Histogram<'type'>;
   readonly aiTokensTotal: Counter<'provider' | 'model' | 'direction'>;
   readonly aiCostUsdTotal: Counter<'provider' | 'model'>;
+  readonly aiCacheHitsTotal: Counter<'kind'>;
 
   constructor() {
     this.httpRequestsTotal = new Counter({
@@ -61,6 +62,13 @@ export class MetricsService implements OnModuleInit {
       labelNames: ['provider', 'model'] as const,
       registers: [this.registry],
     });
+
+    this.aiCacheHitsTotal = new Counter({
+      name: 'cf_ai_cache_hits_total',
+      help: 'Total AI cache hits (response or embedding) — pure margin, no provider call made',
+      labelNames: ['kind'] as const,
+      registers: [this.registry],
+    });
   }
 
   onModuleInit(): void {
@@ -76,5 +84,9 @@ export class MetricsService implements OnModuleInit {
     this.aiTokensTotal.inc({ provider, model, direction: 'input' }, tokensIn);
     this.aiTokensTotal.inc({ provider, model, direction: 'output' }, tokensOut);
     this.aiCostUsdTotal.inc({ provider, model }, costUsd);
+  }
+
+  recordAiCacheHit(kind: 'response' | 'embedding'): void {
+    this.aiCacheHitsTotal.inc({ kind });
   }
 }

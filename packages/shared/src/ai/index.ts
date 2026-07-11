@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { createHash } from 'crypto';
 import { z } from 'zod';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -20,6 +21,11 @@ export interface AICallOptions {
   onProgress?: (event: AIProgressEvent) => void;
   /** Fired after each successful provider call — for per-request token attribution. */
   onUsage?: (event: AIUsageEvent) => void;
+  /**
+   * Set true to skip the cache adapter for this call (e.g. temperature > 0
+   * or intentionally non-deterministic requests).  Default false.
+   */
+  bypassCache?: boolean;
 }
 
 // ── Usage ledger hook (Token Governor — Ai-video edit.md §12.2.8) ─────────────
@@ -30,6 +36,57 @@ export interface AIUsageEvent {
   tokensIn: number;
   tokensOut: number;
   costUsd: number;
+  /** True when the result was served from the response/embedding cache. */
+  fromCache?: boolean;
+  /** Discriminates the cache kind for metrics labelling. */
+  cacheKind?: 'response' | 'embedding';
+}
+
+// ── AI Response Cache Adapter (§6 cache-first) ───────────────────────────────
+//
+// The shared package must not depend on Redis or Nest.  The API process
+// registers a concrete adapter via setAICacheAdapter(); outside the API
+// (tests, scripts) the adapter stays null and caching is a no-op.
+
+export interface AICacheAdapter {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string, ttlSeconds: number): Promise<void>;
+}
+
+let _cacheAdapter: AICacheAdapter | null = null;
+
+export function setAICacheAdapter(adapter: AICacheAdapter | null): void {
+  _cacheAdapter = adapter;
+}
+
+/**
+ * Stable cache key for AI responses and embeddings.
+ * Prefix: `ai:resp:` | `ai:emb:` so Redis namespaces are distinct.
+ */
+export function aiCacheKey(parts: {
+  kind: 'response' | 'embedding';
+  model: string;
+  system?: string;
+  payload: string;
+}): string {
+  const stable = JSON.stringify({
+    kind: parts.kind,
+    model: parts.model,
+    system: parts.system ?? '',
+    payload: parts.payload,
+  });
+  const hash = createHash('sha256').update(stable).digest('hex');
+  const prefix = parts.kind === 'response' ? 'ai:resp:' : 'ai:emb:';
+  return prefix + hash;
+}
+
+/** Serialised envelope stored in Redis for a cached AI response. */
+interface ResponseCacheEnvelope {
+  text: string;
+  tokensIn: number;
+  tokensOut: number;
+  provider: AIProvider;
+  model: string;
 }
 
 let usageListener: ((event: AIUsageEvent) => void) | null = null;
@@ -45,6 +102,8 @@ export interface AICallResult {
   tokensOut: number;
   model: string;
   provider: AIProvider;
+  /** True when served from the response cache — lets callers refetch fresh on a stale/bad entry. */
+  fromCache?: boolean;
 }
 
 export type AIProgressEvent =
@@ -460,13 +519,15 @@ export function getDefaultCostRates(): Record<AIProvider, { input: number; outpu
 
 // ── Raw callAI ────────────────────────────────────────────────────────────────
 
-function emitUsage(result: AICallResult, opts: AICallOptions): void {
+function emitUsage(result: AICallResult, opts: AICallOptions, extra?: { fromCache?: boolean; cacheKind?: 'response' | 'embedding' }): void {
   const event: AIUsageEvent = {
     provider: result.provider,
     model: result.model,
     tokensIn: result.tokensIn,
     tokensOut: result.tokensOut,
-    costUsd: estimateCost(result.provider, result.tokensIn, result.tokensOut),
+    costUsd: extra?.fromCache ? 0 : estimateCost(result.provider, result.tokensIn, result.tokensOut),
+    fromCache: extra?.fromCache,
+    cacheKind: extra?.cacheKind,
   };
   // Ledger hooks must never break the call they observe
   try { usageListener?.(event); } catch { /* noop */ }
@@ -477,8 +538,36 @@ export async function callAI(
   messages: AIMessage[],
   opts: AICallOptions = {},
 ): Promise<AICallResult> {
+  // ── Cache-first: check adapter before touching a provider ──────────────────
+  const adapter = _cacheAdapter;
+  const useCache = adapter !== null && !opts.bypassCache && (opts.temperature === undefined || opts.temperature === 0);
+
+  if (useCache) {
+    const payload = JSON.stringify(messages);
+    const key = aiCacheKey({ kind: 'response', model: opts.model ?? '', system: opts.systemPrompt, payload });
+    try {
+      const raw = await adapter.get(key);
+      if (raw) {
+        const env = JSON.parse(raw) as ResponseCacheEnvelope;
+        const cached: AICallResult = { content: env.text, tokensIn: env.tokensIn, tokensOut: env.tokensOut, model: env.model, provider: env.provider, fromCache: true };
+        emitUsage(cached, opts, { fromCache: true, cacheKind: 'response' });
+        return cached;
+      }
+    } catch { /* cache get failure is a no-op — fall through to provider */ }
+  }
+
   const result = await callAIProvider(messages, opts);
   emitUsage(result, opts);
+
+  // ── Populate cache on successful provider response ─────────────────────────
+  if (useCache && result.content.length > 0) {
+    const payload = JSON.stringify(messages);
+    const key = aiCacheKey({ kind: 'response', model: opts.model ?? '', system: opts.systemPrompt, payload });
+    const ttl = envInt('AI_RESPONSE_CACHE_TTL_SECONDS', 86400);
+    const envelope: ResponseCacheEnvelope = { text: result.content, tokensIn: result.tokensIn, tokensOut: result.tokensOut, model: result.model, provider: result.provider };
+    try { await adapter!.set(key, JSON.stringify(envelope), ttl); } catch { /* cache write failure is a no-op */ }
+  }
+
   return result;
 }
 
@@ -735,12 +824,16 @@ export async function callAIStructured<T>(
   try {
     parsed = parseJson(result.content);
   } catch {
-    // Repair failed — retry the LLM once with a direct JSON-only prompt
-    const retryMsgs: AIMessage[] = [
-      ...messages,
-      { role: 'assistant' as const, content: result.content },
-      { role: 'user' as const, content: 'The previous response contained invalid JSON. Return ONLY valid JSON matching the schema. No markdown. No explanation. No code fences.' },
-    ];
+    // A CACHED response that no longer parses is a stale/poisoned entry — the
+    // right recovery is a fresh provider call for the SAME prompt (bypassing
+    // the cache), not the fix-message dance against a stale transcript.
+    const retryMsgs: AIMessage[] = result.fromCache
+      ? messages
+      : [
+          ...messages,
+          { role: 'assistant' as const, content: result.content },
+          { role: 'user' as const, content: 'The previous response contained invalid JSON. Return ONLY valid JSON matching the schema. No markdown. No explanation. No code fences.' },
+        ];
 
     let retryResult: AICallResult | null = null;
     const release2 = await getSemaphore().acquire();
@@ -748,7 +841,7 @@ export async function callAIStructured<T>(
       for (const p of chain) {
         if (!isProviderAvailable(p)) continue;
         try {
-          retryResult = await withRetry(() => callAI(retryMsgs, { ...opts, provider: p, systemPrompt: systemWithJson }), p);
+          retryResult = await withRetry(() => callAI(retryMsgs, { ...opts, provider: p, systemPrompt: systemWithJson, bypassCache: true }), p);
           onProviderSuccess(p);
           break;
         } catch { /* next provider */ }
@@ -787,7 +880,7 @@ export async function callAIStructured<T>(
       for (const p of chain) {
         if (!isProviderAvailable(p)) continue;
         try {
-          fixResult = await withRetry(() => callAI(fixMsgs, { ...opts, provider: p, systemPrompt: systemWithJson }), p);
+          fixResult = await withRetry(() => callAI(fixMsgs, { ...opts, provider: p, systemPrompt: systemWithJson, bypassCache: true }), p);
           onProviderSuccess(p);
           break;
         } catch { /* next provider */ }
@@ -854,18 +947,62 @@ export async function embedTexts(texts: string[]): Promise<EmbeddingResult> {
   const model = EMBEDDING_MODELS[provider];
   const client = provider === 'openai' ? getOpenAI() : getGemini();
 
-  const embeddings: number[][] = [];
-  let tokensIn = 0;
+  const adapter = _cacheAdapter;
+  const embTtl = envInt('AI_EMBEDDING_CACHE_TTL_SECONDS', 30 * 24 * 60 * 60); // 30 days
 
-  for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
-    const batch = texts.slice(i, i + EMBEDDING_BATCH_SIZE);
+  const embeddings: number[][] = new Array(texts.length);
+  let tokensIn = 0;
+  let cachedCount = 0;
+
+  // ── Per-text cache lookup (reassemble in order) ────────────────────────────
+  const missIndices: number[] = [];
+  const missTexts: string[] = [];
+
+  if (adapter) {
+    await Promise.all(texts.map(async (text, idx) => {
+      const key = aiCacheKey({ kind: 'embedding', model, payload: text });
+      try {
+        const raw = await adapter.get(key);
+        if (raw) {
+          embeddings[idx] = JSON.parse(raw) as number[];
+          cachedCount++;
+          return;
+        }
+      } catch { /* cache miss on error */ }
+      missIndices.push(idx);
+      missTexts.push(text);
+    }));
+  } else {
+    missIndices.push(...texts.map((_, i) => i));
+    missTexts.push(...texts);
+  }
+
+  // ── Emit cache-hit usage for the texts we served from cache ───────────────
+  if (cachedCount > 0) {
+    try {
+      usageListener?.({
+        provider,
+        model,
+        tokensIn: 0,
+        tokensOut: 0,
+        costUsd: 0,
+        fromCache: true,
+        cacheKind: 'embedding',
+      });
+    } catch { /* noop */ }
+  }
+
+  // ── Fetch misses from the provider in batches ──────────────────────────────
+  for (let i = 0; i < missTexts.length; i += EMBEDDING_BATCH_SIZE) {
+    const batchTexts = missTexts.slice(i, i + EMBEDDING_BATCH_SIZE);
+    const batchIndices = missIndices.slice(i, i + EMBEDDING_BATCH_SIZE);
     const release = await getSemaphore().acquire();
     try {
       let lastErr: unknown;
       let response: OpenAI.CreateEmbeddingResponse | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          response = await client.embeddings.create({ model, input: batch, dimensions: EMBEDDING_DIMS });
+          response = await client.embeddings.create({ model, input: batchTexts, dimensions: EMBEDDING_DIMS });
           break;
         } catch (err) {
           lastErr = err;
@@ -878,8 +1015,20 @@ export async function embedTexts(texts: string[]): Promise<EmbeddingResult> {
 
       // The API may return items out of order — index is authoritative
       const ordered = [...response.data].sort((a, b) => a.index - b.index);
-      embeddings.push(...ordered.map((d) => unitNorm(d.embedding)));
-      tokensIn += response.usage?.prompt_tokens ?? batch.reduce((s, t) => s + estimateTokens(t), 0);
+      const batchVectors = ordered.map((d) => unitNorm(d.embedding));
+      const batchTokens = response.usage?.prompt_tokens ?? batchTexts.reduce((s, t) => s + estimateTokens(t), 0);
+
+      for (let j = 0; j < batchIndices.length; j++) {
+        const origIdx = batchIndices[j]!;
+        const vec = batchVectors[j]!;
+        embeddings[origIdx] = vec;
+        // Store in cache per-text
+        if (adapter) {
+          const key = aiCacheKey({ kind: 'embedding', model, payload: batchTexts[j]! });
+          try { await adapter.set(key, JSON.stringify(vec), embTtl); } catch { /* noop */ }
+        }
+      }
+      tokensIn += batchTokens;
     } finally {
       release();
     }
@@ -897,4 +1046,66 @@ export async function embedTexts(texts: string[]): Promise<EmbeddingResult> {
   } catch { /* noop */ }
 
   return { embeddings, provider, model, tokensIn };
+}
+
+// ── Routing Simulation (Phase 5 §16 dry-run) ──────────────────────────────────
+//
+// Reuses the live provider health snapshot and cost table to predict routing
+// without making any provider call.  The API admin endpoint calls this; the
+// function is pure (no side-effects, no I/O) so it is safe to call at any time.
+
+export interface RoutingCandidate {
+  provider: AIProvider;
+  model: string;
+  healthy: boolean;
+  estCostUsd: number;
+  wouldRoute: boolean;
+  reason?: string;
+}
+
+/**
+ * Simulate provider selection for a given task kind and token budget.
+ * Returns one entry per known provider, ordered by descending health score
+ * (i.e. routing preference).  `wouldRoute` is true for the first healthy
+ * candidate that would actually be selected.
+ *
+ * @param taskKind  Maps to a model choice (e.g. 'chat' → default model per provider).
+ * @param estTokensIn  Estimated input tokens (used for cost projection).
+ * @param estTokensOut Estimated output tokens (used for cost projection).
+ */
+export function simulateRouting(
+  taskKind: string, // reserved for future model-selection rules; currently determines display name
+  estTokensIn: number,
+  estTokensOut: number,
+): RoutingCandidate[] {
+  const allProviders: AIProvider[] = ['anthropic', 'openai', 'gemini'];
+  const defaultModels: Record<AIProvider, string> = {
+    anthropic: DEFAULT_ANTHROPIC_MODEL,
+    openai: DEFAULT_OPENAI_MODEL,
+    gemini: DEFAULT_GEMINI_MODEL,
+  };
+
+  const ranked = rankProviders(allProviders);
+  let routeAssigned = false;
+
+  return ranked.map((provider) => {
+    const model = defaultModels[provider];
+    const h = getHealth(provider);
+    const available = isProviderAvailable(provider);
+    const estCostUsd = estimateCost(provider, estTokensIn, estTokensOut);
+
+    let wouldRoute = false;
+    let reason: string | undefined;
+
+    if (!available) {
+      reason = `On cooldown (score=${h.score}, consecutiveFailures=${h.consecutiveFailures})`;
+    } else if (!routeAssigned) {
+      wouldRoute = true;
+      routeAssigned = true;
+    } else {
+      reason = 'Lower priority — a higher-scored provider would route first';
+    }
+
+    return { provider, model, healthy: available, estCostUsd, wouldRoute, reason };
+  });
 }
