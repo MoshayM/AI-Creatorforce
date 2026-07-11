@@ -162,6 +162,35 @@ export interface LibrarySyncStartResponse {
   jobId: string;
 }
 
+// ── Wallet types ──────────────────────────────────────────────────────────────
+
+export type BudgetStatus = 'NONE' | 'OK' | 'ALERT' | 'EXCEEDED';
+
+export interface BudgetState {
+  status: BudgetStatus;
+  monthlyLimit: number;
+  spent: number;
+  remaining: number;
+  willExceed: boolean;
+  blocked: boolean;
+  alertThreshold: number;
+  hardCap: boolean;
+}
+
+export interface UsageSummary {
+  totalSpent: number;
+  byAction: Array<{ action: string; credits: number }>;
+}
+
+export interface WalletTransaction {
+  id: string;
+  entryType: string;
+  amount: number;
+  balanceAfter: number;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+}
+
 // ── Auth provider types ───────────────────────────────────────────────────────
 
 export interface OAuthProviders {
@@ -289,6 +318,13 @@ export const api = {
         successUrl: `${window.location.origin}/settings?recharged=true`,
         cancelUrl: `${window.location.origin}/settings`,
       }, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
+    budget: {
+      get: () => apiClient.get<BudgetState>('/wallet/budget'),
+      set: (data: { monthlyLimit: number; alertThreshold?: number; hardCap?: boolean }) =>
+        apiClient.put<BudgetState>('/wallet/budget', data),
+    },
+    usageSummary: (days = 30) =>
+      apiClient.get<UsageSummary>(`/wallet/usage-summary?days=${days}`),
   },
   media: {
     listExports: (projectId: string) =>

@@ -43,6 +43,7 @@ model User {
   trialGrant    TrialGrant?
   accountLinks  AccountLink[]
   authSessions  AuthSession[]
+  budget        Budget?
 
   @@map("users")
 }
@@ -1671,4 +1672,22 @@ model ChannelSyncState {
   updatedAt              DateTime  @updatedAt
 
   @@map("channel_sync_states")
+}
+
+// ── Monthly spend budgets (spec §10_AI_Credits §Budgets) ─────────────────────
+// NOTE: The spec scopes budgets to channel_id, but this codebase's wallet is
+// per-user (Wallet.userId @unique). We scope Budget to userId to match the
+// existing wallet architecture.
+model Budget {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  monthlyLimit   Int      // credits per calendar month; 0 = no budget
+  alertThreshold Int      @default(80) // percent of limit that triggers alert state
+  hardCap        Boolean  @default(false) // block new paid actions when exceeded
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("budgets")
 }

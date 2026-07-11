@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma, type LedgerEntryType, type LedgerReferenceType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { BudgetService } from './budget.service';
 
 /**
  * Credit buckets in SPEND priority order: cheapest-to-platform first
@@ -55,10 +56,9 @@ export function creditsForCost(
   return Math.ceil(costUsd * rate * markup);
 }
 
-/** Credit-hold enforcement is opt-in (BILLING_ENFORCE_CREDITS) so zero-credit local deployments keep working. */
-export function billingEnforced(): boolean {
-  return (process.env['BILLING_ENFORCE_CREDITS'] ?? 'false').toLowerCase() === 'true';
-}
+// Lives in billing.config.ts to avoid a wallet.service ↔ budget.service import
+// cycle; re-exported here so existing imports keep working.
+export { billingEnforced } from './billing.config';
 
 // ── Credit lots (§5.4: "bonus expires first, purchased expires last") ────────
 
@@ -142,7 +142,10 @@ export interface LedgerWrite {
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly budget: BudgetService,
+  ) {}
 
   async ensureWallet(userId: string) {
     return this.prisma.wallet.upsert({ where: { userId }, create: { userId }, update: {} });
@@ -337,6 +340,11 @@ export class WalletService {
     const wallet = await this.ensureWallet(userId);
     const existing = await this.prisma.creditReservation.findUnique({ where: { idempotencyKey } });
     if (existing) return existing;
+
+    // Budget hard cap (Updates/10 §Budgets): reserve() is the single choke
+    // point every paid AI action passes through, so the cap is enforced here —
+    // after the idempotency short-circuit so replays never double-check.
+    await this.budget.enforceBeforeReserve(userId, amount);
 
     return this.prisma.$transaction(async (tx) => {
       const fresh = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });

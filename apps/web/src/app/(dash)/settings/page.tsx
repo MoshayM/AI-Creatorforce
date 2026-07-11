@@ -1,5 +1,6 @@
 'use client';
 import React, { Suspense, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -1056,6 +1057,11 @@ function SettingsContent() {
           {rechargeMutation.isError && (
             <p className="w-full text-xs text-red-500">{getErrorMessage(rechargeMutation.error) || 'Recharge failed'}</p>
           )}
+          <div className="w-full text-right">
+            <Link href="/wallet" className="text-xs text-brand-600 hover:underline">
+              Open full wallet →
+            </Link>
+          </div>
         </div>
         {sub && (
           <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-4">
