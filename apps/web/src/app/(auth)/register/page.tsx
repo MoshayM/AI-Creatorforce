@@ -1,10 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { User, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { api } from '@/lib/api';
-import { AuthShell, AuthPillInput, SocialRow } from '@/components/auth-shell';
+import { api, setTokens, type OAuthProviders, type OAuthProvider } from '@/lib/api';
+import { AuthShell, AuthPillInput, SocialRow, type OAuthProviderName } from '@/components/auth-shell';
 
 const MOCK_MODE = process.env['NEXT_PUBLIC_USE_MOCK'] === 'true';
 const MOCK_TOKEN = 'mock-jwt-token-for-testing';
@@ -16,6 +16,17 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [providers, setProviders] = useState<OAuthProviders | undefined>(undefined);
+
+  // Fetch which social providers are enabled
+  useEffect(() => {
+    if (MOCK_MODE) return;
+    api.auth.providers()
+      .then((r) => setProviders(r.data))
+      .catch(() => {
+        setProviders({ google: false, apple: false, facebook: false });
+      });
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,7 +47,7 @@ export default function RegisterPage() {
 
     try {
       const { data } = await api.auth.register(form.email, form.password, form.name);
-      localStorage.setItem('cf_token', data.accessToken);
+      setTokens(data.accessToken, data.refreshToken);
       router.push('/projects');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
@@ -47,6 +58,18 @@ export default function RegisterPage() {
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSocialRegister(provider: OAuthProviderName) {
+    setError('');
+    try {
+      const redirectUri = `${window.location.origin}/oauth/callback/${provider}`;
+      const { data } = await api.auth.oauthStart(provider as OAuthProvider, redirectUri, 'login');
+      sessionStorage.setItem('cf.oauth.state', data.state);
+      window.location.href = data.authUrl;
+    } catch {
+      setError(`Could not start ${provider} sign-up. Please try again.`);
     }
   }
 
@@ -115,7 +138,10 @@ export default function RegisterPage() {
         </button>
       </form>
 
-      <SocialRow />
+      <SocialRow
+        providers={providers}
+        onProviderClick={(p) => { void handleSocialRegister(p); }}
+      />
     </AuthShell>
   );
 }

@@ -76,9 +76,12 @@ export function AuthPillInput({
   );
 }
 
-const SOCIALS = [
+export type OAuthProviderName = 'google' | 'apple' | 'facebook';
+
+const SOCIALS: Array<{ name: string; key: OAuthProviderName; svg: React.ReactNode }> = [
   {
     name: 'Google',
+    key: 'google',
     svg: (
       <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden>
         <path fill="#4285F4" d="M23.5 12.3c0-.9-.1-1.5-.3-2.2H12v4.1h6.5c-.1 1.1-.8 2.7-2.4 3.8l3.7 2.9c2.3-2.1 3.7-5.1 3.7-8.6z" />
@@ -90,6 +93,7 @@ const SOCIALS = [
   },
   {
     name: 'Apple',
+    key: 'apple',
     svg: (
       <svg viewBox="0 0 24 24" className="w-5 h-5 fill-gray-900" aria-hidden>
         <path d="M16.4 12.9c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 2.9-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.7c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.6-1-2.6-3.7zM14 5.6c.7-.8 1.1-1.9 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z" />
@@ -98,6 +102,7 @@ const SOCIALS = [
   },
   {
     name: 'Facebook',
+    key: 'facebook',
     svg: (
       <svg viewBox="0 0 24 24" className="w-5 h-5 fill-[#1877F2]" aria-hidden>
         <path d="M24 12c0-6.6-5.4-12-12-12S0 5.4 0 12c0 6 4.4 11 10.1 11.9v-8.4H7.1V12h3v-2.6c0-3 1.8-4.7 4.6-4.7 1.3 0 2.7.2 2.7.2v3h-1.5c-1.5 0-2 .9-2 1.9V12h3.3l-.5 3.5h-2.8v8.4C19.6 23 24 18 24 12z" />
@@ -106,7 +111,21 @@ const SOCIALS = [
   },
 ];
 
-export function SocialRow() {
+/**
+ * Social sign-in button row.
+ *
+ * When `providers` is undefined (still loading) all buttons render disabled.
+ * When `providers` is provided, buttons for enabled providers are clickable;
+ * disabled providers keep the "coming soon" look.
+ * When `onProviderClick` is provided it is called with the provider key on click.
+ */
+export function SocialRow({
+  providers,
+  onProviderClick,
+}: {
+  providers?: Record<OAuthProviderName, boolean>;
+  onProviderClick?: (provider: OAuthProviderName) => void;
+}) {
   return (
     <div className="mt-5">
       <div className="flex items-center gap-3 text-xs text-gray-400">
@@ -115,18 +134,26 @@ export function SocialRow() {
         <span className="flex-1 h-px bg-gray-200" />
       </div>
       <div className="flex justify-center gap-4 mt-3">
-        {SOCIALS.map((s) => (
-          <button
-            key={s.name}
-            type="button"
-            disabled
-            title={`${s.name} sign-in coming soon`}
-            aria-label={`${s.name} sign-in (coming soon)`}
-            className="w-11 h-11 rounded-full bg-white shadow-md flex items-center justify-center opacity-70 cursor-not-allowed"
-          >
-            {s.svg}
-          </button>
-        ))}
+        {SOCIALS.map((s) => {
+          const enabled = providers ? providers[s.key] : false;
+          return (
+            <button
+              key={s.name}
+              type="button"
+              disabled={!enabled}
+              onClick={enabled && onProviderClick ? () => onProviderClick(s.key) : undefined}
+              title={enabled ? `Continue with ${s.name}` : `${s.name} sign-in coming soon`}
+              aria-label={enabled ? `${s.name} sign-in` : `${s.name} sign-in (coming soon)`}
+              className={`w-11 h-11 rounded-full bg-white shadow-md flex items-center justify-center transition-opacity ${
+                enabled
+                  ? 'opacity-100 hover:shadow-lg cursor-pointer'
+                  : 'opacity-70 cursor-not-allowed'
+              }`}
+            >
+              {s.svg}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

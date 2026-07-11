@@ -41,6 +41,8 @@ model User {
   wallet        Wallet?
   payments      Payment[]
   trialGrant    TrialGrant?
+  accountLinks  AccountLink[]
+  authSessions  AuthSession[]
 
   @@map("users")
 }
@@ -1536,4 +1538,56 @@ model TokenUsage {
   @@index([userId, createdAt])
   @@index([importedVideoId, createdAt])
   @@map("token_usage")
+}
+
+// ── Auth Sessions & OAuth ─────────────────────────────────────────────────────
+
+model AccountLink {
+  id              String   @id @default(cuid())
+  userId          String
+  provider        String
+  providerSubject String
+  email           String?
+  linkedAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@index([userId])
+  @@map("account_links")
+}
+
+model AuthSession {
+  id               String    @id @default(cuid())
+  userId           String
+  familyId         String
+  refreshTokenHash String    @unique
+  device           String?
+  ip               String?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  rotatedAt        DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@map("auth_sessions")
+}
+
+model OAuthState {
+  id           String    @id @default(cuid())
+  provider     String
+  state        String    @unique
+  codeVerifier String
+  nonce        String
+  redirectUri  String
+  linkUserId   String?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  usedAt       DateTime?
+
+  @@map("oauth_states")
 }

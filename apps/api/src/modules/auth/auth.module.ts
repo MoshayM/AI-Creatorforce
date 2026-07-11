@@ -6,6 +6,12 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { GoogleStrategy } from './google.strategy';
+import { SessionsService } from './sessions.service';
+import { OAuthService } from './oauth.service';
+import { ProviderRegistry } from './providers/provider.registry';
+import { GoogleAdapter } from './providers/google.adapter';
+import { AppleAdapter } from './providers/apple.adapter';
+import { FacebookAdapter } from './providers/facebook.adapter';
 import { TrialModule } from '../trial/trial.module';
 
 @Module({
@@ -22,8 +28,18 @@ import { TrialModule } from '../trial/trial.module';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy, GoogleStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    GoogleStrategy,
+    SessionsService,
+    OAuthService,
+    ProviderRegistry,
+    GoogleAdapter,
+    AppleAdapter,
+    FacebookAdapter,
+  ],
   controllers: [AuthController],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, JwtModule, SessionsService, OAuthService],
 })
 export class AuthModule {}

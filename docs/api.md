@@ -29,10 +29,22 @@ Standard codes: `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `VALIDATION_FAILED`
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/auth/session` | Create session (handled by Auth.js routes) |
-| DELETE | `/auth/session` | Sign out |
+| POST | `/auth/register` | Email sign-up → `{ accessToken, refreshToken }` |
+| POST | `/auth/login` | Email sign-in → `{ accessToken, refreshToken }` |
+| POST | `/auth/refresh` | Rotate refresh token (single-use; reuse revokes the whole session family) |
+| POST | `/auth/logout` | Revoke current session (server-side; access token dies immediately) |
+| GET | `/auth/sessions` | List active sessions (device, ip, `current` flag) |
+| DELETE | `/auth/sessions/:id` | Revoke a session family |
+| GET | `/auth/providers` | Which social providers are configured (`google`/`apple`/`facebook`) |
+| POST | `/auth/:provider/start` | Begin OAuth (PKCE + state + nonce); `mode: 'link'` attaches to signed-in user |
+| POST | `/auth/:provider/callback` | Exchange code → sign-in tokens, `{ linked: true }`, or 409 `LINK_REQUIRED` |
+| POST | `/auth/apple/return` | Apple form_post landing → 302 back to the SPA callback |
+| GET | `/auth/links` | Linked sign-in methods for the current user |
+| DELETE | `/auth/link/:provider` | Unlink a method (409 if it is the last one) |
 | GET | `/me` | Current user + plan + usage |
 | GET | `/me/usage` | Token/credit usage vs limits |
+
+See `Docs3/Updates/15_Authentication.md` for flows, linking rules, and session semantics.
 
 ## 3. Channels (YouTube)
 

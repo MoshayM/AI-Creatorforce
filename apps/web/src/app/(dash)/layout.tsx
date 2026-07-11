@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
+import { api, clearTokens, getRefreshToken } from '@/lib/api';
 
 const NAV = [
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
@@ -38,8 +39,15 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
     setUserName(nameFromToken());
   }, [router]);
 
-  function handleLogout() {
-    localStorage.removeItem('cf_token');
+  async function handleLogout() {
+    const refreshToken = getRefreshToken() ?? undefined;
+    // Fire-and-forget: inform the server; ignore network failures
+    try {
+      await api.auth.logout(refreshToken);
+    } catch {
+      // Non-fatal — proceed with local token clearance regardless
+    }
+    clearTokens();
     router.push('/login');
   }
 
@@ -73,7 +81,7 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
           </nav>
           <div className="p-3">
             <button
-              onClick={handleLogout}
+              onClick={() => { void handleLogout(); }}
               className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm text-white/75 hover:bg-white/10 hover:text-white w-full transition-colors"
             >
               <LogOut className="w-4 h-4" />
