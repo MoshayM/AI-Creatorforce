@@ -572,4 +572,53 @@ export const api = {
     markAllRead: () =>
       apiClient.post('/notifications/read-all'),
   },
+  admin: {
+    enterpriseMetrics: () => apiClient.get<EnterpriseMetrics>('/admin/analytics/enterprise'),
+    forecasts: (metric?: string) =>
+      apiClient.get<ForecastRow[]>(`/admin/forecasts${metric ? `?metric=${encodeURIComponent(metric)}` : ''}`),
+    generateForecasts: () => apiClient.post<{ ok: boolean; message: string }>('/admin/forecasts/generate'),
+    providers: () => apiClient.get<AdminProvider[]>('/admin/providers'),
+  },
 };
+
+// ── Enterprise admin dashboard (Phase 5 §9) ──────────────────────────────────
+
+export interface EnterpriseMetrics {
+  /** Minor units (cents). */
+  mrr: number;
+  /** Minor units (cents). */
+  arr: number;
+  /** Last 6 × 30-day buckets, oldest first, minor units. */
+  revenueByMonth: number[];
+  arpu: number;
+  ltv: number;
+  /** 0..1 fraction. */
+  churn: number;
+  aiCostUsd: number;
+  cacheSavingsUsd: number;
+  topModels: Array<{ model: string; costUsd: number; tokensIn: number; tokensOut: number }>;
+}
+
+export interface ForecastRow {
+  id: string;
+  metric: string;
+  horizonDays: number;
+  predictedValue: number;
+  confidenceLow: number;
+  confidenceHigh: number;
+  method: string;
+  inputPointsCount: number;
+  generatedAt: string;
+}
+
+export interface AdminProvider {
+  id: string;
+  name: string;
+  status: 'ACTIVE' | 'DEGRADED' | 'DISABLED' | string;
+  priority: number;
+  qualityScore: number;
+  failureRate: number;
+  avgHealthScore: number;
+  costRates: Array<{ unit: string; inputCost: number; outputCost: number }>;
+  healthEvents: Array<{ event: string; checkedAt: string }>;
+}

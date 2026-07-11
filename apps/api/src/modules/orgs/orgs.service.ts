@@ -58,6 +58,140 @@ export function remainingCredits(allocated: number, consumed: number): number {
   return Math.max(0, allocated - consumed);
 }
 
+/**
+ * Successor windows for an expired budget period (spec §14 budget-period-rollover).
+ *
+ * Each window has the same duration as `latest`, starts exactly where the
+ * previous one ends, and windows are generated until one contains `now`
+ * (so a long outage catches up in a single run).  `maxPeriods` bounds the
+ * catch-up so a years-stale period can't explode into thousands of rows.
+ *
+ * Returns [] when `latest` has not ended yet or its duration is non-positive.
+ */
+export function rolloverWindows(
+  latest: { periodStart: Date; periodEnd: Date },
+  now: Date,
+  maxPeriods = 12,
+): Array<{ periodStart: Date; periodEnd: Date }> {
+  const duration = latest.periodEnd.getTime() - latest.periodStart.getTime();
+  if (duration <= 0 || latest.periodEnd > now) return [];
+
+  const windows: Array<{ periodStart: Date; periodEnd: Date }> = [];
+  let start = latest.periodEnd.getTime();
+  while (windows.length < maxPeriods) {
+    const end = start + duration;
+    windows.push({ periodStart: new Date(start), periodEnd: new Date(end) });
+    if (end > now.getTime()) break;
+    start = end;
+  }
+  return windows;
+}
+
+/**
+ * Parse the reservation idempotency key written by orgSpend:
+ * `org-spend:{orgId}:{memberUserId}:{action}:{ts}`.
+ *
+ * The action segment may itself contain ':' — orgId/memberUserId are cuids
+ * (no ':') and the trailing segment is a numeric timestamp, so everything
+ * between index 2 and the final segment is the action.  Returns null for
+ * keys not produced by orgSpend.
+ */
+export function parseOrgSpendKey(
+  key: string,
+): { orgId: string; memberUserId: string; action: string } | null {
+  const parts = key.split(':');
+  if (parts.length < 5 || parts[0] !== 'org-spend') return null;
+  const ts = parts[parts.length - 1];
+  if (!/^\d+$/.test(ts)) return null;
+  return {
+    orgId: parts[1],
+    memberUserId: parts[2],
+    action: parts.slice(3, -1).join(':'),
+  };
+}
+
+export interface UsageReportRow {
+  userId: string;
+  email: string | null;
+  teamId: string | null;
+  role: string;
+  actions: Record<string, { credits: number; count: number }>;
+  totalCredits: number;
+  count: number;
+}
+
+/**
+ * Roll up org-wallet reservations into per-member usage rows (spec §10).
+ *
+ * Credits counted: settledCredits for SETTLED holds (the real debit),
+ * reserved amount for still-HELD ones.  RELEASED holds are expected to be
+ * filtered out by the caller (credits were returned).  Reservations whose
+ * member is no longer in the org still appear (role 'REMOVED') — usage
+ * history must not vanish with a membership.
+ */
+export function buildUsageReport(
+  reservations: Array<{ idempotencyKey: string; amount: number; status: string; settledCredits: number | null }>,
+  members: Array<{ userId: string; teamId: string | null; role: string; email: string | null }>,
+): { byMember: UsageReportRow[]; totalCredits: number; reservationCount: number } {
+  const memberIndex = new Map(members.map((m) => [m.userId, m]));
+  const rows = new Map<string, UsageReportRow>();
+  let totalCredits = 0;
+  let reservationCount = 0;
+
+  for (const r of reservations) {
+    const parsed = parseOrgSpendKey(r.idempotencyKey);
+    if (!parsed) continue;
+
+    const credits = r.status === 'SETTLED' ? (r.settledCredits ?? r.amount) : r.amount;
+    const member = memberIndex.get(parsed.memberUserId);
+
+    let row = rows.get(parsed.memberUserId);
+    if (!row) {
+      row = {
+        userId: parsed.memberUserId,
+        email: member?.email ?? null,
+        teamId: member?.teamId ?? null,
+        role: member?.role ?? 'REMOVED',
+        actions: {},
+        totalCredits: 0,
+        count: 0,
+      };
+      rows.set(parsed.memberUserId, row);
+    }
+
+    const bucket = (row.actions[parsed.action] ??= { credits: 0, count: 0 });
+    bucket.credits += credits;
+    bucket.count += 1;
+    row.totalCredits += credits;
+    row.count += 1;
+    totalCredits += credits;
+    reservationCount += 1;
+  }
+
+  return {
+    byMember: [...rows.values()].sort((a, b) => b.totalCredits - a.totalCredits),
+    totalCredits,
+    reservationCount,
+  };
+}
+
+/** Flatten a usage report into CSV (one row per member × action). */
+export function usageReportCsv(report: { byMember: UsageReportRow[] }): string {
+  const esc = (v: string | null) => {
+    const s = v ?? '';
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = ['userId,email,teamId,role,action,credits,count'];
+  for (const row of report.byMember) {
+    for (const [action, agg] of Object.entries(row.actions)) {
+      lines.push(
+        [esc(row.userId), esc(row.email), esc(row.teamId), esc(row.role), esc(action), agg.credits, agg.count].join(','),
+      );
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
 export type SpendDecision = 'ALLOW' | 'BLOCK_BUDGET' | 'NEEDS_APPROVAL';
 
 /**
@@ -383,6 +517,148 @@ export class OrgsService {
       where: { id: period.id },
       data: { consumedCredits: { increment: credits } },
     });
+  }
+
+  // ── Usage reports (spec §10) ──────────────────────────────────────────────
+
+  /**
+   * Per-member usage rolled up from the org wallet's reservations
+   * (spec §10 "usage reports per team/department/member").
+   *
+   * Requires VIEW_REPORTS (ORG_ADMIN / BILLING_ADMIN / TEAM_MANAGER).
+   * RELEASED holds are excluded — those credits were returned.
+   * `teamId` filters rows to members of that team (usage by ex-members of the
+   * team is attributed by their CURRENT membership, the ledger has no
+   * historical team snapshot — documented limitation).
+   */
+  async usageReport(
+    actorId: string,
+    orgId: string,
+    opts: { from?: Date; to?: Date; teamId?: string } = {},
+  ) {
+    await this.requireOrgAction(actorId, orgId, 'VIEW_REPORTS');
+
+    const wallet = await this.prisma.wallet.findUnique({ where: { orgId } });
+    if (!wallet) throw new NotFoundException('Organisation wallet not found');
+
+    const [reservations, memberships] = await Promise.all([
+      this.prisma.creditReservation.findMany({
+        where: {
+          walletId: wallet.id,
+          status: { in: ['HELD', 'SETTLED'] },
+          idempotencyKey: { startsWith: `org-spend:${orgId}:` },
+          ...(opts.from || opts.to
+            ? { createdAt: { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lt: opts.to } : {}) } }
+            : {}),
+        },
+        select: { idempotencyKey: true, amount: true, status: true, settledCredits: true },
+      }),
+      this.prisma.orgMembership.findMany({
+        where: { orgId },
+        select: { userId: true, teamId: true, role: true },
+      }),
+    ]);
+
+    // OrgMembership has no user relation — resolve emails by id.
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: memberships.map((m) => m.userId) } },
+      select: { id: true, email: true },
+    });
+    const emailById = new Map(users.map((u) => [u.id, u.email]));
+
+    const members = memberships.map((m) => ({
+      userId: m.userId,
+      teamId: m.teamId,
+      role: m.role,
+      email: emailById.get(m.userId) ?? null,
+    }));
+
+    const report = buildUsageReport(reservations, members);
+
+    const byMember = opts.teamId
+      ? report.byMember.filter((r) => r.teamId === opts.teamId)
+      : report.byMember;
+
+    return {
+      orgId,
+      from: opts.from ?? null,
+      to: opts.to ?? null,
+      teamId: opts.teamId ?? null,
+      byMember,
+      totalCredits: opts.teamId
+        ? byMember.reduce((s, r) => s + r.totalCredits, 0)
+        : report.totalCredits,
+      reservationCount: opts.teamId
+        ? byMember.reduce((s, r) => s + r.count, 0)
+        : report.reservationCount,
+    };
+  }
+
+  // ── Budget rollover (spec §14 budget-period-rollover job) ────────────────
+
+  /**
+   * Open successor BudgetPeriods for every (org, team) whose latest period has
+   * ended.  Without this, an expired period means `currentPeriod` finds
+   * nothing and spend silently becomes unbudgeted.
+   *
+   * The successor copies allocation/hardCap from the expired period with
+   * consumption reset; multiple missed windows are backfilled in one run
+   * (bounded — see rolloverWindows).  Idempotent: a successor is only created
+   * when no period already starts at the expired period's end, so replayed
+   * runs are harmless.
+   *
+   * Returns the number of periods created (for job logging).
+   */
+  async rolloverExpiredBudgets(now = new Date()): Promise<number> {
+    const groups = await this.prisma.budgetPeriod.groupBy({
+      by: ['orgId', 'teamId'],
+      _max: { periodEnd: true },
+    });
+
+    let created = 0;
+    for (const g of groups) {
+      const latestEnd = g._max.periodEnd;
+      if (!latestEnd || latestEnd > now) continue; // current period still open
+
+      const latest = await this.prisma.budgetPeriod.findFirst({
+        where: { orgId: g.orgId, teamId: g.teamId ?? null, periodEnd: latestEnd },
+        orderBy: { periodStart: 'desc' },
+      });
+      if (!latest) continue;
+
+      const windows = rolloverWindows(latest, now);
+      if (windows.length === 0) continue;
+
+      // Idempotency guard: another run may have rolled this group already.
+      const successor = await this.prisma.budgetPeriod.findFirst({
+        where: { orgId: g.orgId, teamId: g.teamId ?? null, periodStart: { gte: latest.periodEnd } },
+      });
+      if (successor) continue;
+
+      await this.prisma.budgetPeriod.createMany({
+        data: windows.map((w) => ({
+          orgId: g.orgId,
+          teamId: g.teamId,
+          periodStart: w.periodStart,
+          periodEnd: w.periodEnd,
+          allocatedCredits: latest.allocatedCredits,
+          hardCap: latest.hardCap,
+        })),
+      });
+      created += windows.length;
+
+      await this.notifyAdmins(g.orgId, {
+        type: 'org.budget.rollover',
+        title: 'Budget period rolled over',
+        body: `A new ${latest.allocatedCredits}-credit budget period has started${g.teamId ? ' for your team' : ''}`,
+        meta: { orgId: g.orgId, teamId: g.teamId, allocatedCredits: latest.allocatedCredits, periods: windows.length },
+      });
+
+      this.logger.log(
+        `[orgs] budget rollover org=${g.orgId} team=${g.teamId ?? 'org-wide'} periods=${windows.length}`,
+      );
+    }
+    return created;
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────

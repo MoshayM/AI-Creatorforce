@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell } from 'lucide-react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -29,6 +29,21 @@ function nameFromToken(): string {
   }
 }
 
+/**
+ * Role from the JWT payload — used only to show/hide the Admin nav link.
+ * The API enforces the real permission check; a forged token just sees a 403.
+ */
+function roleFromToken(): string {
+  try {
+    const token = localStorage.getItem('cf_token');
+    if (!token) return 'MEMBER';
+    const payload = JSON.parse(atob(token.split('.')[1] ?? '')) as { role?: string };
+    return payload.role ?? 'MEMBER';
+  } catch {
+    return 'MEMBER';
+  }
+}
+
 /** Format a Date as a relative string, e.g. "3m ago", "2h ago", "5d ago". */
 function relativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -46,6 +61,7 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   const router = useRouter();
   const [userName, setUserName] = useState('Creator');
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // ── Notifications bell state ───────────────────────────────────────────────
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -72,6 +88,8 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
       return;
     }
     setUserName(nameFromToken());
+    // admin:revenue holders (ROLE_PERMISSIONS in the API): OWNER + SUPER_ADMIN
+    setIsAdmin(['OWNER', 'SUPER_ADMIN'].includes(roleFromToken()));
     void fetchNotifications();
     pollRef.current = setInterval(() => { void fetchNotifications(); }, BELL_POLL_MS);
     return () => {
@@ -138,7 +156,7 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
             <p className="text-xs text-white/70">AI Content Platform</p>
           </div>
           <nav className="flex-1 py-2 space-y-1 px-3 overflow-y-auto">
-            {NAV.map(({ href, icon: Icon, label }) => (
+            {[...NAV, ...(isAdmin ? [{ href: '/admin', icon: Gauge, label: 'Admin' }] : [])].map(({ href, icon: Icon, label }) => (
               <Link
                 key={href}
                 href={href}

@@ -16,10 +16,11 @@
 | §8 Profit protection | Fail-closed margin guard (`MIN_PROFIT_MARGIN`, default 30%): worst-case provider cost vs credit value; gates pricing-rule create/update; `/admin/profit/preview` | ✅ shipped |
 | §6 Smart routing | Health-ranked provider selection + automatic failover + rate limiting | ✅ pre-existing in the shared aiClient (score/cooldown/failover) — registry now persists it; per-request cost-based *model* selection deferred (single model per provider today) |
 | §12 Token optimization | Intent cache, compliance cache, per-stage resume, embedding no-reembed | ✅ pre-existing; response-cache generalization deferred |
-| §10 Org/team billing | Organizations, teams, shared wallets, budgets, manager approval | ❌ next — shared wallet = existing wallet owned by an org (spec's own reuse note) |
-| §11 BI/forecasting | LTV/CAC/ARPU/MRR, forecasts | ❌ later — needs revenue history to be meaningful |
-| §13 Developer portal | Hashed API keys, webhooks, sandbox | ❌ later (an internal `ApiKey` model exists as a starting point) |
-| §15 Monitoring/DR | SLOs, backups, replicas | ⏸ deferred — single-node local deployment; ledger/audit design already supports reconstruction |
+| §10 Org/team billing | Organizations, teams, shared wallets, budgets, manager approval | ✅ shipped (Wave 3) — shared wallet = existing wallet owned by an org; Wave 6 adds usage reports + budget rollover |
+| §11 BI/forecasting | LTV/CAC/ARPU/MRR, forecasts | ✅ shipped (Wave 4a backend + Wave 6 dashboard UI) |
+| §13 Developer portal | Hashed API keys, webhooks, sandbox | ✅ shipped (Wave 4b) — SDK/OpenAPI-docs autogen + per-key usage analytics deferred |
+| §14 Background jobs | forecast-generation, budget-period-rollover, cache-eviction | ✅ forecast + rollover jobs shipped; cache-eviction satisfied by Redis TTL (see deviations) |
+| §15 Monitoring/DR | SLOs, backups, replicas | ✅ shipped (Wave 5) — alert rules, SLOs, Grafana dashboard, DR scripts + runbooks |
 
 ## Phase 6 slice status
 
@@ -29,7 +30,7 @@
 | §8–9 Upgrade engine + first-recharge rewards | Behavior-driven nudges; profit-gated bonuses | ✅ shipped |
 | §10.1 Offer engine | Behavior-qualified campaigns, redeem + auto-apply at settle, profit-gated | ✅ shipped |
 | §12 Marketplace | `credit_packs`, regional rows, pack-based recharge over the existing payment path | ✅ shipped |
-| §10.2 Referrals | Codes, qualification gate, fraud, leaderboard | ❌ next (Wave 4) |
+| §10.2 Referrals | Codes, qualification gate, fraud, leaderboard | ✅ shipped (Waves 4+5, with in-app notifications + growth surfaces) |
 | §11 Wallet display | Lot breakdown already exists on the settings wallet card; expiry timeline pending | ⏳ partial |
 
 ## What shipped in this slice (Phase 5 Wave 1)
@@ -129,6 +130,31 @@
   admin-created campaigns + behavior-driven qualification + the Wave 2
   upgrade nudges — same outcomes, no per-user campaign-row explosion.
 
+## What shipped in Phase 5 Wave 6 (org billing hardening + enterprise dashboard)
+
+- **budget-period-rollover job** (§14): hourly `BudgetRolloverJob` calls
+  `OrgsService.rolloverExpiredBudgets()` — every (org, team) whose latest
+  `BudgetPeriod` has ended gets a successor with the same duration,
+  allocation and hardCap, consumption reset.  Without this an expired period
+  meant `currentPeriod` found nothing and org spend silently went
+  unbudgeted.  Missed windows are backfilled in one run (`rolloverWindows`,
+  pure + tested, capped at 12 periods); idempotent via successor-existence
+  check; org admins are notified (`org.budget.rollover`).  Kill-switch:
+  `BUDGET_ROLLOVER_JOB_ENABLED=false`.
+- **Usage reports** (§10): `GET /orgs/:id/reports/usage?from=&to=&teamId=&format=json|csv`
+  (VIEW_REPORTS role) rolls up the org wallet's HELD/SETTLED reservations
+  per member × action — SETTLED holds count `settledCredits` (the real
+  debit), HELD count the reserved amount, RELEASED are excluded.  Member
+  attribution parses the orgSpend idempotency-key format the same module
+  writes (`parseOrgSpendKey`, pure + tested); usage by removed members
+  survives as role `REMOVED`.  `format=csv` streams a text/csv attachment.
+- **Enterprise dashboard UI** (§9): `/admin` page in the web app (nav link
+  shown to OWNER/SUPER_ADMIN from the JWT role; the API's permission guard
+  is the real gate) rendering the Wave 4a backend: MRR/ARR, ARPU/LTV, churn,
+  AI cost + cache savings, revenue-by-period bars, most-used models,
+  forecast cards (per-metric units: revenue minor, cost USD, subscription
+  count) with a manual generate button, and provider health/cost table.
+
 ## Deliberate deviations
 
 - **Monolith modules, not microservices** (both specs §3) — same precedent
@@ -146,6 +172,15 @@
 - **Nominal-usage margin checks**: rule-level checks use per-action nominal
   token counts (`NOMINAL_USAGE`) rather than per-user history — history-based
   prediction becomes worthwhile with the Phase 6 behavior tracker.
+- **cache-eviction job** (§14): not built as a job — the response/embedding
+  caches live in Redis with a TTL set on every write (`AiCacheAdapter`), so
+  expiry is handled by Redis itself (plus `maxmemory` LRU if configured).
+  A sweep job would duplicate what the store already guarantees.
+- **Usage-report attribution**: member attribution comes from the orgSpend
+  reservation idempotency key rather than a ledger column — the format is
+  owned by the same module and parsed by a tested pure function.  If
+  attribution ever needs to survive a key-format change, add a `metadata`
+  column to `credit_reservations` and write both.
 - **Identity verification** (Phase 6 §6): no outbound email/OTP infra exists,
   so "verified identity" = the registered email (hashed) — the one-trial
   uniqueness and fingerprint/IP scoring still hold; OTP/social verification
@@ -155,9 +190,12 @@
 
 ## Next steps
 
-1. Phase 6 Wave 2: behavior tracker + upgrade engine + first-recharge
-   rewards (profit-gated via the shipped guard).
-2. Phase 5 org/team billing (shared wallets reuse the wallet/ledger as the
-   spec prescribes; budgets enforce at the reserve step).
-3. Offer engine + credit-pack marketplace, then referrals.
-4. Trial→paid conversion analytics on the admin dashboard.
+1. Wire `OrgsService.orgSpend` into the copilot/supervisor spend path so AI
+   actions can run against an org shared wallet (the gate + budget machinery
+   is built and tested; nothing calls it yet).
+2. Developer portal follow-ups: SDK/OpenAPI-docs autogen + per-key usage
+   analytics (token-usage table already has the data).
+3. Transcript/analysis cache keyed by media content hash (§12) — response +
+   embedding caches shipped; video/audio re-analysis is still uncached.
+4. Playwright e2e coverage for Phase 5 flows (org creation → budget
+   enforcement → approval gating; admin dashboard render).
