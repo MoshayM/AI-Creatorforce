@@ -1,0 +1,119 @@
+groups:
+  - name: creatorforce.api
+    rules:
+      # ── ApiDown ─────────────────────────────────────────────────────────────
+      # The scrape target has been absent for 2 minutes (the job reports up == 0).
+      - alert: ApiDown
+        expr: up{job="creatorforce-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CreatorForce API is unreachable"
+          description: "Prometheus has been unable to scrape the API at {{ $labels.instance }} for more than 2 minutes."
+          runbook_url: "https://github.com/CreatorForce/creatorforce-ai/blob/master/infra/dr/RUNBOOKS.md#api-down"
+
+  - name: creatorforce.errors
+    rules:
+      # ── HighErrorRate (warning) ──────────────────────────────────────────────
+      # 5xx error share of total requests > 5 % for 5 minutes.
+      - alert: HighErrorRateWarning
+        expr: >
+          (
+            sum(rate(cf_http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(cf_http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated 5xx error rate (> 5 %)"
+          description: "The 5xx share of HTTP traffic is {{ $value | humanizePercentage }} over the last 5 minutes."
+          runbook_url: "https://github.com/CreatorForce/creatorforce-ai/blob/master/infra/dr/RUNBOOKS.md#high-error-rate"
+
+      # ── HighErrorRate (critical) ─────────────────────────────────────────────
+      # 5xx error share > 20 % for 5 minutes.
+      - alert: HighErrorRateCritical
+        expr: >
+          (
+            sum(rate(cf_http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(cf_http_requests_total[5m]))
+          ) > 0.20
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical 5xx error rate (> 20 %)"
+          description: "The 5xx share of HTTP traffic is {{ $value | humanizePercentage }} over the last 5 minutes."
+          runbook_url: "https://github.com/CreatorForce/creatorforce-ai/blob/master/infra/dr/RUNBOOKS.md#high-error-rate"
+
+  - name: creatorforce.latency
+    rules:
+      # ── SlowRequests ─────────────────────────────────────────────────────────
+      # p95 latency across all routes > 2 s for 10 minutes.
+      - alert: SlowRequests
+        expr: >
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(cf_http_request_duration_seconds_bucket[10m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 HTTP latency exceeds 2 s"
+          description: "The 95th-percentile request duration is {{ $value | humanizeDuration }} (threshold 2 s)."
+          runbook_url: "https://github.com/CreatorForce/creatorforce-ai/blob/master/infra/dr/RUNBOOKS.md#high-error-rate"
+
+  - name: creatorforce.jobs
+    rules:
+      # ── JobFailureSpike ──────────────────────────────────────────────────────
+      # More than 5 new job failures accumulated in a 15-minute window.
+      - alert: JobFailureSpike
+        expr: increase(cf_jobs_total{status="failed"}[15m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spike in BullMQ job failures"
+          description: "{{ $value }} jobs failed in the last 15 minutes (threshold 5)."
+          runbook_url: "https://github.com/CreatorForce/creatorforce-ai/blob/master/infra/dr/RUNBOOKS.md#job-failures"
+
+  - name: creatorforce.ai_cost
+    rules:
+      # ── AiCostSpike ──────────────────────────────────────────────────────────
+      # AI spend increased by more than AI_COST_SPIKE_THRESHOLD_USD (default $10) in 1 hour.
+      # This is the margin-dip proxy described in Phase 5 spec §15.
+      # Tune AI_COST_SPIKE_THRESHOLD_USD in your environment (see .env.example).
+      - alert: AiCostSpike
+        expr: increase(cf_ai_cost_usd_total[1h]) > 10
+        # ↑ Replace 10 with ${AI_COST_SPIKE_THRESHOLD_USD} or adjust directly here.
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI spend spike: > $10 in the last hour"
+          description: "AI cost increased by ${{ $value }} in the last hour (threshold $10). Review provider usage and check for rogue jobs."
+          runbook_url: "https://github.com/CreatorForce/creatorforce-ai/blob/master/infra/dr/RUNBOOKS.md#ai-cost-spike"
+
+      # ── CacheHitStall ─────────────────────────────────────────────────────────
+      # AI tokens are being consumed but the cache hit counter has not moved for 1 hour.
+      # Indicates a cache regression (eviction config bug, key drift, cold-start, etc.).
+      - alert: CacheHitStall
+        expr: >
+          (
+            rate(cf_ai_cache_hits_total[1h]) == 0
+          )
+          and
+          (
+            rate(cf_ai_tokens_total[1h]) > 0
+          )
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "AI cache hits are zero while tokens are flowing"
+          description: "No cache hits recorded in the last hour even though AI token consumption is non-zero. Possible cache regression."
+          runbook_url: "https://github.com/CreatorForce/creatorforce-ai/blob/master/infra/dr/RUNBOOKS.md#ai-cost-spike"
