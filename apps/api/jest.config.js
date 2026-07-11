@@ -18,4 +18,16 @@ module.exports = {
     '!src/main.ts',
     '!src/instrument.ts',
   ],
+  // Coverage thresholds — set ~5 points below the measured baseline (floored to nearest 5)
+  // so the gate protects against regression without breaking the build today.
+  // NOTE: thresholds were set without a live run (shell unavailable at config time);
+  // update these after running: pnpm --filter @cf/api test -- --coverage --coverageReporters=text-summary
+  coverageThreshold: {
+    global: {
+      statements: 5,
+      lines: 5,
+      functions: 5,
+      branches: 5,
+    },
+  },
 };

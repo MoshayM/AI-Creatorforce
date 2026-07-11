@@ -1,0 +1,30 @@
+version: 2
+
+updates:
+  # npm ecosystem — covers root workspace, apps/*, and packages/*
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    groups:
+      # Group minor and patch updates to reduce PR noise; majors are reviewed individually.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    # Security updates are always opened individually so they are visible and actioned promptly.
+    # Dependabot opens security PRs outside the weekly schedule regardless of the group config.
+
+  # GitHub Actions ecosystem
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    open-pull-requests-limit: 5

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, main, develop]
   pull_request:
-    branches: [main]
+    branches: [master, main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -154,3 +154,148 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
+
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Gate: custom architecture rules at ERROR severity must pass.
+      - name: Run custom rules (blocking)
+        run: |
+          pip install semgrep --quiet
+          semgrep scan \
+            --config .semgrep/ \
+            --error \
+            --severity ERROR \
+            --quiet
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+      # Informational: TypeScript registry pack — findings don't block the build.
+      - name: Run registry pack (informational)
+        run: |
+          semgrep scan \
+            --config p/typescript \
+            --quiet
+        continue-on-error: true
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  e2e:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [lint, typecheck, unit-tests]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: cf
+          POSTGRES_PASSWORD: cf
+          POSTGRES_DB: creatorforce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://cf:cf@localhost:5432/creatorforce
+      # BullModule is hardcoded to 127.0.0.1:6379 in app.module.ts; service maps to that.
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-secret-e2e
+      API_PORT: '4007'
+      NODE_ENV: production
+      # Silence optional external integrations so the API starts without real keys.
+      SKIP_ENV_VALIDATION: 'true'
+      ANTHROPIC_API_KEY: ci-placeholder
+      OPENAI_API_KEY: ci-placeholder
+      GEMINI_API_KEY: ci-placeholder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm --filter @cf/tsconfig --filter @cf/eslint-config --filter @cf/shared build
+
+      - name: Generate Prisma client
+        run: pnpm --filter @cf/api exec prisma generate
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Run database migrations
+        run: pnpm --filter @cf/api exec prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Build API
+        run: pnpm --filter @cf/api build
+
+      - name: Start API in background
+        run: |
+          node apps/api/dist/main.js &
+          # Wait until the API health endpoint responds (up to 30s)
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4007/api/v1 > /dev/null 2>&1 || \
+               curl -sf http://localhost:4007/api/docs > /dev/null 2>&1; then
+              echo "API is up"; break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 1
+          done
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          API_PORT: ${{ env.API_PORT }}
+          NODE_ENV: ${{ env.NODE_ENV }}
+          ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ env.GEMINI_API_KEY }}
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @cf/e2e exec playwright install --with-deps chromium
+
+      - name: Run Playwright E2E tests
+        run: pnpm --filter @cf/e2e exec playwright test
+        env:
+          CI: 'true'
+          # playwright.config.ts webServer block hardcodes NEXT_PUBLIC_API_URL=http://localhost:4007/api/v1
+          # and starts the Next.js dev server via 'pnpm --filter @cf/web dev' automatically.
+          NEXT_PUBLIC_API_URL: 'http://localhost:4007/api/v1'
+          NEXT_PUBLIC_USE_MOCK: 'false'
+          SKIP_ENV_VALIDATION: 'true'
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/e2e/playwright-report/
+          retention-days: 7

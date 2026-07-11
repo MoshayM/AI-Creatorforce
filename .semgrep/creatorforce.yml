@@ -1,0 +1,89 @@
+rules:
+
+  # ── Rule 1: No OFFSET/skip pagination in Prisma findMany ─────────────────────
+  # Architecture invariant: keyset/cursor pagination only (see Updates/08_Playlists_and_Library.md).
+  # Suppress a justified exception with an inline `// nosemgrep: no-offset-pagination`.
+  - id: no-offset-pagination
+    languages: [typescript]
+    severity: ERROR
+    message: >
+      OFFSET pagination (skip:) detected in a Prisma findMany() call.
+      Use keyset/cursor pagination instead — see Updates/08_Playlists_and_Library.md.
+    pattern: $DB.findMany({ ..., skip: $SKIP, ... })
+    paths:
+      include:
+        - apps/api/src/**/*.ts
+      exclude:
+        - "**/*.spec.ts"
+
+  # ── Rule 2: No direct AI provider SDK imports outside the adapter layer ───────
+  # Architecture invariant: provider SDKs are only allowed in packages/shared/src/ai/**.
+  # Note: googleapis is intentionally excluded (legitimate use across channel/auth code).
+  - id: no-direct-provider-sdk
+    languages: [typescript]
+    severity: ERROR
+    message: >
+      Direct import of an AI provider SDK (@anthropic-ai/sdk or openai) is not
+      allowed outside the adapter layer (packages/shared/src/ai/**).
+      Import callAI / callAIStructured from @cf/shared instead.
+    pattern-either:
+      - pattern: import $X from "@anthropic-ai/sdk"
+      - pattern: import { $X } from "@anthropic-ai/sdk"
+      - pattern: import * as $X from "@anthropic-ai/sdk"
+      - pattern: import $X from "openai"
+      - pattern: import { $X } from "openai"
+      - pattern: import * as $X from "openai"
+    paths:
+      include:
+        - apps/**/*.ts
+      exclude:
+        - "**/*.spec.ts"
+
+  # ── Rule 3: No secrets/tokens in log calls ───────────────────────────────────
+  # Audit rule: flag logger.* / console.log calls where an argument identifier
+  # matches sensitive names (password, refreshToken, accessToken, apiKey, clientSecret).
+  - id: no-raw-secret-log
+    languages: [typescript]
+    severity: WARNING
+    message: >
+      Potential secret or token value passed directly to a log call.
+      Redact or omit sensitive fields (password, refreshToken, accessToken,
+      apiKey, clientSecret) from logs. Audit and remediate.
+    patterns:
+      - pattern-either:
+          - pattern: $LOGGER.log(..., $SECRET, ...)
+          - pattern: $LOGGER.warn(..., $SECRET, ...)
+          - pattern: $LOGGER.error(..., $SECRET, ...)
+          - pattern: $LOGGER.debug(..., $SECRET, ...)
+          - pattern: $LOGGER.verbose(..., $SECRET, ...)
+          - pattern: console.log(..., $SECRET, ...)
+          - pattern: console.warn(..., $SECRET, ...)
+          - pattern: console.error(..., $SECRET, ...)
+          - pattern: console.debug(..., $SECRET, ...)
+      - metavariable-regex:
+          metavariable: $SECRET
+          regex: ^(password|refreshToken|accessToken|apiKey|clientSecret)$
+    paths:
+      include:
+        - apps/**/*.ts
+        - packages/**/*.ts
+      exclude:
+        - "**/*.spec.ts"
+
+  # ── Rule 4: No 'none' algorithm in JWT verification options ──────────────────
+  # Security invariant: 'none' in a JWT algorithms array allows signature bypass.
+  - id: no-jwt-none-alg
+    languages: [typescript]
+    severity: ERROR
+    message: >
+      JWT 'none' algorithm detected in an algorithms array.
+      The 'none' algorithm disables signature verification and is a critical
+      security vulnerability. Remove it immediately.
+    pattern: |
+      { ..., algorithms: [..., 'none', ...], ... }
+    paths:
+      include:
+        - apps/**/*.ts
+        - packages/**/*.ts
+      exclude:
+        - "**/*.spec.ts"
