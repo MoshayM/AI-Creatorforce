@@ -43,6 +43,8 @@ export const JobTypeSchema = z.enum([
   'EMBEDDING_GENERATION',
   'CHURCH_PACK_GENERATION',
   'SOCIAL_CONTENT_GENERATION',
+  // Channel library (Updates/08) — channel-scoped, no project
+  'CHANNEL_SYNC',
 ]);
 export type JobType = z.infer<typeof JobTypeSchema>;
 

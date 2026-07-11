@@ -55,6 +55,7 @@ import { promises as fsp } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { createHash } from 'crypto';
+import { ChannelSyncService } from '../modules/channels/channel-sync.service';
 
 interface JobPayload {
   jobId: string;
@@ -104,6 +105,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly pricingService: PricingService,
     private readonly trialLimits: TrialLimitsService,
     private readonly events: EventsGateway,
+    private readonly channelSync: ChannelSyncService,
   ) {
     super();
   }
@@ -241,6 +243,19 @@ export class SupervisorWorker extends WorkerHost {
     jobId: string,
     payload: Record<string, unknown>,
   ): Promise<unknown> {
+    // CHANNEL_SYNC is channel-scoped — it has no project. Skip the project
+    // lookup so findUniqueOrThrow doesn't throw on an empty projectId.
+    if (type === 'CHANNEL_SYNC') {
+      const channelId = payload['channelId'] as string;
+      if (!channelId) throw new Error('CHANNEL_SYNC requires payload.channelId');
+      this.log(jobId, projectId, 'Starting channel library sync…', `channelId=${channelId}`);
+      await this.channelSync.runSync(channelId, {
+        onProgress: (msg) => this.log(jobId, projectId, msg),
+      });
+      this.log(jobId, projectId, 'Channel sync complete ✓');
+      return { channelId, synced: true };
+    }
+
     const project = await this.prisma.project.findUniqueOrThrow({ where: { id: projectId } });
 
     switch (type) {

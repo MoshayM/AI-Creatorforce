@@ -99,7 +99,19 @@ export class JobsService {
       where: { id: jobId },
       include: { project: { select: { userId: true } } },
     });
-    if (!job || job.project.userId !== userId) throw new NotFoundException('Job not found');
+    // Project-less jobs (CHANNEL_SYNC) are owned via their channel instead.
+    let owned = job?.project ? job.project.userId === userId : false;
+    if (job && !job.project) {
+      const channelId = (job.payload as { channelId?: string } | null)?.channelId;
+      if (channelId) {
+        const channel = await this.prisma.channel.findUnique({
+          where: { id: channelId },
+          select: { userId: true },
+        });
+        owned = channel?.userId === userId;
+      }
+    }
+    if (!job || !owned) throw new NotFoundException('Job not found');
     if (['PENDING', 'QUEUED', 'RUNNING'].includes(job.status)) {
       throw new BadRequestException('This job is still active — cancel it before deleting.');
     }

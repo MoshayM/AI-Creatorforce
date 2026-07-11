@@ -101,6 +101,67 @@ apiClient.interceptors.response.use(
   },
 );
 
+// ── Library types ─────────────────────────────────────────────────────────────
+
+export interface LibraryVideo {
+  id: string;
+  youtubeVideoId: string;
+  kind: 'video' | 'short';
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  durationMs: number;
+  publishedAt: string | null;
+  viewCount: number | null;
+  likeCount: number | null;
+  commentCount: number | null;
+}
+
+export interface LibraryPlaylist {
+  id: string;
+  youtubePlaylistId: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  itemCount: number;
+}
+
+export interface LibraryPlaylistItem {
+  id: string;
+  position: number;
+  video: LibraryVideo;
+}
+
+export interface LibraryVideosPage {
+  data: LibraryVideo[];
+  nextCursor: string | null;
+}
+
+export interface LibraryPlaylistsPage {
+  data: LibraryPlaylist[];
+  nextCursor: string | null;
+}
+
+export interface LibraryPlaylistItemsPage {
+  data: LibraryPlaylistItem[];
+  nextCursor: string | null;
+}
+
+export type LibrarySyncPhase = 'IDLE' | 'VIDEOS' | 'PLAYLISTS' | 'PLAYLIST_ITEMS' | 'DONE' | 'ERROR';
+
+export interface LibrarySyncStatus {
+  phase: LibrarySyncPhase;
+  syncedVideos: number;
+  syncedPlaylists: number;
+  error?: string | null;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface LibrarySyncStartResponse {
+  jobId: string;
+}
+
 // ── Auth provider types ───────────────────────────────────────────────────────
 
 export interface OAuthProviders {
@@ -322,5 +383,33 @@ export const api = {
       apiClient.post(`/shorts-studio/clips/${shortClipId}/publish`),
     publishStatus: (shortClipId: string) =>
       apiClient.get(`/shorts-studio/clips/${shortClipId}/publish-status`),
+  },
+  library: {
+    syncStart: (channelId: string) =>
+      apiClient.post<LibrarySyncStartResponse>(`/channels/${channelId}/sync`),
+    syncStatus: (channelId: string) =>
+      apiClient.get<LibrarySyncStatus>(`/channels/${channelId}/sync-status`),
+    listVideos: (
+      channelId: string,
+      params: { cursor?: string; q?: string; type?: string; sort?: string },
+    ) => {
+      const sp = new URLSearchParams();
+      if (params.cursor) sp.set('cursor', params.cursor);
+      if (params.q) sp.set('q', params.q);
+      if (params.type) sp.set('type', params.type);
+      if (params.sort) sp.set('sort', params.sort);
+      const qs = sp.toString();
+      return apiClient.get<LibraryVideosPage>(`/channels/${channelId}/videos${qs ? `?${qs}` : ''}`);
+    },
+    listPlaylists: (channelId: string, cursor?: string) =>
+      apiClient.get<LibraryPlaylistsPage>(
+        `/channels/${channelId}/playlists${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+      ),
+    listPlaylistItems: (channelId: string, playlistId: string, cursor?: string) =>
+      apiClient.get<LibraryPlaylistItemsPage>(
+        `/channels/${channelId}/playlists/${playlistId}/items${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+      ),
+    reorderPlaylist: (channelId: string, playlistId: string, itemIds: string[]) =>
+      apiClient.patch(`/channels/${channelId}/playlists/${playlistId}/order`, { itemIds }),
   },
 };

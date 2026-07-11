@@ -85,7 +85,7 @@ export class ApprovalsService {
         select: { type: true, projectId: true, result: true },
       });
       const result = job?.result as { shortClipId?: string; exportId?: string } | null;
-      if (job?.type === 'SHORTS_EXPORT' && result?.shortClipId && result?.exportId) {
+      if (job?.type === 'SHORTS_EXPORT' && job.projectId && result?.shortClipId && result?.exportId) {
         await this.prisma.shortClip.update({
           where: { id: result.shortClipId },
           data: { status: 'APPROVED' },

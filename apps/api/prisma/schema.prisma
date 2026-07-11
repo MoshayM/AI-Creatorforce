@@ -98,6 +98,8 @@ model Channel {
   projects           Project[]
   videos             Video[]
   analyticsSnapshots AnalyticsSnapshot[]
+  libraryVideos      LibraryVideo[]
+  libraryPlaylists   LibraryPlaylist[]
 
   @@map("channels")
 }
@@ -141,7 +143,7 @@ enum ProjectStatus {
 
 model AgentJob {
   id          String    @id @default(cuid())
-  projectId   String
+  projectId   String?
   type        JobType
   status      JobStatus @default(PENDING)
   payload     Json      @default("{}")
@@ -153,7 +155,7 @@ model AgentJob {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   agentLogs AgentLog[]
   approval  Approval?
 
@@ -204,6 +206,7 @@ enum JobType {
   EMBEDDING_GENERATION
   CHURCH_PACK_GENERATION
   SOCIAL_CONTENT_GENERATION
+  CHANNEL_SYNC
 }
 
 enum JobStatus {
@@ -1590,4 +1593,82 @@ model OAuthState {
   usedAt       DateTime?
 
   @@map("oauth_states")
+}
+
+// ── Channel Library (spec §08) ────────────────────────────────────────────────
+
+model LibraryVideo {
+  id             String    @id @default(cuid())
+  channelId      String
+  youtubeVideoId String
+  kind           String    @default("video") // 'video' | 'short'
+  title          String
+  description    String?
+  thumbnailUrl   String?
+  durationMs     Int       @default(0)
+  publishedAt    DateTime?
+  viewCount      Int       @default(0)
+  likeCount      Int       @default(0)
+  commentCount   Int       @default(0)
+  archived       Boolean   @default(false) // no longer present on YouTube
+  lastSeenAt     DateTime  @default(now()) // touched every sync pass that sees it
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  channel       Channel               @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  playlistItems LibraryPlaylistItem[]
+
+  @@unique([channelId, youtubeVideoId])
+  @@index([channelId, archived, publishedAt(sort: Desc), id]) // keyset pagination
+  @@map("library_videos")
+}
+
+model LibraryPlaylist {
+  id                String   @id @default(cuid())
+  channelId         String
+  youtubePlaylistId String
+  title             String
+  description       String?
+  thumbnailUrl      String?
+  itemCount         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  channel Channel               @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  items   LibraryPlaylistItem[]
+
+  @@unique([channelId, youtubePlaylistId])
+  @@map("library_playlists")
+}
+
+model LibraryPlaylistItem {
+  id             String @id @default(cuid())
+  playlistId     String
+  libraryVideoId String
+  position       Int
+
+  playlist LibraryPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  video    LibraryVideo    @relation(fields: [libraryVideoId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, libraryVideoId])
+  @@index([playlistId, position])
+  @@map("library_playlist_items")
+}
+
+model ChannelSyncState {
+  id                     String    @id @default(cuid())
+  channelId              String    @unique
+  phase                  String    @default("IDLE") // IDLE|VIDEOS|PLAYLISTS|PLAYLIST_ITEMS|DONE|ERROR
+  videosPageToken        String?
+  playlistsPageToken     String?
+  currentPlaylistId      String?   // LibraryPlaylist.id being item-synced
+  playlistItemsPageToken String?
+  syncedVideos           Int       @default(0)
+  syncedPlaylists        Int       @default(0)
+  error                  String?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  updatedAt              DateTime  @updatedAt
+
+  @@map("channel_sync_states")
 }

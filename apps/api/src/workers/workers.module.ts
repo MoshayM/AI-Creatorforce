@@ -22,6 +22,7 @@ import { WalletModule } from '../modules/wallet/wallet.module';
 import { AiOpsModule } from '../modules/ai-ops/ai-ops.module';
 import { TrialModule } from '../modules/trial/trial.module';
 import { GatewayModule } from '../gateway/gateway.module';
+import { ChannelsModule } from '../modules/channels/channels.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { GatewayModule } from '../gateway/gateway.module';
     AiOpsModule,
     TrialModule,
     GatewayModule,
+    ChannelsModule,
   ],
   providers: [SupervisorWorker],
 })
