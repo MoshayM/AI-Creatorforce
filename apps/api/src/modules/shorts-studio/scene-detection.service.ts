@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { runFfmpegCapture } from '../media/adapters/ffmpeg.util';
 import { VideoImportService } from './video-import.service';
+import { AnalysisCacheService } from './analysis-cache.service';
 
 const SCENE_THRESHOLD = 0.3;
 /** Guard against pathological outputs on very long or very cutty videos. */
@@ -19,6 +20,7 @@ export class SceneDetectionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly videoImport: VideoImportService,
+    private readonly analysisCache: AnalysisCacheService,
   ) {}
 
   async ensureScenes(importedVideoId: string, onLog?: (msg: string) => void) {
@@ -30,6 +32,11 @@ export class SceneDetectionService {
       onLog?.(`Scenes already detected (${existing}) — reusing`);
       return { skipped: true, scenes: existing };
     }
+
+    // §12 content-hash cache: identical source already scene-scored — copy
+    // rows and skip the (long) ffmpeg pass.
+    const cached = await this.analysisCache.copyScenes(importedVideoId, onLog);
+    if (cached) return { skipped: false, scenes: cached.scenes, fromCache: true };
 
     const sourcePath = await this.videoImport.getSourcePath(importedVideoId);
     onLog?.('Detecting scene changes…');

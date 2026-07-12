@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { callAIStructured, TopicSegmentationOutputSchema, type TopicSegmentCandidate } from '@cf/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AnalysisCacheService } from './analysis-cache.service';
 
 const TOPIC_SYSTEM = `You are an expert video editor segmenting a long-form video transcript into self-contained topics for short-form clips.
 
@@ -69,7 +70,10 @@ function buildWindows(rows: TranscriptRow[]): Window[] {
 export class TopicSegmentationService {
   private readonly logger = new Logger(TopicSegmentationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly analysisCache: AnalysisCacheService,
+  ) {}
 
   async ensureTopics(importedVideoId: string, onLog?: (msg: string) => void) {
     const video = await this.prisma.importedVideo.findUnique({ where: { id: importedVideoId } });
@@ -90,6 +94,13 @@ export class TopicSegmentationService {
       _max: { endMs: true },
     });
     const coveredUpTo = lastCovered._max.endMs ?? -1;
+
+    // §12 content-hash cache — only when nothing exists yet: a partially
+    // segmented video resumes its own windows rather than mixing in copies.
+    if (coveredUpTo < 0) {
+      const cached = await this.analysisCache.copyTopics(importedVideoId, onLog);
+      if (cached) return { skipped: false, segments: cached.segments, fromCache: true };
+    }
     const pending = windows.filter((w) => w.endMs > coveredUpTo);
     if (pending.length === 0) {
       const count = await this.prisma.topicSegment.count({ where: { importedVideoId } });

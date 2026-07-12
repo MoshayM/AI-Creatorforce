@@ -6,6 +6,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { runFfmpeg } from '../media/adapters/ffmpeg.util';
 import { YouTubeReadService, type TranscriptCueDTO } from './youtube-read.service';
 import { VideoImportService } from './video-import.service';
+import { AnalysisCacheService } from './analysis-cache.service';
 
 interface WhisperSegment {
   start: number; // seconds
@@ -27,6 +28,7 @@ export class TranscriptService {
     private readonly prisma: PrismaService,
     private readonly youtubeRead: YouTubeReadService,
     private readonly videoImport: VideoImportService,
+    private readonly analysisCache: AnalysisCacheService,
   ) {}
 
   async ensureTranscript(importedVideoId: string, onLog?: (msg: string) => void) {
@@ -40,6 +42,13 @@ export class TranscriptService {
     if (existing > 0) {
       onLog?.(`Transcript already exists (${existing} segments) — reusing`);
       return { skipped: true, segments: existing, source: video.transcriptStatus };
+    }
+
+    // 0) §12 content-hash cache: byte-identical source already transcribed
+    // (same file re-imported) — copy rows, no caption fetch or ASR.
+    const cached = await this.analysisCache.copyTranscript(importedVideoId, onLog);
+    if (cached) {
+      return { skipped: false, segments: cached.segments, source: cached.source, fromCache: true };
     }
 
     // 1) Owner captions via the Data API (needs force-ssl scope)

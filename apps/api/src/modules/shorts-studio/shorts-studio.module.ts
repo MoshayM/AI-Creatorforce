@@ -12,6 +12,7 @@ import { YouTubeReadService } from './youtube-read.service';
 import { VideoImportService } from './video-import.service';
 import { TranscriptService } from './transcript.service';
 import { SceneDetectionService } from './scene-detection.service';
+import { AnalysisCacheService } from './analysis-cache.service';
 import { TopicSegmentationService } from './topic-segmentation.service';
 import { HighlightScoringService } from './highlight-scoring.service';
 import { ChapterDetectionService } from './chapter-detection.service';
@@ -39,6 +40,7 @@ import { ShortsExportService } from './shorts-export.service';
     ShortsStudioService,
     YouTubeReadService,
     VideoImportService,
+    AnalysisCacheService,
     TranscriptService,
     SceneDetectionService,
     TopicSegmentationService,

@@ -209,6 +209,23 @@
   `orgs.spec.ts` gained team coverage: create-team POST body, budget scope
   `?teamId=` + PUT `teamId`, add-member `teamId`.
 
+## What shipped in Phase 5 Wave 9 (content-hash analysis cache, §12)
+
+- **`AnalysisCacheService`** (shorts-studio): when a video's source media is
+  byte-identical to one already analyzed — same `AssetVersion.contentHash`,
+  e.g. the same file re-imported into another project or after a delete —
+  transcript segments (embeddings included), scene rows, and topic segments
+  are **copied** from the analyzed twin instead of recomputed.  A full hit
+  skips Whisper ASR, the ffmpeg scene pass, and every topic-segmentation AI
+  window.  Wired into `ensureTranscript` / `ensureScenes` / `ensureTopics`
+  ahead of provider work; topic copy only fires when zero rows exist so a
+  partially segmented video still resumes its own windows.
+- **Scoping**: same-user only — identical input yields identical output, but
+  derived rows never cross tenants, keeping access control auditable.  Rows
+  are copied, not shared, so §16 resume rules and cascade deletes keep
+  working per video.  `AssetVersion.contentHash` was already indexed — no
+  migration.
+
 ## Deliberate deviations
 
 - **Monolith modules, not microservices** (both specs §3) — same precedent
@@ -252,8 +269,9 @@
    analytics.  Note: per-key attribution needs design first — `token_usage`
    has no key column and the dev API has no AI-spending routes yet, so
    "the data is already there" only holds per-user, not per-key.
-4. Transcript/analysis cache keyed by media content hash (§12) — response +
-   embedding caches shipped; video/audio re-analysis is still uncached.
+4. ~~Transcript/analysis cache keyed by media content hash~~ — done (Wave 9):
+   `AnalysisCacheService` copies transcript/scene/topic rows across
+   content-identical videos of the same user.
 5. ~~Playwright e2e coverage for Phase 5 flows~~ — done (Wave 8):
    `admin.spec.ts` covers the dashboard; org/team flows in `orgs.spec.ts`.
 6. ~~Team-scoped budgets in the UI~~ — done (Wave 8): teams CRUD + scope
