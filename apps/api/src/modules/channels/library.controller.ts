@@ -10,6 +10,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AGENT_QUEUE } from '../jobs/jobs.constants';
+import { currentCorrelationId } from '../../common/correlation.context';
 import { LibraryService } from './library.service';
 
 class ReorderDto {
@@ -75,7 +76,7 @@ export class LibraryController {
 
     await this.queue.add(
       'CHANNEL_SYNC',
-      { jobId: job.id, projectId: '', type: 'CHANNEL_SYNC', payload: { channelId: id } },
+      { jobId: job.id, projectId: '', type: 'CHANNEL_SYNC', payload: { channelId: id }, correlationId: currentCorrelationId() },
       { jobId: job.id, attempts: 1 },
     );
 

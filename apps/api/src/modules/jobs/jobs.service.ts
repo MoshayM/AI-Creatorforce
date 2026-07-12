@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AGENT_QUEUE } from './jobs.constants';
+import { currentCorrelationId } from '../../common/correlation.context';
 import type { JobType } from '@cf/shared';
 
 @Injectable()
@@ -20,7 +21,7 @@ export class JobsService {
     });
 
     try {
-      await this.queue.add(type, { jobId: job.id, projectId, type, payload }, {
+      await this.queue.add(type, { jobId: job.id, projectId, type, payload, correlationId: currentCorrelationId() }, {
         jobId: job.id,
         attempts: 1,
       });

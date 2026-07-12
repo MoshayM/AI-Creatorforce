@@ -7,6 +7,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { correlationMiddleware } from './common/correlation.context';
 
 // Prisma BigInt columns (Asset sizes, video statistics) must survive
 // res.json() — JSON.stringify throws on BigInt without this.
@@ -18,6 +19,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.use(helmet());
+  // First in the chain so every downstream log, error envelope, and Sentry
+  // event carries the request's correlation ID.
+  app.use(correlationMiddleware);
   app.enableCors({
     origin: process.env['WEB_URL'] ?? 'http://localhost:3007',
     credentials: true,
