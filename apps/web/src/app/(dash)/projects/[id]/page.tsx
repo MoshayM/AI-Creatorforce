@@ -32,11 +32,48 @@ interface ProjectDetail {
   title: string;
   niche?: string;
   status: string;
+  /** Phase 5 §10: org whose shared wallet pays for this project's AI jobs. */
+  billingOrgId?: string | null;
   channel: { title: string; youtubeChannelId: string };
   jobs: Job[];
 }
 
 type ContentType = 'VIDEO' | 'MUSIC' | 'SHORT';
+
+/**
+ * Phase 5 §10: pick which wallet pays for this project's AI jobs. Hidden when
+ * the user belongs to no org. Spend-time gating (SPEND role + budget) happens
+ * server-side on every job regardless of this setting.
+ */
+function BillingOrgPicker({ projectId, billingOrgId }: { projectId: string; billingOrgId: string | null | undefined }) {
+  const qc = useQueryClient();
+  const { data: orgs = [] } = useQuery({
+    queryKey: ['orgs-mine'],
+    queryFn: () => api.orgs.mine().then((r) => r.data),
+  });
+  const save = useMutation({
+    mutationFn: (orgId: string) => api.projects.update(projectId, { billingOrgId: orgId }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['project', projectId] }),
+  });
+  if (orgs.length === 0) return null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <label htmlFor="project-billing-org" className="text-xs text-gray-400">Bill to</label>
+      <select
+        id="project-billing-org"
+        value={billingOrgId ?? ''}
+        onChange={(e) => save.mutate(e.target.value)}
+        disabled={save.isPending}
+        className="text-xs text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-1"
+      >
+        <option value="">Personal wallet</option>
+        {orgs.map((o) => (
+          <option key={o.id} value={o.id}>{o.name}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 // ─── Status styling ───────────────────────────────────────────────────────────
 
@@ -553,6 +590,7 @@ export default function ProjectDetailPage() {
             <p className="text-gray-500 mt-1">{project.channel.title}{project.niche ? ` · ${project.niche}` : ''}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <BillingOrgPicker projectId={id} billingOrgId={project.billingOrgId} />
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${CT_META[contentType].color}`}>
               {CT_META[contentType].label}
             </span>

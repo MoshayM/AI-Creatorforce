@@ -319,10 +319,22 @@ export class OrgsService {
   /** List all members. Any member of the org may call this. */
   async members(actorId: string, orgId: string) {
     await this.requireMembership(actorId, orgId);
-    return this.prisma.orgMembership.findMany({
+    const memberships = await this.prisma.orgMembership.findMany({
       where: { orgId },
       orderBy: { createdAt: 'asc' },
     });
+    // OrgMembership has no User relation in the schema; join manually so the
+    // management UI can show who each row belongs to.
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: memberships.map((m) => m.userId) } },
+      select: { id: true, email: true, name: true },
+    });
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return memberships.map((m) => ({
+      ...m,
+      email: byId.get(m.userId)?.email ?? null,
+      name: byId.get(m.userId)?.name ?? null,
+    }));
   }
 
   // ── Budget management ─────────────────────────────────────────────────────

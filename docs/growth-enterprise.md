@@ -167,6 +167,30 @@
   forecast cards (per-metric units: revenue minor, cost USD, subscription
   count) with a manual generate button, and provider health/cost table.
 
+## What shipped in Phase 5 Wave 7 (org billing everywhere + org UI)
+
+- **Project → org billing** (§10): `projects.billingOrgId` (nullable; set/cleared
+  via POST/PUT `/projects` — owner must be a member of the org, verified at set
+  time).  When set, the supervisor's reserve→settle for every agent job runs on
+  the org shared wallet through `orgSpend` (SPEND role + budget gate), with the
+  same consumption reconciliation as copilot turns: recorded at reserve,
+  delta-adjusted at settle, rolled back on release.  `NEEDS_APPROVAL` fails the
+  job with `ORG_APPROVAL_REQUIRED` (managers notified inside orgSpend); the user
+  re-enqueues after approval.  Voice turns bill orgs through the same
+  `/copilot/chat` `orgId` path as chat — the panel's picker covers both.
+- **Org management UI**: `/orgs` page — create org, budget-period status +
+  creation (MANAGE_BUDGET), member list + add-by-email with role +
+  `approvalRequired` (MANAGE_ORG), usage-report CSV download (VIEW_REPORTS).
+  Role capabilities mirrored client-side for display only; the server re-checks.
+  `GET /orgs/:id/members` now joins user email/name (OrgMembership has no User
+  relation — manual join).
+- **Bill-to pickers**: copilot panel header ("Bill to: personal wallet / org")
+  sends `orgId` on every turn; project detail header picker PUTs
+  `billingOrgId`.  Both hidden when the user belongs to no org.
+- **E2e**: `orgs.spec.ts` — create-org POST body, budget card render, member
+  roles render, budget PUT body, MEMBER-role control hiding, copilot turn
+  carries `orgId`, project picker PUTs `billingOrgId`.
+
 ## Deliberate deviations
 
 - **Monolith modules, not microservices** (both specs §3) — same precedent
@@ -202,14 +226,15 @@
 
 ## Next steps
 
-1. Extend org billing beyond copilot chat: the supervisor/agent-job spend
-   path and voice turns still bill the personal wallet only (same
-   `orgSpend` integration pattern applies).
-2. Web UI for orgs: org/member management pages and a "bill to org" picker
-   in the copilot panel (the API accepts `orgId` today; nothing sends it).
+1. ~~Extend org billing beyond copilot chat~~ — done (Wave 7): agent jobs bill
+   via `projects.billingOrgId`; voice turns share the copilot `orgId` path.
+2. ~~Web UI for orgs~~ — done (Wave 7): `/orgs` page + bill-to pickers in the
+   copilot panel and project detail header.
 3. Developer portal follow-ups: SDK/OpenAPI-docs autogen + per-key usage
    analytics (token-usage table already has the data).
 4. Transcript/analysis cache keyed by media content hash (§12) — response +
    embedding caches shipped; video/audio re-analysis is still uncached.
-5. Playwright e2e coverage for Phase 5 flows (org creation → budget
-   enforcement → approval gating; admin dashboard render).
+5. Playwright e2e coverage for Phase 5 flows — org flows covered (Wave 7,
+   `orgs.spec.ts`); admin dashboard render still uncovered.
+6. Team-scoped budgets in the UI: budget periods are org-wide from the page
+   today (`teamId` accepted by the API; no team picker until teams get UI).

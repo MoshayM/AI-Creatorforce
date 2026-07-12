@@ -120,6 +120,8 @@ model Project {
   status      ProjectStatus @default(DRAFT)
   niche       String?
   targetLang  String        @default("en")
+  /** Phase 5 §10: when set, agent-job spend reserves on this org's shared wallet. */
+  billingOrgId String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 

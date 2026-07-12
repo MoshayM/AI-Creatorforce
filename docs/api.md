@@ -293,6 +293,13 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | GET/POST/PATCH | `/admin/credit-packs` | `admin:pricing` — packs; creation margin-gated on real credit economics; audited |
 | GET/PUT | `/wallet/budget` | Per-user monthly budget: limit, alert threshold, hard cap. Hard cap enforced fail-closed inside `WalletService.reserve()` (`Updates/10` §Budgets) |
 | GET | `/wallet/usage-summary?days=` | Month/period spend grouped by action intent |
+| GET | `/wallet/forecast?days=` | Window-average burn projection: daily burn, days-to-empty, projected month-end spend (`Updates/10` Phase 2) |
+| GET | `/wallet/recommendations` | Rule-based optimization tips: budget pace, low balance, expiring lots, dominant action, cache-hit rate |
+| POST | `/orgs` | Create organisation — caller becomes ORG_ADMIN; org shared wallet provisioned in the same transaction (Phase 5 §10) |
+| GET | `/orgs/mine` | My orgs with my role in each |
+| GET/POST | `/orgs/:id/members` | List members (with email/name) / add-or-update by email (MANAGE_ORG); roles ORG_ADMIN, BILLING_ADMIN, TEAM_MANAGER, MEMBER + `approvalRequired` |
+| GET/PUT | `/orgs/:id/budget?teamId=` | Current budget-period status + org balance / create a period (MANAGE_BUDGET); hard cap blocks spend at exhaustion |
+| GET | `/orgs/:id/reports/usage?from=&to=&teamId=&format=json\|csv` | Per-member usage rollup (VIEW_REPORTS) |
 | POST | `/referral/code` | Get-or-create my referral code (deterministic, 8-char) (Phase 6 §10.2) |
 | POST | `/referral/redeem` | Apply a code once (self/duplicate/inactive rejected); registration auto-applies `?ref=` codes |
 | GET | `/referral/earnings` | My code, totals, per-referral status (PENDING→QUALIFIED on first recharge→REWARDED; FLAGGED withheld on shared-fingerprint fraud) |

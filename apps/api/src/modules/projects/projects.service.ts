@@ -7,11 +7,27 @@ export interface CreateProjectDto {
   description?: string;
   niche?: string;
   targetLang?: string;
+  /** Phase 5 §10: bill agent-job spend to this org's shared wallet; null/'' clears. */
+  billingOrgId?: string | null;
 }
 
 @Injectable()
 export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * A project may only bill an org the owner belongs to. Spend-time gating
+   * (SPEND role + budget) still happens in orgSpend on every job — this check
+   * exists so a typo'd or foreign orgId fails at set time, not at job time.
+   */
+  private async resolveBillingOrgId(userId: string, billingOrgId: string | null | undefined): Promise<string | null> {
+    if (!billingOrgId) return null;
+    const membership = await this.prisma.orgMembership.findUnique({
+      where: { orgId_userId: { orgId: billingOrgId, userId } },
+    });
+    if (!membership) throw new ForbiddenException('You are not a member of that organisation');
+    return billingOrgId;
+  }
 
   async create(userId: string, dto: CreateProjectDto) {
     const channel = await this.prisma.channel.findFirst({
@@ -27,6 +43,7 @@ export class ProjectsService {
         description: dto.description,
         niche: dto.niche,
         targetLang: dto.targetLang ?? 'en',
+        billingOrgId: await this.resolveBillingOrgId(userId, dto.billingOrgId),
       },
     });
   }
@@ -69,12 +86,16 @@ export class ProjectsService {
 
   async update(userId: string, projectId: string, data: Partial<CreateProjectDto> & { status?: string }) {
     await this.get(userId, projectId);
-    const { channelId: _channelId, status, ...rest } = data;
+    const { channelId: _channelId, status, billingOrgId, ...rest } = data;
     return this.prisma.project.update({
       where: { id: projectId },
       data: {
         ...rest,
         ...(status ? { status: status as import('@prisma/client').ProjectStatus } : {}),
+        // Distinguish "not sent" (leave as-is) from null/'' (clear the org link)
+        ...(billingOrgId !== undefined
+          ? { billingOrgId: await this.resolveBillingOrgId(userId, billingOrgId) }
+          : {}),
       },
     });
   }

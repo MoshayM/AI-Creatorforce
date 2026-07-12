@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bot, X, Send, Mic, MicOff, Loader2, Volume2, VolumeX, ShieldCheck } from 'lucide-react';
-import { apiClient } from '@/lib/api';
+import { Bot, X, Send, Mic, MicOff, Loader2, Volume2, VolumeX, ShieldCheck, Building2 } from 'lucide-react';
+import { apiClient, api, type Org } from '@/lib/api';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -62,6 +62,16 @@ export function CopilotPanel() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const voiceSupported = typeof window !== 'undefined' && !!getRecognition();
+  // Phase 5 §10: bill turns (chat + voice) to an org shared wallet; '' = personal
+  const [orgs, setOrgs] = useState<Org[]>([]);
+  const [billingOrgId, setBillingOrgId] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    api.orgs.mine()
+      .then((r) => setOrgs(r.data))
+      .catch(() => setOrgs([])); // not signed in / no orgs — picker stays hidden
+  }, [open]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
@@ -106,6 +116,7 @@ export function CopilotPanel() {
         ...(confirmedCommand ? { confirmedCommand } : {}),
         // Lets a spoken "yes" complete the awaiting confirmation
         ...(!confirmedCommand && pending ? { pendingCommand: pending } : {}),
+        ...(billingOrgId ? { orgId: billingOrgId } : {}),
       });
       const data = res.data as CopilotResponse;
       setMessages((m) => [...m, { role: 'assistant', content: data.reply, fromCache: data.fromCache }]);
@@ -125,7 +136,7 @@ export function CopilotPanel() {
     } finally {
       setBusy(false);
     }
-  }, [messages, speak, pending]);
+  }, [messages, speak, pending, billingOrgId]);
 
   const startListening = useCallback(() => {
     const rec = getRecognition();
@@ -181,6 +192,7 @@ export function CopilotPanel() {
           onClick={() => setOpen(true)}
           className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-b from-[#9d6ff0] to-[#7c4fd8] text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
           title="Copilot — type or speak to control the pipeline"
+          aria-label="Open Copilot"
         >
           <Bot className="w-7 h-7" />
         </button>
@@ -210,6 +222,25 @@ export function CopilotPanel() {
               <X className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Bill-to picker — only shown when the user belongs to an org */}
+          {orgs.length > 0 && (
+            <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+              <Building2 className="w-3.5 h-3.5 text-gray-400" />
+              <label htmlFor="copilot-billing-org" className="text-[11px] text-gray-500">Bill to</label>
+              <select
+                id="copilot-billing-org"
+                value={billingOrgId}
+                onChange={(e) => setBillingOrgId(e.target.value)}
+                className="flex-1 text-[11px] text-gray-700 bg-transparent border border-gray-200 rounded px-1.5 py-0.5"
+              >
+                <option value="">Personal wallet</option>
+                {orgs.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Messages */}
           <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-3">

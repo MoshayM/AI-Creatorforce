@@ -21,6 +21,7 @@ import { MediaModule } from '../modules/media/media.module';
 import { ShortsStudioModule } from '../modules/shorts-studio/shorts-studio.module';
 import { WalletModule } from '../modules/wallet/wallet.module';
 import { AiOpsModule } from '../modules/ai-ops/ai-ops.module';
+import { OrgsModule } from '../modules/orgs/orgs.module';
 import { TrialModule } from '../modules/trial/trial.module';
 import { GatewayModule } from '../gateway/gateway.module';
 import { ChannelsModule } from '../modules/channels/channels.module';
@@ -47,6 +48,7 @@ import { ChannelsModule } from '../modules/channels/channels.module';
     ShortsStudioModule,
     WalletModule,
     AiOpsModule,
+    OrgsModule,
     TrialModule,
     GatewayModule,
     ChannelsModule,

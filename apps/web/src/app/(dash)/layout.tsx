@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge } from 'lucide-react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2 } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -10,6 +10,7 @@ const NAV = [
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
   { href: '/library', icon: ListVideo, label: 'Library' },
   { href: '/wallet', icon: Wallet, label: 'Wallet' },
+  { href: '/orgs', icon: Building2, label: 'Organization' },
   { href: '/growth', icon: Gift, label: 'Growth' },
   { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
   { href: '/approvals', icon: CheckSquare, label: 'Approvals' },

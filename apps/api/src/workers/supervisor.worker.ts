@@ -40,8 +40,10 @@ import { validateMediaFile, formatIssues } from '../modules/media/media-validati
 import { buildSrt, buildVtt, fitCuesToDuration } from '../modules/media/subtitle.util';
 import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, type PipelineScope, type PipelineStage } from './pipeline-plan';
 import { newAccumulator, runWithAiContext } from '../common/ai-usage.context';
+import { runWithCorrelationId } from '../common/correlation.context';
 import { WalletService, billingEnforced, creditsForCost } from '../modules/wallet/wallet.service';
 import { PricingService } from '../modules/ai-ops/pricing.service';
+import { OrgsService } from '../modules/orgs/orgs.service';
 import { TrialLimitsService } from '../modules/trial/trial-limits.service';
 import { EventsGateway } from '../gateway/events.gateway';
 import { AGENT_QUEUE } from '../modules/jobs/jobs.module';
@@ -54,7 +56,7 @@ import type {
 import { promises as fsp } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { ChannelSyncService } from '../modules/channels/channel-sync.service';
 import { MetricsService } from '../modules/metrics/metrics.service';
 
@@ -63,6 +65,8 @@ interface JobPayload {
   projectId: string;
   type: JobType;
   payload: Record<string, unknown>;
+  /** Correlation ID adopted from the enqueuing request; minted here if absent. */
+  correlationId?: string;
 }
 
 @Injectable()
@@ -104,6 +108,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly shortsExport: ShortsExportService,
     private readonly walletService: WalletService,
     private readonly pricingService: PricingService,
+    private readonly orgs: OrgsService,
     private readonly trialLimits: TrialLimitsService,
     private readonly events: EventsGateway,
     private readonly channelSync: ChannelSyncService,
@@ -113,6 +118,12 @@ export class SupervisorWorker extends WorkerHost {
   }
 
   async process(job: Job<JobPayload>): Promise<unknown> {
+    // Adopt the enqueuing request's correlation ID so worker-side logs and
+    // Sentry events trace back to the originating request; retries reuse it.
+    return runWithCorrelationId(job.data.correlationId ?? randomUUID(), () => this.processJob(job));
+  }
+
+  private async processJob(job: Job<JobPayload>): Promise<unknown> {
     const { jobId, projectId, type, payload } = job.data;
     const t0 = Date.now();
 
@@ -125,7 +136,10 @@ export class SupervisorWorker extends WorkerHost {
     const accumulator = newAccumulator();
     let reservationId: string | null = null;
     let holdUserId: string | null = null;
-    const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { userId: true } });
+    // Phase 5 §10: when the project bills an org, the hold sits on the org
+    // shared wallet and budget consumption must be reconciled on settle/release.
+    let orgBilling: { orgId: string; teamId: string | null; reserved: number } | null = null;
+    const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { userId: true, billingOrgId: true } });
 
     // Phase 6 §7: trial feature gate — server-side, before any spend.
     // Non-trial users pass through untouched.
@@ -152,8 +166,25 @@ export class SupervisorWorker extends WorkerHost {
         lockedPrice = await this.pricingService.resolvePrice({ action: type }).catch(() => null);
         const estimate = lockedPrice?.creditCost ?? Math.max(1, Number(process.env['JOB_RESERVE_CREDITS']) || 50);
         try {
-          const reservation = await this.walletService.reserve(holdUserId, estimate, `job:${jobId}`, 'AI_REQUEST', jobId);
-          reservationId = reservation.id;
+          if (project.billingOrgId) {
+            // Org billing: orgSpend gates SPEND role + team/org budget and
+            // holds on the org shared wallet (same pattern as copilot turns).
+            const spend = await this.orgs.orgSpend(holdUserId, project.billingOrgId, {
+              amount: estimate,
+              action: type,
+              memberUserId: holdUserId,
+            });
+            if (spend.status === 'NEEDS_APPROVAL') {
+              // Managers were notified inside orgSpend; the job cannot run
+              // until one approves and the user re-enqueues it.
+              throw new Error('ORG_APPROVAL_REQUIRED: spend exceeds your approval threshold — a manager has been notified');
+            }
+            reservationId = spend.reservationId;
+            orgBilling = { orgId: project.billingOrgId, teamId: spend.teamId, reserved: estimate };
+          } else {
+            const reservation = await this.walletService.reserve(holdUserId, estimate, `job:${jobId}`, 'AI_REQUEST', jobId);
+            reservationId = reservation.id;
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           await this.prisma.agentJob.update({
@@ -179,7 +210,15 @@ export class SupervisorWorker extends WorkerHost {
         await this.walletService.settleReservation(reservationId, settleCredits, {
           jobId, jobType: type, costUsd: accumulator.costUsd, calls: accumulator.calls,
           ...(lockedPrice ? { priceLocked: true, pricingRuleId: lockedPrice.ruleId } : {}),
+          ...(orgBilling ? { orgId: orgBilling.orgId, memberUserId: holdUserId } : {}),
         }).catch((e) => console.warn(`[credits] settle failed for job ${jobId}: ${e instanceof Error ? e.message : String(e)}`));
+        // Budget consumption was recorded for the reserved estimate — adjust
+        // to what actually settled so the period reflects real spend.
+        if (orgBilling && settleCredits !== orgBilling.reserved) {
+          await this.orgs
+            .recordConsumption(orgBilling.orgId, orgBilling.teamId ?? undefined, settleCredits - orgBilling.reserved)
+            .catch(() => undefined);
+        }
       }
       const elapsed = Date.now() - t0;
       // METADATA sets job to WAITING_APPROVAL mid-dispatch — don't overwrite that status,
@@ -205,6 +244,12 @@ export class SupervisorWorker extends WorkerHost {
       // §5.3 step 4: failed run → release the hold, debit nothing
       if (reservationId) {
         await this.walletService.releaseReservation(reservationId).catch(() => undefined);
+        // The hold debited nothing — roll the budget consumption back too.
+        if (orgBilling) {
+          await this.orgs
+            .recordConsumption(orgBilling.orgId, orgBilling.teamId ?? undefined, -orgBilling.reserved)
+            .catch(() => undefined);
+        }
       }
       const msg = err instanceof Error ? err.message : String(err);
       await this.prisma.agentJob.update({

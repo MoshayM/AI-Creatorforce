@@ -208,6 +208,42 @@ export interface WalletTransaction {
   metadata: Record<string, unknown>;
 }
 
+// ── Organization types (Phase 5 §10) ──────────────────────────────────────────
+
+export interface Org {
+  id: string;
+  name: string;
+  ownerUserId: string;
+  billingEmail: string | null;
+  status: string;
+  /** The caller's role in this org (ORG_ADMIN | TEAM_MANAGER | BILLING_ADMIN | MEMBER). */
+  role: string;
+}
+
+export interface OrgMember {
+  id: string;
+  orgId: string;
+  userId: string;
+  teamId: string | null;
+  role: string;
+  approvalRequired: boolean;
+  email: string | null;
+  name: string | null;
+}
+
+export interface OrgBudgetStatus {
+  period: {
+    id: string;
+    periodStart: string;
+    periodEnd: string;
+    allocatedCredits: number;
+    consumedCredits: number;
+    hardCap: boolean;
+  } | null;
+  remaining: number | null;
+  orgBalance: number;
+}
+
 // ── Trial types ───────────────────────────────────────────────────────────────
 
 export type TrialStatus = 'ACTIVE' | 'EXPIRED' | 'CONVERTED' | 'REVOKED' | 'PENDING_REVIEW';
@@ -439,6 +475,21 @@ export const api = {
       apiClient.get<CreditForecast>(`/wallet/forecast?days=${days}`),
     recommendations: () =>
       apiClient.get<CreditRecommendation[]>('/wallet/recommendations'),
+  },
+  orgs: {
+    mine: () => apiClient.get<Org[]>('/orgs/mine'),
+    create: (data: { name: string; billingEmail?: string }) =>
+      apiClient.post<Org>('/orgs', data),
+    members: (orgId: string) => apiClient.get<OrgMember[]>(`/orgs/${orgId}/members`),
+    addMember: (orgId: string, data: { email: string; role?: string; approvalRequired?: boolean }) =>
+      apiClient.post<OrgMember>(`/orgs/${orgId}/members`, data),
+    budget: (orgId: string, teamId?: string) =>
+      apiClient.get<OrgBudgetStatus>(`/orgs/${orgId}/budget${teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''}`),
+    setBudget: (orgId: string, data: { periodStart: string; periodEnd: string; allocatedCredits: number; hardCap?: boolean; teamId?: string }) =>
+      apiClient.put(`/orgs/${orgId}/budget`, data),
+    usageReportCsvUrl: (orgId: string) => `/orgs/${orgId}/reports/usage?format=csv`,
+    usageReport: (orgId: string, params?: { from?: string; to?: string; teamId?: string }) =>
+      apiClient.get(`/orgs/${orgId}/reports/usage`, { params }),
   },
   media: {
     listExports: (projectId: string) =>

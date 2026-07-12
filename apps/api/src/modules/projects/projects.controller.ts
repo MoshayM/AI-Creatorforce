@@ -11,6 +11,8 @@ class CreateProjectDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() niche?: string;
   @IsOptional() @IsString() targetLang?: string;
+  /** Phase 5 §10: bill agent-job spend to this org; empty string clears. */
+  @IsOptional() @IsString() billingOrgId?: string;
 }
 
 @ApiTags('projects')

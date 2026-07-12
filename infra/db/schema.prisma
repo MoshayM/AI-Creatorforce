@@ -120,6 +120,8 @@ model Project {
   status      ProjectStatus @default(DRAFT)
   niche       String?
   targetLang  String        @default("en")
+  /** Phase 5 §10: when set, agent-job spend reserves on this org's shared wallet. */
+  billingOrgId String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -605,6 +607,12 @@ model PromptVersion {
 }
 
 // ── Organizations & Team Billing (Phase 5 Wave 3, §4.5–4.9) ─────────────────
+// An Organization owns one shared wallet and may contain Teams.  OrgMembership
+// carries the billing role (ORG_ADMIN | TEAM_MANAGER | BILLING_ADMIN | MEMBER).
+// BudgetPeriod tracks credit allocations per org (optionally per team) with hard-
+// or soft-cap enforcement.  The existing per-user Wallet is kept intact; Wallet
+// is made polymorphic (exactly one of userId / orgId must be set — enforced by a
+// DB CHECK constraint in the migration).
 
 model Organization {
   id           String   @id @default(cuid())
@@ -760,7 +768,11 @@ enum SocialContentKind {
 // Credits are integers, never floats. All mutations go through WalletService.
 
 // Phase 5 Wave 3: Wallet is now polymorphic — exactly ONE of userId / orgId must
-// be non-null.  DB CHECK constraint in migration 20260711170000_org_billing.
+// be non-null.  This is enforced by a DB-level CHECK constraint added in
+// migration 20260711170000_org_billing.  Prisma relations are kept conditional:
+// userId nullable + orgId nullable, each @unique so lookups stay O(1).
+// Existing code that does wallet.userId! or ensureWallet(userId) is unaffected
+// because userId is still set for all user wallets; orgId is purely additive.
 model Wallet {
   id                 String   @id @default(cuid())
   /** Null only for org wallets. */
