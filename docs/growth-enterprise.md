@@ -191,6 +191,24 @@
   roles render, budget PUT body, MEMBER-role control hiding, copilot turn
   carries `orgId`, project picker PUTs `billingOrgId`.
 
+## What shipped in Phase 5 Wave 8 (teams UI + admin e2e)
+
+- **Teams API**: `POST /orgs/:id/teams` (MANAGE_ORG) and `GET /orgs/:id/teams`
+  (any member).  The `Team` model already existed (Wave 3, nullable `orgId`);
+  these endpoints only cover org-linked teams.  Budget (`PUT /orgs/:id/budget`)
+  and member (`POST /orgs/:id/members`) endpoints now validate a supplied
+  `teamId` names a team of *that* org — a foreign/typo'd id previously created
+  a period that never matched any member and silently never enforced.
+- **Teams UI** (closes next-step 6): Teams card on `/orgs` (chip list +
+  create, MANAGE_ORG); budget card gained a scope picker (org-wide / per-team)
+  driving both the status query (`?teamId=`) and new-period `teamId`; the
+  add-member form gained a team select and the member table a Team column.
+  Team controls stay hidden while the org has no teams.
+- **E2e**: `admin.spec.ts` (closes next-step 5) — KPI/forecast/provider render
+  with per-metric units, generate-forecasts POST, 403 → access-required state.
+  `orgs.spec.ts` gained team coverage: create-team POST body, budget scope
+  `?teamId=` + PUT `teamId`, add-member `teamId`.
+
 ## Deliberate deviations
 
 - **Monolith modules, not microservices** (both specs §3) — same precedent
@@ -231,10 +249,12 @@
 2. ~~Web UI for orgs~~ — done (Wave 7): `/orgs` page + bill-to pickers in the
    copilot panel and project detail header.
 3. Developer portal follow-ups: SDK/OpenAPI-docs autogen + per-key usage
-   analytics (token-usage table already has the data).
+   analytics.  Note: per-key attribution needs design first — `token_usage`
+   has no key column and the dev API has no AI-spending routes yet, so
+   "the data is already there" only holds per-user, not per-key.
 4. Transcript/analysis cache keyed by media content hash (§12) — response +
    embedding caches shipped; video/audio re-analysis is still uncached.
-5. Playwright e2e coverage for Phase 5 flows — org flows covered (Wave 7,
-   `orgs.spec.ts`); admin dashboard render still uncovered.
-6. Team-scoped budgets in the UI: budget periods are org-wide from the page
-   today (`teamId` accepted by the API; no team picker until teams get UI).
+5. ~~Playwright e2e coverage for Phase 5 flows~~ — done (Wave 8):
+   `admin.spec.ts` covers the dashboard; org/team flows in `orgs.spec.ts`.
+6. ~~Team-scoped budgets in the UI~~ — done (Wave 8): teams CRUD + scope
+   picker on the budget card and team assignment on the member form.

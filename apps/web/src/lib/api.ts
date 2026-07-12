@@ -231,6 +231,14 @@ export interface OrgMember {
   name: string | null;
 }
 
+export interface OrgTeam {
+  id: string;
+  name: string;
+  ownerId: string;
+  orgId: string;
+  createdAt: string;
+}
+
 export interface OrgBudgetStatus {
   period: {
     id: string;
@@ -481,8 +489,11 @@ export const api = {
     create: (data: { name: string; billingEmail?: string }) =>
       apiClient.post<Org>('/orgs', data),
     members: (orgId: string) => apiClient.get<OrgMember[]>(`/orgs/${orgId}/members`),
-    addMember: (orgId: string, data: { email: string; role?: string; approvalRequired?: boolean }) =>
+    addMember: (orgId: string, data: { email: string; role?: string; approvalRequired?: boolean; teamId?: string }) =>
       apiClient.post<OrgMember>(`/orgs/${orgId}/members`, data),
+    teams: (orgId: string) => apiClient.get<OrgTeam[]>(`/orgs/${orgId}/teams`),
+    createTeam: (orgId: string, data: { name: string }) =>
+      apiClient.post<OrgTeam>(`/orgs/${orgId}/teams`, data),
     budget: (orgId: string, teamId?: string) =>
       apiClient.get<OrgBudgetStatus>(`/orgs/${orgId}/budget${teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''}`),
     setBudget: (orgId: string, data: { periodStart: string; periodEnd: string; allocatedCredits: number; hardCap?: boolean; teamId?: string }) =>

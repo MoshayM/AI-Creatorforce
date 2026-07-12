@@ -292,6 +292,7 @@ export class OrgsService {
    */
   async addMember(actorId: string, orgId: string, dto: AddMemberDto) {
     await this.requireOrgAction(actorId, orgId, 'MANAGE_ORG');
+    if (dto.teamId) await this.assertTeamInOrg(orgId, dto.teamId);
 
     const target = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (!target) throw new NotFoundException(`No user registered with email ${dto.email}`);
@@ -337,6 +338,34 @@ export class OrgsService {
     }));
   }
 
+  // ── Teams ─────────────────────────────────────────────────────────────────
+
+  /** Create a team inside the org. Actor must hold MANAGE_ORG. */
+  async createTeam(actorId: string, orgId: string, name: string) {
+    await this.requireOrgAction(actorId, orgId, 'MANAGE_ORG');
+    const team = await this.prisma.team.create({
+      data: { name, ownerId: actorId, orgId },
+    });
+    this.logger.log(`[orgs] createTeam org=${orgId} team=${team.id} actor=${actorId}`);
+    return team;
+  }
+
+  /** List the org's teams. Any member may call this. */
+  async listTeams(actorId: string, orgId: string) {
+    await this.requireMembership(actorId, orgId);
+    return this.prisma.team.findMany({ where: { orgId }, orderBy: { createdAt: 'asc' } });
+  }
+
+  /**
+   * A teamId sent to budget/member endpoints must name a team of THIS org —
+   * a foreign or typo'd id would otherwise create a budget period that never
+   * matches any member's teamId and silently never enforces.
+   */
+  private async assertTeamInOrg(orgId: string, teamId: string): Promise<void> {
+    const team = await this.prisma.team.findFirst({ where: { id: teamId, orgId }, select: { id: true } });
+    if (!team) throw new BadRequestException('teamId does not name a team of this organisation');
+  }
+
   // ── Budget management ─────────────────────────────────────────────────────
 
   /**
@@ -345,6 +374,7 @@ export class OrgsService {
    */
   async setBudget(actorId: string, orgId: string, dto: SetBudgetDto) {
     await this.requireOrgAction(actorId, orgId, 'MANAGE_BUDGET');
+    if (dto.teamId) await this.assertTeamInOrg(orgId, dto.teamId);
 
     if (dto.periodEnd <= dto.periodStart) {
       throw new BadRequestException('periodEnd must be after periodStart');

@@ -1,8 +1,8 @@
 'use client';
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Building2, Users, PiggyBank, PlusCircle, Loader2, AlertCircle, Download, ShieldCheck } from 'lucide-react';
-import { api, apiClient, type Org, type OrgMember, type OrgBudgetStatus } from '@/lib/api';
+import { Building2, Users, PiggyBank, PlusCircle, Loader2, AlertCircle, Download, ShieldCheck, Layers } from 'lucide-react';
+import { api, apiClient, type Org, type OrgMember, type OrgBudgetStatus, type OrgTeam } from '@/lib/api';
 import { getErrorMessage } from '@/lib/getErrorMessage';
 
 // Role → capability mirror of the server's orgRoleAllows (UI hint only — the
@@ -85,20 +85,31 @@ function CreateOrgCard({ onCreated }: { onCreated: (org: Org) => void }) {
   );
 }
 
+// ── Teams hook (shared by budget/members/teams cards; react-query dedupes) ────
+
+function useOrgTeams(orgId: string) {
+  return useQuery<OrgTeam[]>({
+    queryKey: ['org-teams', orgId],
+    queryFn: () => api.orgs.teams(orgId).then((r) => r.data),
+  });
+}
+
 // ── Budget card ───────────────────────────────────────────────────────────────
 
 function BudgetCard({ org }: { org: Org }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [teamId, setTeamId] = useState('');
   const [allocated, setAllocated] = useState('1000');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [hardCap, setHardCap] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const { data: teams = [] } = useOrgTeams(org.id);
   const { data: budget, isLoading } = useQuery<OrgBudgetStatus>({
-    queryKey: ['org-budget', org.id],
-    queryFn: () => api.orgs.budget(org.id).then((r) => r.data),
+    queryKey: ['org-budget', org.id, teamId],
+    queryFn: () => api.orgs.budget(org.id, teamId || undefined).then((r) => r.data),
   });
 
   const save = useMutation({
@@ -108,6 +119,9 @@ function BudgetCard({ org }: { org: Org }) {
         periodEnd: new Date(end).toISOString(),
         allocatedCredits: parseInt(allocated, 10) || 0,
         hardCap,
+        // A period created while a team is selected budgets that team;
+        // org-wide otherwise — mirrored by the status query above.
+        ...(teamId ? { teamId } : {}),
       }),
     onSuccess: () => {
       setEditing(false);
@@ -129,11 +143,26 @@ function BudgetCard({ org }: { org: Org }) {
           <PiggyBank className="w-4 h-4 text-brand-600" />
           <span className="text-sm font-semibold text-gray-800">Shared Wallet &amp; Budget</span>
         </div>
-        {canManageBudget(org.role) && !editing && (
-          <button onClick={() => setEditing(true)} className="text-xs text-brand-600 hover:underline">
-            New budget period
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {teams.length > 0 && (
+            <select
+              aria-label="Budget scope"
+              value={teamId}
+              onChange={(e) => setTeamId(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1 text-xs bg-white"
+            >
+              <option value="">Org-wide</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>Team: {t.name}</option>
+              ))}
+            </select>
+          )}
+          {canManageBudget(org.role) && !editing && (
+            <button onClick={() => setEditing(true)} className="text-xs text-brand-600 hover:underline">
+              New budget period
+            </button>
+          )}
+        </div>
       </div>
 
       {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
@@ -169,6 +198,13 @@ function BudgetCard({ org }: { org: Org }) {
 
       {editing && (
         <div className="space-y-3 border-t border-gray-100 pt-3">
+          <p className="text-xs text-gray-500">
+            New period for{' '}
+            <span className="font-medium text-gray-700">
+              {teamId ? `team "${teams.find((t) => t.id === teamId)?.name ?? teamId}"` : 'the whole organization'}
+            </span>
+            {' '}— switch the scope picker above to budget a team instead.
+          </p>
           <div className="grid sm:grid-cols-3 gap-3">
             <div>
               <label htmlFor="budget-start" className="block text-xs text-gray-600 mb-1">Period start</label>
@@ -217,6 +253,7 @@ function MembersCard({ org }: { org: Org }) {
   const qc = useQueryClient();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('MEMBER');
+  const [teamId, setTeamId] = useState('');
   const [approvalRequired, setApprovalRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -224,9 +261,12 @@ function MembersCard({ org }: { org: Org }) {
     queryKey: ['org-members', org.id],
     queryFn: () => api.orgs.members(org.id).then((r) => r.data),
   });
+  const { data: teams = [] } = useOrgTeams(org.id);
+  const teamName = (id: string | null) => (id ? teams.find((t) => t.id === id)?.name ?? id : '—');
 
   const add = useMutation({
-    mutationFn: () => api.orgs.addMember(org.id, { email: email.trim(), role, approvalRequired }),
+    mutationFn: () =>
+      api.orgs.addMember(org.id, { email: email.trim(), role, approvalRequired, ...(teamId ? { teamId } : {}) }),
     onSuccess: () => {
       setEmail('');
       setError(null);
@@ -251,6 +291,7 @@ function MembersCard({ org }: { org: Org }) {
             <tr className="text-left text-xs text-gray-400">
               <th className="py-1.5 font-medium">Member</th>
               <th className="py-1.5 font-medium">Role</th>
+              <th className="py-1.5 font-medium">Team</th>
               <th className="py-1.5 font-medium">Spend approval</th>
             </tr>
           </thead>
@@ -263,6 +304,7 @@ function MembersCard({ org }: { org: Org }) {
                     {m.role.replace(/_/g, ' ')}
                   </span>
                 </td>
+                <td className="py-2 text-gray-500 text-xs">{teamName(m.teamId)}</td>
                 <td className="py-2 text-gray-500 text-xs">
                   {m.approvalRequired ? (
                     <span className="inline-flex items-center gap-1 text-amber-700"><ShieldCheck className="w-3.5 h-3.5" /> manager approval</span>
@@ -278,7 +320,7 @@ function MembersCard({ org }: { org: Org }) {
 
       {canManageOrg(org.role) && (
         <div className="border-t border-gray-100 pt-3 space-y-3">
-          <div className="grid sm:grid-cols-3 gap-3">
+          <div className={`grid gap-3 ${teams.length > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
             <div>
               <label htmlFor="member-email" className="block text-xs text-gray-600 mb-1">Email (must be registered)</label>
               <input id="member-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
@@ -295,6 +337,18 @@ function MembersCard({ org }: { org: Org }) {
                 <option value="ORG_ADMIN">Org admin</option>
               </select>
             </div>
+            {teams.length > 0 && (
+              <div>
+                <label htmlFor="member-team" className="block text-xs text-gray-600 mb-1">Team</label>
+                <select id="member-team" value={teamId} onChange={(e) => setTeamId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="">No team</option>
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex items-end pb-2">
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={approvalRequired} onChange={(e) => setApprovalRequired(e.target.checked)} />
@@ -313,6 +367,73 @@ function MembersCard({ org }: { org: Org }) {
             {add.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
             Add member
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Teams card ────────────────────────────────────────────────────────────────
+
+function TeamsCard({ org }: { org: Org }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: teams = [], isLoading } = useOrgTeams(org.id);
+
+  const create = useMutation({
+    mutationFn: () => api.orgs.createTeam(org.id, { name: name.trim() }),
+    onSuccess: () => {
+      setName('');
+      setError(null);
+      void qc.invalidateQueries({ queryKey: ['org-teams', org.id] });
+    },
+    onError: (e) => setError(getErrorMessage(e)),
+  });
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Layers className="w-4 h-4 text-brand-600" />
+        <span className="text-sm font-semibold text-gray-800">Teams</span>
+        <span className="text-xs text-gray-400">{teams.length}</span>
+      </div>
+      <p className="text-xs text-gray-500">
+        Teams scope budgets: a budget period created for a team only gates members assigned to it.
+      </p>
+
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+
+      {teams.length > 0 && (
+        <ul className="flex flex-wrap gap-2">
+          {teams.map((t) => (
+            <li key={t.id} className="px-2.5 py-1 rounded-full bg-gray-100 text-xs text-gray-700">{t.name}</li>
+          ))}
+        </ul>
+      )}
+
+      {canManageOrg(org.role) && (
+        <div className="border-t border-gray-100 pt-3 space-y-3">
+          <div className="flex items-end gap-3">
+            <div className="flex-1 max-w-xs">
+              <label htmlFor="team-name" className="block text-xs text-gray-600 mb-1">Team name</label>
+              <input id="team-name" value={name} onChange={(e) => setName(e.target.value)}
+                placeholder="Video production"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <button
+              onClick={() => create.mutate()}
+              disabled={!name.trim() || create.isPending}
+              className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2"
+            >
+              {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+              Create team
+            </button>
+          </div>
+          {error && (
+            <p className="flex items-center gap-1.5 text-xs text-red-600"><AlertCircle className="w-3.5 h-3.5" /> {error}</p>
+          )}
         </div>
       )}
     </div>
@@ -416,6 +537,7 @@ export default function OrgsPage() {
             </span>
           </div>
           <BudgetCard org={selected} />
+          <TeamsCard org={selected} />
           <MembersCard org={selected} />
           <UsageReportCard org={selected} />
         </section>

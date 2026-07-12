@@ -297,8 +297,9 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | GET | `/wallet/recommendations` | Rule-based optimization tips: budget pace, low balance, expiring lots, dominant action, cache-hit rate |
 | POST | `/orgs` | Create organisation — caller becomes ORG_ADMIN; org shared wallet provisioned in the same transaction (Phase 5 §10) |
 | GET | `/orgs/mine` | My orgs with my role in each |
-| GET/POST | `/orgs/:id/members` | List members (with email/name) / add-or-update by email (MANAGE_ORG); roles ORG_ADMIN, BILLING_ADMIN, TEAM_MANAGER, MEMBER + `approvalRequired` |
-| GET/PUT | `/orgs/:id/budget?teamId=` | Current budget-period status + org balance / create a period (MANAGE_BUDGET); hard cap blocks spend at exhaustion |
+| GET/POST | `/orgs/:id/members` | List members (with email/name) / add-or-update by email (MANAGE_ORG); roles ORG_ADMIN, BILLING_ADMIN, TEAM_MANAGER, MEMBER + `approvalRequired`; `teamId` validated against the org (Wave 8) |
+| GET/POST | `/orgs/:id/teams` | List teams (any member) / create a team (MANAGE_ORG) — teams scope budget periods and member assignment (Wave 8) |
+| GET/PUT | `/orgs/:id/budget?teamId=` | Current budget-period status + org balance / create a period (MANAGE_BUDGET); hard cap blocks spend at exhaustion; `teamId` validated against the org (Wave 8) |
 | GET | `/orgs/:id/reports/usage?from=&to=&teamId=&format=json\|csv` | Per-member usage rollup (VIEW_REPORTS) |
 | POST | `/referral/code` | Get-or-create my referral code (deterministic, 8-char) (Phase 6 §10.2) |
 | POST | `/referral/redeem` | Apply a code once (self/duplicate/inactive rejected); registration auto-applies `?ref=` codes |

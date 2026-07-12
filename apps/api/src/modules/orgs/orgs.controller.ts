@@ -17,6 +17,7 @@ import { OrgsService, usageReportCsv } from './orgs.service';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { AddMemberDto } from './dto/add-member.dto';
 import { SetBudgetDto } from './dto/set-budget.dto';
+import { CreateTeamDto } from './dto/create-team.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('orgs')
@@ -49,6 +50,22 @@ export class OrgsController {
   @Get(':id/members')
   members(@CurrentUser() user: JwtPayload, @Param('id') orgId: string) {
     return this.orgs.members(user.sub, orgId);
+  }
+
+  /** POST /orgs/:id/teams — create a team (requires MANAGE_ORG) */
+  @Post(':id/teams')
+  createTeam(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') orgId: string,
+    @Body() dto: CreateTeamDto,
+  ) {
+    return this.orgs.createTeam(user.sub, orgId, dto.name);
+  }
+
+  /** GET /orgs/:id/teams — list teams (any org member) */
+  @Get(':id/teams')
+  teams(@CurrentUser() user: JwtPayload, @Param('id') orgId: string) {
+    return this.orgs.listTeams(user.sub, orgId);
   }
 
   /** PUT /orgs/:id/budget — create a budget period (requires MANAGE_BUDGET) */
