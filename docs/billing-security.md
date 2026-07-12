@@ -147,15 +147,21 @@
   bucket (`planLotDebit`, pure + tested); expired lots are unspendable even
   before the sweep; ledger entries record the lot split.
 - **Expiry job** (daily, before ledger reconciliation): idempotent EXPIRY
-  ledger debit per lot, counters synced. Expiry *email* notifications (7/3/1
-  days) remain open — no outbound email infra exists.
+  ledger debit per lot, counters synced.
+- **Expiry warnings** (Phase 5 Wave 11, `LotExpiryJob` hourly): in-app
+  `credits.expiring` at the 7/3/1 day-marks per lot with credits remaining
+  (day-mark logic shared with trial expiry; each mark fires once per lot).
+  Trial lots excluded (TrialExpiryJob already announces those); org wallets
+  excluded (budget-period machinery owns org warnings).  *Email* delivery
+  remains the notify() extension point — no outbound email infra exists.
 - **Fraud freeze**: `charge.dispute.created` sets `user.rechargesFrozen`;
   recharge attempts fail closed with `FRAUD_HOLD`;
   `POST /admin/users/:id/recharges-frozen` (audited) lifts it after review.
 
 ## Next steps
 
-1. Expiry warning notifications (7/3/1 days) once an email/notification
-   channel exists.
+1. ~~Expiry warning notifications (7/3/1 days)~~ — done (Wave 11) via the
+   in-app channel (`LotExpiryJob`); email rides the notify() extension
+   point when outbound email lands.
 2. Apple IAP / Google Play Billing adapters behind a
    `PaymentGatewayAdapter` interface when mobile clients exist (§6.6).
