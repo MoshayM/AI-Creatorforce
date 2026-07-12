@@ -301,8 +301,10 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | GET/POST | `/orgs/:id/teams` | List teams (any member) / create a team (MANAGE_ORG) — teams scope budget periods and member assignment (Wave 8) |
 | GET/PUT | `/orgs/:id/budget?teamId=` | Current budget-period status + org balance / create a period (MANAGE_BUDGET); hard cap blocks spend at exhaustion; `teamId` validated against the org (Wave 8) |
 | GET | `/orgs/:id/reports/usage?from=&to=&teamId=&format=json\|csv` | Per-member usage rollup (VIEW_REPORTS) |
-| GET | `/dev/usage?days=` | Per-developer-key request analytics: totals + sparse per-day counts, last `days` UTC days (default 30, clamped 1–90) (Wave 10) |
+| GET | `/dev/usage?days=` | Per-developer-key analytics: request totals + sparse per-day counts, plus attributed AI spend `tokens` {tokensIn, tokensOut, costUsd, calls} (Waves 10+12) |
 | GET | `/api/dev-docs` (+ `-json`) | Public developer-API OpenAPI doc, served in every environment — `-json` is the SDK-generation source (Wave 10) |
+| GET | `/dev-api/v1/projects`, `/projects/:id`, `/projects/:id/jobs`, `/jobs/:id` | Public API resource reads (scopes `projects:read` / `jobs:read`; ownership via key owner) (Wave 12) |
+| POST | `/dev-api/v1/projects/:id/jobs` | Public API job enqueue — first paid AI action; scope `jobs:write`, sandbox keys rejected; run's token usage attributed to the key (Wave 12) |
 | POST | `/referral/code` | Get-or-create my referral code (deterministic, 8-char) (Phase 6 §10.2) |
 | POST | `/referral/redeem` | Apply a code once (self/duplicate/inactive rejected); registration auto-applies `?ref=` codes |
 | GET | `/referral/earnings` | My code, totals, per-referral status (PENDING→QUALIFIED on first recharge→REWARDED; FLAGGED withheld on shared-fingerprint fraud) |

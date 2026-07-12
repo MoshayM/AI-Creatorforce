@@ -242,6 +242,24 @@
   source (openapi-generator et al.); shipping generated SDK packages is a
   consumer-side build step, not a server feature.
 
+## What shipped in Phase 5 Wave 12 (dev-API resources + per-key tokens)
+
+- **Resource routes** on `/dev-api/v1`: projects list/get (`projects:read`),
+  project jobs list + job get with result (`jobs:read`).  Every route
+  resolves through the key owner's userId (ProjectsService.get is
+  ownership-scoped) — a key can never touch foreign resources regardless of
+  scopes; channel-scoped jobs (null projectId) 404 on the public surface.
+- **First paid AI action**: `POST /dev-api/v1/projects/:id/jobs`
+  (`jobs:write`) — type validated against `JobTypeSchema`, sandbox keys
+  rejected (real credit spend), billing rides the existing supervisor
+  reserve→settle (personal wallet or `billingOrgId` org wallet, unchanged).
+- **Per-key token attribution** (closes the Wave 10 deferral):
+  `token_usage.developerKeyId` (indexed) — the enqueue route stamps the key
+  id into the job payload, the supervisor passes it into the AI-usage
+  context, and `UsageLedgerService` writes it on every provider call in the
+  run.  `GET /dev/usage` now returns `tokens` {in, out, costUsd, calls} per
+  key alongside request counts.
+
 ## Deliberate deviations
 
 - **Monolith modules, not microservices** (both specs §3) — same precedent
@@ -281,10 +299,10 @@
    via `projects.billingOrgId`; voice turns share the copilot `orgId` path.
 2. ~~Web UI for orgs~~ — done (Wave 7): `/orgs` page + bill-to pickers in the
    copilot panel and project detail header.
-3. ~~Developer portal follow-ups~~ — done (Wave 10): OpenAPI doc at
-   `/api/dev-docs(-json)` + per-key request analytics (`GET /dev/usage`).
-   Still open by design: per-key TOKEN attribution — add a `token_usage`
-   key column when the dev API grows AI-spending routes.
+3. ~~Developer portal follow-ups~~ — done (Waves 10+12): OpenAPI doc at
+   `/api/dev-docs(-json)`, per-key request analytics (`GET /dev/usage`),
+   and per-key token attribution via `token_usage.developerKeyId` now that
+   the dev API has an AI-spending route (job enqueue).
 4. ~~Transcript/analysis cache keyed by media content hash~~ — done (Wave 9):
    `AnalysisCacheService` copies transcript/scene/topic rows across
    content-identical videos of the same user.

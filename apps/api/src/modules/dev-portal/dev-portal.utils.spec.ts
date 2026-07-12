@@ -120,7 +120,21 @@ describe('buildUsageSummary — per-key request analytics (Wave 10)', () => {
     const out = buildUsageSummary([key('idle')], [], 7);
     expect(out.keys[0]!.totalRequests).toBe(0);
     expect(out.keys[0]!.byDay).toEqual([]);
+    expect(out.keys[0]!.tokens).toEqual({ tokensIn: 0, tokensOut: 0, costUsd: 0, calls: 0 });
     expect(out.totalRequests).toBe(0);
+  });
+
+  it('merges per-key token totals under `tokens`, zeroing keys without AI spend', () => {
+    const out = buildUsageSummary(
+      [key('k1'), key('k2')],
+      [],
+      30,
+      [{ developerKeyId: 'k1', tokensIn: 12_000, tokensOut: 3_000, costUsd: 0.42, calls: 4 }],
+    );
+    const k1 = out.keys.find((k) => k.id === 'k1')!;
+    expect(k1.tokens).toEqual({ tokensIn: 12_000, tokensOut: 3_000, costUsd: 0.42, calls: 4 });
+    const k2 = out.keys.find((k) => k.id === 'k2')!;
+    expect(k2.tokens.calls).toBe(0);
   });
 
   it('drops rows for keys not in the list (deleted between queries)', () => {

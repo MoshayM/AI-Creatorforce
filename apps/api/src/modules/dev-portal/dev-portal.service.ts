@@ -218,7 +218,26 @@ export class DevPortalService {
       orderBy: { day: 'asc' },
       select: { keyId: true, day: true, requests: true },
     });
-    return buildUsageSummary(keys, rows, window);
+
+    // AI spend attributed to each key (Wave 12): token_usage rows written by
+    // runs that a dev-API job enqueue triggered.
+    const tokenGroups = await this.prisma.tokenUsage.groupBy({
+      by: ['developerKeyId'],
+      where: { developerKeyId: { in: keys.map((k) => k.id) }, createdAt: { gte: cutoff } },
+      _sum: { tokensIn: true, tokensOut: true, costUsd: true },
+      _count: { _all: true },
+    });
+    const tokenTotals = tokenGroups
+      .filter((g) => g.developerKeyId !== null)
+      .map((g) => ({
+        developerKeyId: g.developerKeyId as string,
+        tokensIn: g._sum.tokensIn ?? 0,
+        tokensOut: g._sum.tokensOut ?? 0,
+        costUsd: g._sum.costUsd ?? 0,
+        calls: g._count._all,
+      }));
+
+    return buildUsageSummary(keys, rows, window, tokenTotals);
   }
 
   /** Revokes a developer key. Throws if the key does not belong to the user. */

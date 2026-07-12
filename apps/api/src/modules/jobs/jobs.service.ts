@@ -15,13 +15,18 @@ export class JobsService {
     @InjectQueue(AGENT_QUEUE) private readonly queue: Queue,
   ) {}
 
-  async enqueue(projectId: string, type: JobType, payload: Record<string, unknown> = {}) {
+  async enqueue(
+    projectId: string,
+    type: JobType,
+    payload: Record<string, unknown> = {},
+    opts?: { developerKeyId?: string },
+  ) {
     const job = await this.prisma.agentJob.create({
       data: { projectId, type, status: 'PENDING', payload: payload as never },
     });
 
     try {
-      await this.queue.add(type, { jobId: job.id, projectId, type, payload, correlationId: currentCorrelationId() }, {
+      await this.queue.add(type, { jobId: job.id, projectId, type, payload, correlationId: currentCorrelationId(), developerKeyId: opts?.developerKeyId }, {
         jobId: job.id,
         attempts: 1,
       });

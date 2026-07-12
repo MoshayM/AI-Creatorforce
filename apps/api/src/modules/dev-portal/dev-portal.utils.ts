@@ -120,14 +120,32 @@ export interface KeyUsageMeta {
   revokedAt: Date | null;
 }
 
+/** Per-key AI-spend totals from token_usage (Wave 12 — dev-API triggered runs). */
+export interface KeyTokenTotals {
+  developerKeyId: string;
+  tokensIn: number;
+  tokensOut: number;
+  costUsd: number;
+  calls: number;
+}
+
+const ZERO_TOKENS = { tokensIn: 0, tokensOut: 0, costUsd: 0, calls: 0 };
+
 /**
  * Shape the per-key usage response from daily rollup rows.
  *
  * Rollup rows are sparse (no row for a zero-request day) and stay sparse in
  * the output — `byDay` lists only days with traffic, `day` as `YYYY-MM-DD`.
  * Rows for keys not in `keys` (e.g. deleted between queries) are dropped.
+ * `tokenTotals` (AI spend attributed to the key) merges in as `tokens`,
+ * zeroed for keys that never triggered an AI run.
  */
-export function buildUsageSummary(keys: KeyUsageMeta[], rows: KeyUsageDayRow[], windowDays: number) {
+export function buildUsageSummary(
+  keys: KeyUsageMeta[],
+  rows: KeyUsageDayRow[],
+  windowDays: number,
+  tokenTotals: KeyTokenTotals[] = [],
+) {
   const byKey = new Map<string, { totalRequests: number; byDay: Array<{ day: string; requests: number }> }>(
     keys.map((k) => [k.id, { totalRequests: 0, byDay: [] }]),
   );
@@ -137,7 +155,15 @@ export function buildUsageSummary(keys: KeyUsageMeta[], rows: KeyUsageDayRow[], 
     bucket.totalRequests += r.requests;
     bucket.byDay.push({ day: r.day.toISOString().slice(0, 10), requests: r.requests });
   }
-  const keysOut = keys.map((k) => ({ ...k, ...byKey.get(k.id)! }));
+  const tokensByKey = new Map(tokenTotals.map((t) => [t.developerKeyId, t]));
+  const keysOut = keys.map((k) => {
+    const t = tokensByKey.get(k.id);
+    return {
+      ...k,
+      ...byKey.get(k.id)!,
+      tokens: t ? { tokensIn: t.tokensIn, tokensOut: t.tokensOut, costUsd: t.costUsd, calls: t.calls } : { ...ZERO_TOKENS },
+    };
+  });
   return {
     windowDays,
     totalRequests: keysOut.reduce((n, k) => n + k.totalRequests, 0),

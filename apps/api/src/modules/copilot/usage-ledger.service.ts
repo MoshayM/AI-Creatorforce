@@ -57,6 +57,7 @@ export class UsageLedgerService implements OnModuleInit, OnModuleDestroy {
           jobId: ctx?.jobId ?? null,
           projectId: ctx?.projectId ?? null,
           importedVideoId: ctx?.importedVideoId ?? null,
+          developerKeyId: ctx?.developerKeyId ?? null,
         },
       })
       .catch((err) => this.logger.warn(`token_usage write failed: ${err instanceof Error ? err.message : String(err)}`));

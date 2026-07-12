@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ChannelsModule } from '../channels/channels.module';
 import { WalletModule } from '../wallet/wallet.module';
+import { ProjectsModule } from '../projects/projects.module';
+import { JobsModule } from '../jobs/jobs.module';
 import { DevPortalService } from './dev-portal.service';
 import { DevPortalController } from './dev-portal.controller';
 import { DevApiController } from './dev-api.controller';
@@ -16,11 +18,11 @@ import { WebhookDeliveryJob } from './webhook-delivery.job';
  * - Webhook delivery background job (60 s polling)
  * - DeveloperKeyGuard for the public dev-api/v1 surface
  *
- * Imports ChannelsModule and WalletModule for the dev-api/v1 proxy endpoints.
+ * Imports Channels/Wallet/Projects/Jobs modules for the dev-api/v1 surface.
  * DevPortalService is exported so BillingModule can inject it @Optional().
  */
 @Module({
-  imports: [ChannelsModule, WalletModule],
+  imports: [ChannelsModule, WalletModule, ProjectsModule, JobsModule],
   providers: [DevPortalService, DeveloperKeyGuard, WebhookDeliveryJob],
   controllers: [DevPortalController, DevApiController],
   exports: [DevPortalService],

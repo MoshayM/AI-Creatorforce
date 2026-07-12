@@ -67,6 +67,8 @@ interface JobPayload {
   payload: Record<string, unknown>;
   /** Correlation ID adopted from the enqueuing request; minted here if absent. */
   correlationId?: string;
+  /** Wave 12: present when the job was enqueued through the developer API. */
+  developerKeyId?: string;
 }
 
 @Injectable()
@@ -201,7 +203,7 @@ export class SupervisorWorker extends WorkerHost {
       // §12.2.8 cost attribution: every provider call inside this dispatch —
       // including SHORTS_ANALYZE child stages — inherits this context.
       const result = await runWithAiContext(
-        { jobId, projectId, importedVideoId: payload['importedVideoId'] as string | undefined, userId: holdUserId ?? undefined, accumulator },
+        { jobId, projectId, importedVideoId: payload['importedVideoId'] as string | undefined, userId: holdUserId ?? undefined, developerKeyId: job.data.developerKeyId, accumulator },
         () => this.dispatch(type, projectId, jobId, payload),
       );
       // Settle: locked rule price when one was quoted (§7), else real cost (§5.3)

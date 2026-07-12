@@ -24,6 +24,8 @@ export interface AiUsageContext {
   jobId?: string;
   projectId?: string;
   importedVideoId?: string;
+  /** Wave 12: set when the run was triggered through the developer API. */
+  developerKeyId?: string;
   /** When present, every provider call inside the context adds to it. */
   accumulator?: AiUsageAccumulator;
 }

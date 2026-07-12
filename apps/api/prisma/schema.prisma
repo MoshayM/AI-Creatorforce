@@ -1605,6 +1605,8 @@ model TokenUsage {
   jobId           String?
   projectId       String?
   importedVideoId String?
+  /** Wave 12: set when the spend was triggered through the developer API. */
+  developerKeyId  String?
   provider        String
   model           String
   tokensIn        Int      @default(0)
@@ -1617,6 +1619,7 @@ model TokenUsage {
 
   @@index([userId, createdAt])
   @@index([importedVideoId, createdAt])
+  @@index([developerKeyId, createdAt])
   @@map("token_usage")
 }
 
