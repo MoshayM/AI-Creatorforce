@@ -226,6 +226,22 @@
   working per video.  `AssetVersion.contentHash` was already indexed — no
   migration.
 
+## What shipped in Phase 5 Wave 10 (dev-portal analytics + OpenAPI)
+
+- **Per-key request analytics**: `developer_key_usage_days` — one row per key
+  per UTC day, incremented fire-and-forget by `DeveloperKeyGuard` after auth
+  + rate-limit pass (rejected and rate-limited calls stay out).
+  `GET /dev/usage?days=` returns totals + sparse per-day counts per key
+  (`buildUsageSummary`, pure + tested).  Request-level only by design: the
+  next-steps note stands — token attribution per key needs a `token_usage`
+  key column and only makes sense once the dev API grows AI-spending routes.
+- **OpenAPI for the public API**: a second Swagger document filtered to the
+  `/dev-api/` surface (portal management and internal routes excluded),
+  served at `/api/dev-docs` in EVERY environment — unlike the internal doc,
+  which stays non-production.  `/api/dev-docs-json` is the SDK-generation
+  source (openapi-generator et al.); shipping generated SDK packages is a
+  consumer-side build step, not a server feature.
+
 ## Deliberate deviations
 
 - **Monolith modules, not microservices** (both specs §3) — same precedent
@@ -265,10 +281,10 @@
    via `projects.billingOrgId`; voice turns share the copilot `orgId` path.
 2. ~~Web UI for orgs~~ — done (Wave 7): `/orgs` page + bill-to pickers in the
    copilot panel and project detail header.
-3. Developer portal follow-ups: SDK/OpenAPI-docs autogen + per-key usage
-   analytics.  Note: per-key attribution needs design first — `token_usage`
-   has no key column and the dev API has no AI-spending routes yet, so
-   "the data is already there" only holds per-user, not per-key.
+3. ~~Developer portal follow-ups~~ — done (Wave 10): OpenAPI doc at
+   `/api/dev-docs(-json)` + per-key request analytics (`GET /dev/usage`).
+   Still open by design: per-key TOKEN attribution — add a `token_usage`
+   key column when the dev API grows AI-spending routes.
 4. ~~Transcript/analysis cache keyed by media content hash~~ — done (Wave 9):
    `AnalysisCacheService` copies transcript/scene/topic rows across
    content-identical videos of the same user.

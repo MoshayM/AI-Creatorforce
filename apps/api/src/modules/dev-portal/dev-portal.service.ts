@@ -8,7 +8,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { TokenEncryptionService } from '../channels/token-encryption.service';
-import { generateDeveloperKey, nextBackoff } from './dev-portal.utils';
+import { generateDeveloperKey, nextBackoff, buildUsageSummary } from './dev-portal.utils';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -181,6 +181,44 @@ export class DevPortalService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Increment the per-key daily request rollup (Wave 10).  Called
+   * fire-and-forget from DeveloperKeyGuard — never throws, never blocks.
+   */
+  async recordRequest(keyId: string): Promise<void> {
+    const day = new Date();
+    day.setUTCHours(0, 0, 0, 0);
+    try {
+      await this.prisma.developerKeyUsageDay.upsert({
+        where: { keyId_day: { keyId, day } },
+        create: { keyId, day, requests: 1 },
+        update: { requests: { increment: 1 } },
+      });
+    } catch (err: unknown) {
+      this.logger.warn(`[dev-portal] usage rollup failed key=${keyId}: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Per-key request analytics over the last `days` UTC days (default 30,
+   * clamped 1–90).  Request-level only — see DeveloperKeyUsageDay.
+   */
+  async usage(userId: string, days = 30) {
+    const window = Math.min(Math.max(Math.trunc(days) || 30, 1), 90);
+    const keys = await this.listKeys(userId);
+
+    const cutoff = new Date();
+    cutoff.setUTCHours(0, 0, 0, 0);
+    cutoff.setUTCDate(cutoff.getUTCDate() - (window - 1));
+
+    const rows = await this.prisma.developerKeyUsageDay.findMany({
+      where: { keyId: { in: keys.map((k) => k.id) }, day: { gte: cutoff } },
+      orderBy: { day: 'asc' },
+      select: { keyId: true, day: true, requests: true },
+    });
+    return buildUsageSummary(keys, rows, window);
   }
 
   /** Revokes a developer key. Throws if the key does not belong to the user. */

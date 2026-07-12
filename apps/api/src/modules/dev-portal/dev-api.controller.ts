@@ -1,4 +1,5 @@
 import { Controller, Get, Request, UseGuards } from '@nestjs/common';
+import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { Request as ExpressRequest } from 'express';
 import { DeveloperKeyGuard, RequireScope } from './developer-key.guard';
 import { WalletService } from '../wallet/wallet.service';
@@ -20,6 +21,8 @@ interface DevKeyUser {
  * Sandbox note: sandbox keys are accepted here. Routes that would spend
  * real credits MUST check `req.user.sandbox` and reject or use play-money.
  */
+@ApiTags('developer-api')
+@ApiSecurity('api-key')
 @Controller('dev-api/v1')
 @UseGuards(DeveloperKeyGuard)
 export class DevApiController {

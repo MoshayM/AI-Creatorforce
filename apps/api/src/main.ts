@@ -53,6 +53,28 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
   }
 
+  // Public developer API docs (Phase 5 Wave 10) — served in EVERY environment
+  // (unlike the internal doc above): the OpenAPI JSON at
+  // /api/dev-docs-json is the SDK-generation source for API consumers.
+  {
+    const devConfig = new DocumentBuilder()
+      .setTitle('CreatorForce Developer API')
+      .setDescription(
+        'Public API — authenticate with a developer key (`Authorization: Bearer cfk_…` or `X-Api-Key`). ' +
+          'Generate a client with openapi-generator against /api/dev-docs-json.',
+      )
+      .setVersion('1.0')
+      .addApiKey({ type: 'apiKey', name: 'X-Api-Key', in: 'header' }, 'api-key')
+      .build();
+    const devDocument = SwaggerModule.createDocument(app, devConfig);
+    // Keep only the public /dev-api surface — portal management and internal
+    // routes stay out of the consumer-facing contract.
+    devDocument.paths = Object.fromEntries(
+      Object.entries(devDocument.paths).filter(([p]) => p.includes('/dev-api/')),
+    );
+    SwaggerModule.setup('api/dev-docs', app, devDocument);
+  }
+
   const port = parseInt(process.env['API_PORT'] ?? '4007', 10);
   await app.listen(port);
   console.warn(`AI CreatorForce API running on http://localhost:${port}/api/v1`);

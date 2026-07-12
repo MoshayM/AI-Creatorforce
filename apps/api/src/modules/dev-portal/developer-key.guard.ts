@@ -103,6 +103,10 @@ export class DeveloperKeyGuard implements CanActivate {
       throw new ForbiddenException('Rate limit exceeded');
     }
 
+    // Usage analytics (Wave 10): count served requests only — rejected auth
+    // and rate-limited calls stay out of the rollup. Fire-and-forget.
+    void this.devPortal.recordRequest(verified.keyId);
+
     // Scope check (if route requires a specific scope)
     const requiredScope = this.reflector.get<string | undefined>(
       REQUIRE_SCOPE_KEY,

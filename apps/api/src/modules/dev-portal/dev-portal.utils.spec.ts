@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { generateDeveloperKey, scopeAllows, signWebhookPayload, nextBackoff } from './dev-portal.utils';
+import { generateDeveloperKey, scopeAllows, signWebhookPayload, nextBackoff, buildUsageSummary } from './dev-portal.utils';
 
 describe('generateDeveloperKey — key format + hashing (§13)', () => {
   it('live keys carry the cfk_live_ marker and a 40-char base62 suffix', () => {
@@ -82,5 +82,61 @@ describe('nextBackoff — retry ladder + dead-letter', () => {
     expect(nextBackoff(6)).toBe(-1);
     expect(nextBackoff(0)).toBe(-1);
     expect(nextBackoff(-1)).toBe(-1);
+  });
+});
+
+describe('buildUsageSummary — per-key request analytics (Wave 10)', () => {
+  const key = (id: string, over: Partial<Parameters<typeof buildUsageSummary>[0][number]> = {}) => ({
+    id,
+    name: `Key ${id}`,
+    keyPrefix: 'cfk_live_XXX',
+    sandbox: false,
+    lastUsedAt: null,
+    revokedAt: null,
+    ...over,
+  });
+
+  it('groups sparse daily rows under their key and totals them', () => {
+    const out = buildUsageSummary(
+      [key('k1'), key('k2')],
+      [
+        { keyId: 'k1', day: new Date('2026-07-10T00:00:00Z'), requests: 5 },
+        { keyId: 'k1', day: new Date('2026-07-12T00:00:00Z'), requests: 2 },
+        { keyId: 'k2', day: new Date('2026-07-12T00:00:00Z'), requests: 7 },
+      ],
+      30,
+    );
+    expect(out.windowDays).toBe(30);
+    expect(out.totalRequests).toBe(14);
+    const k1 = out.keys.find((k) => k.id === 'k1')!;
+    expect(k1.totalRequests).toBe(7);
+    expect(k1.byDay).toEqual([
+      { day: '2026-07-10', requests: 5 },
+      { day: '2026-07-12', requests: 2 },
+    ]);
+  });
+
+  it('keys with no traffic still appear, with zero totals', () => {
+    const out = buildUsageSummary([key('idle')], [], 7);
+    expect(out.keys[0]!.totalRequests).toBe(0);
+    expect(out.keys[0]!.byDay).toEqual([]);
+    expect(out.totalRequests).toBe(0);
+  });
+
+  it('drops rows for keys not in the list (deleted between queries)', () => {
+    const out = buildUsageSummary(
+      [key('k1')],
+      [{ keyId: 'ghost', day: new Date('2026-07-12T00:00:00Z'), requests: 99 }],
+      30,
+    );
+    expect(out.totalRequests).toBe(0);
+  });
+
+  it('preserves key metadata on each row', () => {
+    const revoked = new Date('2026-07-01T00:00:00Z');
+    const out = buildUsageSummary([key('k1', { revokedAt: revoked, sandbox: true })], [], 30);
+    expect(out.keys[0]!.revokedAt).toBe(revoked);
+    expect(out.keys[0]!.sandbox).toBe(true);
+    expect(out.keys[0]!.name).toBe('Key k1');
   });
 });

@@ -102,3 +102,45 @@ export function nextBackoff(attempts: number): number {
   if (attempts <= 0 || attempts > 5) return -1;
   return BACKOFF_MS[attempts - 1]!;
 }
+
+// ── Per-key usage summary (Wave 10) ────────────────────────────────────────────
+
+export interface KeyUsageDayRow {
+  keyId: string;
+  day: Date;
+  requests: number;
+}
+
+export interface KeyUsageMeta {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  sandbox: boolean;
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
+}
+
+/**
+ * Shape the per-key usage response from daily rollup rows.
+ *
+ * Rollup rows are sparse (no row for a zero-request day) and stay sparse in
+ * the output — `byDay` lists only days with traffic, `day` as `YYYY-MM-DD`.
+ * Rows for keys not in `keys` (e.g. deleted between queries) are dropped.
+ */
+export function buildUsageSummary(keys: KeyUsageMeta[], rows: KeyUsageDayRow[], windowDays: number) {
+  const byKey = new Map<string, { totalRequests: number; byDay: Array<{ day: string; requests: number }> }>(
+    keys.map((k) => [k.id, { totalRequests: 0, byDay: [] }]),
+  );
+  for (const r of rows) {
+    const bucket = byKey.get(r.keyId);
+    if (!bucket) continue;
+    bucket.totalRequests += r.requests;
+    bucket.byDay.push({ day: r.day.toISOString().slice(0, 10), requests: r.requests });
+  }
+  const keysOut = keys.map((k) => ({ ...k, ...byKey.get(k.id)! }));
+  return {
+    windowDays,
+    totalRequests: keysOut.reduce((n, k) => n + k.totalRequests, 0),
+    keys: keysOut,
+  };
+}

@@ -1868,10 +1868,27 @@ model DeveloperKey {
   revokedAt       DateTime?
   createdAt       DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usageDays DeveloperKeyUsageDay[]
 
   @@index([userId])
   @@map("developer_keys")
+}
+
+// Per-key request rollup (Phase 5 Wave 10): one row per key per UTC day,
+// incremented fire-and-forget by DeveloperKeyGuard on every served request.
+// Request-level only — AI token attribution per key waits for the dev API to
+// grow AI-spending routes (token_usage has no key column today).
+model DeveloperKeyUsageDay {
+  id       String   @id @default(cuid())
+  keyId    String
+  day      DateTime @db.Date
+  requests Int      @default(0)
+
+  key DeveloperKey @relation(fields: [keyId], references: [id], onDelete: Cascade)
+
+  @@unique([keyId, day])
+  @@map("developer_key_usage_days")
 }
 
 model DeveloperWebhook {

@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -40,6 +41,18 @@ export class DevPortalController {
   @Get('keys')
   listKeys(@Request() req: ExpressRequest & { user: JwtUser }) {
     return this.devPortal.listKeys(req.user.sub);
+  }
+
+  /**
+   * Per-key request analytics over the last `days` UTC days (default 30,
+   * clamped 1–90): totals + sparse per-day counts for each of my keys.
+   */
+  @Get('usage')
+  usage(
+    @Request() req: ExpressRequest & { user: JwtUser },
+    @Query('days') days?: string,
+  ) {
+    return this.devPortal.usage(req.user.sub, days ? parseInt(days, 10) : undefined);
   }
 
   @Delete('keys/:id')
