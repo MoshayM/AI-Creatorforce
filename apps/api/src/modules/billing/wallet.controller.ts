@@ -122,7 +122,7 @@ export class WalletController {
     };
   }
 
-  // ── Credit intelligence (Updates/10 Phase 2) ─────────────────────────────────
+  // ── Credit intelligence (docs4/10 Phase 2) ─────────────────────────────────
 
   /**
    * GET /wallet/forecast?days=30 — window-average burn projection:

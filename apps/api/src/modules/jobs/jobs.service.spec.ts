@@ -101,7 +101,7 @@ describe('JobsService.enqueue', () => {
     });
   });
 
-  // Updates/35: DLQ replay
+  // docs4/35: DLQ replay
 
   it('replays a FAILED job as a fresh enqueue with the same project/type/payload', async () => {
     prisma.agentJob.findUnique.mockResolvedValue({

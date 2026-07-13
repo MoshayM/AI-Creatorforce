@@ -47,7 +47,7 @@ export class LibraryController {
    * POST /channels/:id/sync
    * Enqueue a CHANNEL_SYNC job (idempotent — returns existing jobId if already running).
    */
-  // 202: the sync is queued, not done (Updates/16 — async ops return 202 + job id)
+  // 202: the sync is queued, not done (docs4/16 — async ops return 202 + job id)
   @Post(':id/sync')
   @HttpCode(HttpStatus.ACCEPTED)
   async enqueueSync(@Param('id') id: string, @CurrentUser() user: JwtPayload) {

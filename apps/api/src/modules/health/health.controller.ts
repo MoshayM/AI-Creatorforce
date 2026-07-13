@@ -6,7 +6,7 @@ import { AGENT_QUEUE } from '../jobs/jobs.constants';
 import { Public } from '../../common/decorators/public.decorator';
 
 /**
- * Probe endpoints (Updates/39): GET /health (liveness — process is up) and
+ * Probe endpoints (docs4/39): GET /health (liveness — process is up) and
  * GET /ready (readiness — DB + Redis reachable).  Outside the /api prefix
  * and unversioned, same as /metrics, so load balancers and the runbooks'
  * `curl -f http://localhost:4007/health` work without knowing the API

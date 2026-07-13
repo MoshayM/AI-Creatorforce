@@ -1,14 +1,14 @@
 rules:
 
   # ── Rule 1: No OFFSET/skip pagination in Prisma findMany ─────────────────────
-  # Architecture invariant: keyset/cursor pagination only (see Updates/08_Playlists_and_Library.md).
+  # Architecture invariant: keyset/cursor pagination only (see docs4/08_Playlists_and_Library.md).
   # Suppress a justified exception with an inline `// nosemgrep: no-offset-pagination`.
   - id: no-offset-pagination
     languages: [typescript]
     severity: ERROR
     message: >
       OFFSET pagination (skip:) detected in a Prisma findMany() call.
-      Use keyset/cursor pagination instead — see Updates/08_Playlists_and_Library.md.
+      Use keyset/cursor pagination instead — see docs4/08_Playlists_and_Library.md.
     pattern: $DB.findMany({ ..., skip: $SKIP, ... })
     paths:
       include:

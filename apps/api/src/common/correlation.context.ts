@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
 
 /**
- * Correlation IDs (Updates/32 + /02 + /38): every request and job carries an
+ * Correlation IDs (docs4/32 + /02 + /38): every request and job carries an
  * ID that survives across the gateway → service → worker path so one incident
  * can be traced end-to-end. Kept in its own AsyncLocalStorage (separate from
  * the AI usage context, which has a different lifetime: a job's usage context

@@ -107,7 +107,7 @@ export class JobsService {
   }
 
   /**
-   * DLQ replay (Updates/35): re-run a dead job as a FRESH AgentJob so the
+   * DLQ replay (docs4/35): re-run a dead job as a FRESH AgentJob so the
    * failed row stays in history (write-once). Pipeline resume semantics mean
    * completed prior stages are reused, so replaying FULL_PRODUCTION picks up
    * where the failure happened.

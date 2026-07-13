@@ -99,7 +99,7 @@ const MOCK_PACKS = [
   { id: 'pack-2', name: 'Creator', credits: 5_000, priceMinor: 3_999, currency: 'usd', region: null, sortOrder: 1 },
 ];
 
-// Error envelope (Updates/32) for a provider outage — the UI must translate
+// Error envelope (docs4/32) for a provider outage — the UI must translate
 // this into actionable copy (risk R-06).
 const PROVIDER_OUTAGE_ENVELOPE = {
   success: false,

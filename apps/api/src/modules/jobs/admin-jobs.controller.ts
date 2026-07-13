@@ -6,7 +6,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { JobsService } from './jobs.service';
 
 /**
- * DLQ surface (Updates/35): inspect dead jobs and replay them. Permission-string
+ * DLQ surface (docs4/35): inspect dead jobs and replay them. Permission-string
  * RBAC like every admin route; replays are audit-logged before the response.
  */
 @Controller('admin/jobs')
@@ -29,7 +29,7 @@ export class AdminJobsController {
     });
   }
 
-  // 202: the replay is queued, not done (Updates/16 — async ops return 202 + job id)
+  // 202: the replay is queued, not done (docs4/16 — async ops return 202 + job id)
   @Post(':id/replay')
   @RequirePermissions('admin:jobs')
   @HttpCode(HttpStatus.ACCEPTED)

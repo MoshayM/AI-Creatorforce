@@ -1,6 +1,6 @@
 # risk-register.md — AI CreatorForce
 
-> Living register per `Updates/47_Risk_Register.md`: technical, product, security,
+> Living register per `docs4/47_Risk_Register.md`: technical, product, security,
 > and operational risks with likelihood, impact, owner, mitigation, and status.
 > Review cadence: on every wave that touches a listed area; prune resolved rows.
 > Last updated: 2026-07-13 (Wave 19).

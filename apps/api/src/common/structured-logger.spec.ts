@@ -1,6 +1,6 @@
 import { buildLogEntry, redact } from './structured-logger';
 
-describe('redact — Updates/38 "no secrets/PII in logs"', () => {
+describe('redact — docs4/38 "no secrets/PII in logs"', () => {
   it('replaces sensitive keys anywhere in the tree, case-insensitively', () => {
     const input = {
       user: 'u1',

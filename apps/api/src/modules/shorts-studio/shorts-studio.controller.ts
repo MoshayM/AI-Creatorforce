@@ -94,7 +94,7 @@ export class ShortsStudioController {
 
   // ── Analyze (18.2) ──────────────────────────────────────────────────────────
 
-  // 202: analysis is queued, not done (Updates/16 — async ops return 202 + job id)
+  // 202: analysis is queued, not done (docs4/16 — async ops return 202 + job id)
   @Post('videos/:importedVideoId/analyze')
   @HttpCode(HttpStatus.ACCEPTED)
   async analyze(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {

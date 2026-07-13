@@ -44,7 +44,7 @@ export class StorageService {
   }
 
   /**
-   * Recursively remove everything under a key prefix (asset GC, Updates/09).
+   * Recursively remove everything under a key prefix (asset GC, docs4/09).
    * Requires ≥2 path segments (e.g. `assets/{projectId}/{assetId}`) so a bug
    * can never wipe a whole top-level directory, let alone the root.
    */

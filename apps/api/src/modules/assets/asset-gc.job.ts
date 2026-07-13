@@ -25,7 +25,7 @@ function gcEnabled(): boolean {
 // ── Service ───────────────────────────────────────────────────────────────────
 
 /**
- * Asset lifecycle GC (Updates/09 §Lifecycle + Updates/40): soft-delete →
+ * Asset lifecycle GC (docs4/09 §Lifecycle + docs4/40): soft-delete →
  * grace → purge, in two stages per sweep:
  *
  *  A. MARK — a live asset untouched for a full grace period with no

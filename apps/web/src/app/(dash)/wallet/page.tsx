@@ -178,7 +178,7 @@ function BudgetCard() {
   );
 }
 
-// ── Forecast card (Updates/10 Phase 2) ────────────────────────────────────────
+// ── Forecast card (docs4/10 Phase 2) ────────────────────────────────────────
 
 function ForecastCard() {
   const { data: forecast, isLoading } = useQuery<CreditForecast>({
@@ -225,7 +225,7 @@ function ForecastCard() {
   );
 }
 
-// ── Recommendations card (Updates/10 Phase 2) ─────────────────────────────────
+// ── Recommendations card (docs4/10 Phase 2) ─────────────────────────────────
 
 function RecommendationsCard() {
   const { data: recs = [], isLoading } = useQuery<CreditRecommendation[]>({

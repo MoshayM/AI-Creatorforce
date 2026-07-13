@@ -25,7 +25,7 @@ class EnqueueDto {
 export class JobsController {
   constructor(private readonly svc: JobsService) {}
 
-  // 202: the work is queued, not done (Updates/16 — async ops return 202 + job id)
+  // 202: the work is queued, not done (docs4/16 — async ops return 202 + job id)
   // Optional Idempotency-Key header (Wave 17): a replay returns the original job.
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)

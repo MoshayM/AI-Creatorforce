@@ -80,7 +80,7 @@ export interface CopilotResponse {
   executed?: { action: string; result: unknown };
   needsConfirmation?: CopilotCommand;
   /**
-   * Credit quote shown WITH the confirmation gate (Updates/49 transparent-AI:
+   * Credit quote shown WITH the confirmation gate (docs4/49 transparent-AI:
    * a paid action is accepted against a visible estimate). Resolved from the
    * pricing rules; null when no rule prices this action (cost varies by usage).
    */

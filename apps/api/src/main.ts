@@ -17,7 +17,7 @@ import { StructuredLogger } from './common/structured-logger';
 };
 
 async function bootstrap() {
-  // JSON lines in production (Updates/38, risk R-04); readable console in dev.
+  // JSON lines in production (docs4/38, risk R-04); readable console in dev.
   const app = await NestFactory.create(AppModule, { logger: new StructuredLogger() });
 
   app.use(helmet());

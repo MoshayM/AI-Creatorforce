@@ -29,7 +29,7 @@ function noReferences() {
   prisma.timeline.findMany.mockResolvedValue([]);
 }
 
-describe('AssetGcJob.sweep — Updates/09 lifecycle (soft-delete → grace → purge)', () => {
+describe('AssetGcJob.sweep — docs4/09 lifecycle (soft-delete → grace → purge)', () => {
   let gc: AssetGcJob;
   const now = new Date('2026-07-13T12:00:00Z');
 

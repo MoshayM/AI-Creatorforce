@@ -44,7 +44,7 @@ Standard codes: `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `VALIDATION_FAILED`
 | GET | `/me` | Current user + plan + usage |
 | GET | `/me/usage` | Token/credit usage vs limits |
 
-See `Docs3/Updates/15_Authentication.md` for flows, linking rules, and session semantics.
+See `Docs3/docs4/15_Authentication.md` for flows, linking rules, and session semantics.
 
 ## 3. Channels (YouTube)
 
@@ -56,7 +56,7 @@ See `Docs3/Updates/15_Authentication.md` for flows, linking rules, and session s
 | DELETE | `/channels/:id` | Disconnect & revoke tokens |
 | GET | `/channels/:id` | Channel details + sync status |
 
-### 3.1 Channel Library (synced, cursor-paginated — `Updates/08`)
+### 3.1 Channel Library (synced, cursor-paginated — `docs4/08`)
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -291,9 +291,9 @@ Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `
 | POST | `/offers/:id/redeem` | Redeem a direct-grant offer (idempotent per user); recharge-attached offers apply automatically at settle |
 | GET | `/marketplace/packs` | Credit packs (`?region=` filters; global packs always included) (Phase 6 §12) |
 | GET/POST/PATCH | `/admin/credit-packs` | `admin:pricing` — packs; creation margin-gated on real credit economics; audited |
-| GET/PUT | `/wallet/budget` | Per-user monthly budget: limit, alert threshold, hard cap. Hard cap enforced fail-closed inside `WalletService.reserve()` (`Updates/10` §Budgets) |
+| GET/PUT | `/wallet/budget` | Per-user monthly budget: limit, alert threshold, hard cap. Hard cap enforced fail-closed inside `WalletService.reserve()` (`docs4/10` §Budgets) |
 | GET | `/wallet/usage-summary?days=` | Month/period spend grouped by action intent |
-| GET | `/wallet/forecast?days=` | Window-average burn projection: daily burn, days-to-empty, projected month-end spend (`Updates/10` Phase 2) |
+| GET | `/wallet/forecast?days=` | Window-average burn projection: daily burn, days-to-empty, projected month-end spend (`docs4/10` Phase 2) |
 | GET | `/wallet/recommendations` | Rule-based optimization tips: budget pace, low balance, expiring lots, dominant action, cache-hit rate |
 | POST | `/orgs` | Create organisation — caller becomes ORG_ADMIN; org shared wallet provisioned in the same transaction (Phase 5 §10) |
 | GET | `/orgs/mine` | My orgs with my role in each |

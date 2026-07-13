@@ -23,7 +23,7 @@ export interface BurnForecast {
 }
 
 /**
- * Burn-rate forecast (Updates/10 §forecasting): a simple, explainable
+ * Burn-rate forecast (docs4/10 §forecasting): a simple, explainable
  * window-average projection — the same philosophy as the BI forecasts
  * (start with models a user can verify by hand).
  *
@@ -71,7 +71,7 @@ export interface CreditRecommendation {
 }
 
 /**
- * Rule-based optimization recommendations (Updates/10 Phase 2).  Every rule
+ * Rule-based optimization recommendations (docs4/10 Phase 2).  Every rule
  * is data-backed and actionable; none require ML.  Ordered warnings-first so
  * the UI can render top-down.
  */

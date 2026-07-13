@@ -468,7 +468,7 @@ export class WalletService {
     const existing = await this.prisma.creditReservation.findUnique({ where: { idempotencyKey } });
     if (existing) return existing;
 
-    // Budget hard cap (Updates/10 §Budgets): reserve() is the single choke
+    // Budget hard cap (docs4/10 §Budgets): reserve() is the single choke
     // point every paid AI action passes through, so the cap is enforced here —
     // after the idempotency short-circuit so replays never double-check.
     await this.budget.enforceBeforeReserve(userId, amount);

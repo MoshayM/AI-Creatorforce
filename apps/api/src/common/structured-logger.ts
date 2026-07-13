@@ -2,7 +2,7 @@ import { ConsoleLogger, type LoggerService, type LogLevel } from '@nestjs/common
 import { currentCorrelationId } from './correlation.context';
 
 /**
- * Structured JSON logging (Updates/38, risk R-04): one JSON object per line on
+ * Structured JSON logging (docs4/38, risk R-04): one JSON object per line on
  * stdout — machine-parseable so a future aggregator (Loki/ELK/CloudWatch) can
  * ingest without a format migration. Every line carries the request/job
  * correlation ID from AsyncLocalStorage, so API and worker lines for the same
@@ -13,7 +13,7 @@ import { currentCorrelationId } from './correlation.context';
  */
 
 const REDACTED = '[REDACTED]';
-// Key-name deny list (Updates/38 "no secrets/PII"): matched case-insensitively
+// Key-name deny list (docs4/38 "no secrets/PII"): matched case-insensitively
 // against object keys anywhere in the payload tree.
 const SENSITIVE_KEY = /password|passwd|secret|token|apikey|api_key|authorization|cookie|credential|private/i;
 

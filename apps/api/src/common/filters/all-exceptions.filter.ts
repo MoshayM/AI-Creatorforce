@@ -10,7 +10,7 @@ import type { Request, Response } from 'express';
 import { currentCorrelationId } from '../correlation.context';
 
 /**
- * Error envelope (Updates/32): { code, message, details, correlationId,
+ * Error envelope (docs4/32): { code, message, details, correlationId,
  * retryable } plus the legacy { success, statusCode } fields existing clients
  * read. `code` is a stable machine category; `retryable` is the spec's
  * retry-guidance flag (rate-limit and internal/provider errors are worth

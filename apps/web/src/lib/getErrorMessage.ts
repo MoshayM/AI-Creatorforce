@@ -4,7 +4,7 @@ type AxiosLike = {
 };
 
 /**
- * Friendly guidance per error-envelope `code` (Updates/32), appended to the
+ * Friendly guidance per error-envelope `code` (docs4/32), appended to the
  * server message for categories where the raw text is technical and the fix
  * is on the user's side of the screen (risk R-06: provider outages read as
  * generic failures).
