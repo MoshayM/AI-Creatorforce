@@ -3,7 +3,7 @@
 > Living register per `Updates/47_Risk_Register.md`: technical, product, security,
 > and operational risks with likelihood, impact, owner, mitigation, and status.
 > Review cadence: on every wave that touches a listed area; prune resolved rows.
-> Last updated: 2026-07-13 (Wave 17).
+> Last updated: 2026-07-13 (Wave 18).
 
 | ID | Risk | Category | Likelihood | Impact | Mitigation | Status |
 |----|------|----------|-----------|--------|------------|--------|
@@ -16,7 +16,6 @@
 | R-09 | i18n absent: UI strings hard-coded English; retrofit cost grows with every new surface | Product | High (if targeting non-EN) | Medium | Externalize strings when a second locale is committed; AI content is already multi-language | Accepted (deferred) |
 | R-10 | External security scanning (Snyk/ZAP/Burp) not wired — CI runs pnpm audit + Semgrep only | Security | Medium | Medium | External-blocked (accounts/licenses); Semgrep custom rules cover architecture invariants | External-blocked |
 | R-11 | Long-video (4–8 h) pipeline untested at scale: chapter windowing, embedding throughput, render backpressure | Technical | Medium | Medium | Needs a real long source video (video-hub.md Phase 7); load-test before onboarding long-form creators | Blocked (test media) |
-| R-12 | Sandbox dev keys rely on per-route checks to block paid actions — a new dev-API route could forget the check | Security | Medium | Medium | Enqueue route checks `req.user.sandbox`; consider a guard-level `@PaidAction()` decorator as surface grows | Open (monitor) |
 
 ## Closed / resolved
 
@@ -28,3 +27,4 @@
 | R-C4 | No health probes for load balancers/runbooks | `/health` + `/ready` endpoints (Wave 13) |
 | R-C5 | Stuck jobs: RUNNING `AgentJob` rows of crashed workers lingered forever | `JobReaperJob` sweep (Wave 17): guarded RUNNING→FAILED past `JOB_REAPER_STALL_MINUTES` (default 120) + hold release |
 | R-C6 | Double-enqueue race on `AgentJob` | `Idempotency-Key` on `POST /jobs` and dev-API enqueue, unique column closes the race (Wave 17) |
+| R-C7 | New paid dev-API routes could forget the sandbox-key check | Guard-level `@PaidAction()` decorator — sandbox keys rejected in `DeveloperKeyGuard` before any marked handler runs (Wave 18) |

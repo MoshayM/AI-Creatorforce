@@ -21,6 +21,17 @@ export function RequireScope(scope: string): MethodDecorator & ClassDecorator {
   return SetMetadata(REQUIRE_SCOPE_KEY, scope);
 }
 
+export const PAID_ACTION_KEY = 'dev_paid_action';
+
+/**
+ * Marks a dev-API route as a paid AI action (Wave 18, risk R-12): the guard
+ * rejects sandbox keys before the handler runs, so a new paid route can't
+ * forget the check — it declares intent instead of re-implementing it.
+ */
+export function PaidAction(): MethodDecorator & ClassDecorator {
+  return SetMetadata(PAID_ACTION_KEY, true);
+}
+
 // ── In-memory sliding-window rate limiter ──────────────────────────────────────
 
 interface WindowEntry {
@@ -71,10 +82,9 @@ function checkRateLimit(keyId: string, limitPerMin: number): boolean {
  * On success, attaches `{ sub, scopes, sandbox, developerKeyId }` to
  * `request.user` so downstream handlers can access identity and permissions.
  *
- * Sandbox keys (sandbox=true) are authenticated normally but the API surface
- * MUST refuse paid AI actions for sandbox keys. The guard marks the context;
- * enforcement for paid actions is the responsibility of the individual
- * route handlers / services.
+ * Sandbox keys (sandbox=true) are authenticated normally but paid AI actions
+ * are refused at the guard level: routes declare themselves with
+ * `@PaidAction()` and sandbox keys never reach their handlers (Wave 18, R-12).
  *
  * Rate limiting: simple in-memory sliding window per keyId (see note above).
  */
@@ -114,6 +124,15 @@ export class DeveloperKeyGuard implements CanActivate {
     );
     if (requiredScope && !scopeAllows(verified.scopes, requiredScope)) {
       throw new ForbiddenException(`Scope '${requiredScope}' required`);
+    }
+
+    // Paid-action gate (Wave 18, R-12): sandbox keys never reach paid handlers.
+    const paidAction = this.reflector.getAllAndOverride<boolean | undefined>(PAID_ACTION_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (paidAction && verified.sandbox) {
+      throw new ForbiddenException('Sandbox keys cannot run paid AI actions — create a live key');
     }
 
     // Attach to request.user

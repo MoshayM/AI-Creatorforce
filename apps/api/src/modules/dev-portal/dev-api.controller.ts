@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Body,
   Controller,
-  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -14,7 +13,7 @@ import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { Request as ExpressRequest } from 'express';
 import { IsObject, IsOptional, IsString } from 'class-validator';
 import { JobTypeSchema, type JobType } from '@cf/shared';
-import { DeveloperKeyGuard, RequireScope } from './developer-key.guard';
+import { DeveloperKeyGuard, PaidAction, RequireScope } from './developer-key.guard';
 import { WalletService } from '../wallet/wallet.service';
 import { ChannelsService } from '../channels/channels.service';
 import { ProjectsService } from '../projects/projects.service';
@@ -36,8 +35,8 @@ class DevEnqueueDto {
  * Public developer API surface — authenticated via DeveloperKeyGuard.
  *
  * Sandbox note: sandbox keys are accepted here. Routes that would spend
- * real credits MUST check `req.user.sandbox` and reject or use play-money —
- * job enqueue below is the first such route.
+ * real credits MUST be marked `@PaidAction()` — the guard rejects sandbox
+ * keys for them before the handler runs (Wave 18, R-12).
  *
  * Ownership: every project/job route resolves through the key owner's
  * userId (ProjectsService.get is ownership-scoped), so a key can never
@@ -122,14 +121,12 @@ export class DevApiController {
    */
   @Post('projects/:id/jobs')
   @RequireScope('jobs:write')
+  @PaidAction()
   async enqueueJob(
     @Request() req: ExpressRequest & { user: DevKeyUser },
     @Param('id') id: string,
     @Body() dto: DevEnqueueDto,
   ) {
-    if (req.user.sandbox) {
-      throw new ForbiddenException('Sandbox keys cannot run paid AI actions — create a live key');
-    }
     const parsed = JobTypeSchema.safeParse(dto.type);
     if (!parsed.success) {
       throw new BadRequestException(`Unknown job type '${dto.type}'`);
