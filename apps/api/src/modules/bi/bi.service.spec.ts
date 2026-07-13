@@ -3,6 +3,7 @@ import {
   linearForecast,
   churnRate,
   bucketByPeriod,
+  northStarRate,
 } from './bi.service';
 
 // ── movingAverageForecast ─────────────────────────────────────────────────────
@@ -143,6 +144,28 @@ describe('churnRate', () => {
 
   it('returns exactly 1 when all were lost', () => {
     expect(churnRate(50, 50)).toBe(1);
+  });
+});
+
+// ── northStarRate ─────────────────────────────────────────────────────────────
+
+describe('northStarRate', () => {
+  it('returns 0 when there are no active channels (no denominator)', () => {
+    expect(northStarRate(0, 0)).toBe(0);
+    expect(northStarRate(12, 0)).toBe(0);
+  });
+
+  it('computes published videos per active channel', () => {
+    expect(northStarRate(12, 4)).toBeCloseTo(3);
+    expect(northStarRate(5, 2)).toBeCloseTo(2.5);
+  });
+
+  it('returns 0 when nothing was published', () => {
+    expect(northStarRate(0, 7)).toBe(0);
+  });
+
+  it('supports rates below one video per channel', () => {
+    expect(northStarRate(1, 4)).toBeCloseTo(0.25);
   });
 });
 

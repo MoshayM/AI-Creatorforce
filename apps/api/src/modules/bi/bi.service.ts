@@ -129,6 +129,20 @@ export function bucketByPeriod(
   return buckets;
 }
 
+/**
+ * North-star metric (docs4/01_Product_Vision §North-Star): published,
+ * human-approved videos produced through the full workflow per active
+ * channel per month.  Returns 0 when there are no active channels
+ * (no denominator).
+ */
+export function northStarRate(
+  publishedVideos: number,
+  activeChannels: number,
+): number {
+  if (activeChannels <= 0) return 0;
+  return publishedVideos / activeChannels;
+}
+
 // ── Plan price map ────────────────────────────────────────────────────────────
 // MRR/ARR require mapping the Plan enum to a monthly price in minor units
 // (cents).  Real prices live in the Stripe product catalogue; we mirror them
@@ -186,6 +200,8 @@ export class BiService {
       aiCostSum30d,
       cacheHitCostSum30d,
       topModels,
+      publishedVideos30d,
+      activeChannelRows,
     ] = await Promise.all([
       // Active subscriptions grouped by plan for MRR/ARR
       this.prisma.subscription.groupBy({
@@ -241,6 +257,20 @@ export class BiService {
         orderBy: { _sum: { costUsd: 'desc' } },
         take: 5,
       }),
+
+      // North-star numerator: videos published through the workflow last 30d
+      this.prisma.video.count({
+        where: { status: 'PUBLISHED', publishedAt: { gte: thirtyDaysAgo } },
+      }),
+
+      // North-star denominator: distinct channels with workflow activity
+      // last 30d.  Selects only channelId over an indexed relation filter —
+      // bounded by channel count, not job count.
+      this.prisma.project.findMany({
+        where: { jobs: { some: { createdAt: { gte: thirtyDaysAgo } } } },
+        select: { channelId: true },
+        distinct: ['channelId'],
+      }),
     ]);
 
     // MRR: sum of (count × monthly plan price) across active subscriptions
@@ -292,7 +322,15 @@ export class BiService {
         ? cacheActualSavings
         : cacheTokens * BLENDED_RATE_PER_TOKEN;
 
+    // North-star metric (docs4/01): published videos per active channel, 30d
+    const activeChannels30d = activeChannelRows.length;
+
     return {
+      northStar: {
+        publishedVideos30d,
+        activeChannels30d,
+        perActiveChannel: northStarRate(publishedVideos30d, activeChannels30d),
+      },
       mrr: mrrMinor,
       arr: arrMinor,
       revenueByMonth,

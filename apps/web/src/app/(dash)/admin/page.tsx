@@ -8,6 +8,7 @@ import {
   PiggyBank,
   RefreshCw,
   ShieldAlert,
+  Star,
   TrendingUp,
   Users,
 } from 'lucide-react';
@@ -155,6 +156,18 @@ export default function AdminDashboardPage() {
         <p className="text-sm text-gray-500 py-16 text-center">Loading enterprise metrics…</p>
       ) : metrics ? (
         <>
+          {/* ── North star (docs4/01: published videos / active channel) ──── */}
+          <div className="grid grid-cols-1">
+            <StatCard
+              tone="lilac"
+              icon={<Star className="w-5 h-5" />}
+              label="North star — published videos per active channel (30d)"
+              value={(metrics.northStar?.perActiveChannel ?? 0).toFixed(1)}
+              sub={`${metrics.northStar?.publishedVideos30d ?? 0} published · ${metrics.northStar?.activeChannels30d ?? 0} active channels`}
+              subClassName="text-gray-600"
+            />
+          </div>
+
           {/* ── KPI cards ─────────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard tone="lilac" icon={<DollarSign className="w-5 h-5" />} label="MRR" value={money(metrics.mrr)} sub={`ARR ${money(metrics.arr)}`} subClassName="text-gray-600" />

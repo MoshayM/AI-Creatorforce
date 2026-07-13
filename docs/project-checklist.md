@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-13 (Wave 23).
+> Last updated: 2026-07-13 (Wave 24).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -27,7 +27,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 
 ### 01 Product Vision
 - ✅ Features map to principles (docs/project.md); ✅ no anti-goal violations
-- ◐ North-star metric: BI dashboard live (bi module, admin e2e); a single named north-star tile not yet designated
+- ✅ North-star metric designated: hero tile "published videos per active channel (30d)" on the admin BI dashboard (`bi.service.enterpriseMetrics` northStar field + `northStarRate` unit tests, Wave 24)
 
 ### 02 System Architecture
 - ✅ channel_id on domain tables; ✅ expensive ops via queue; ✅ estimate/accept/run

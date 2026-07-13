@@ -697,6 +697,15 @@ export const api = {
 // ── Enterprise admin dashboard (Phase 5 §9) ──────────────────────────────────
 
 export interface EnterpriseMetrics {
+  /**
+   * North-star metric (docs4/01): published, human-approved videos produced
+   * through the full workflow per active channel, trailing 30 days.
+   */
+  northStar: {
+    publishedVideos30d: number;
+    activeChannels30d: number;
+    perActiveChannel: number;
+  };
   /** Minor units (cents). */
   mrr: number;
   /** Minor units (cents). */
