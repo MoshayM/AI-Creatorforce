@@ -17,6 +17,10 @@ test.describe('Job History (project page)', () => {
   });
 
   test('lists job runs with status badges', async ({ page }) => {
+    // The section collapses to a summary bar by default — expand it first
+    const bar = page.getByRole('button', { name: /recent jobs/i });
+    await expect(bar).toBeVisible({ timeout: 8_000 });
+    await bar.click();
     await expect(page.getByText('TREND_ANALYSIS')).toBeVisible({ timeout: 8_000 });
     await expect(page.getByText('RESEARCH', { exact: true })).toBeVisible();
     await expect(page.getByText('COMPLIANCE', { exact: true })).toBeVisible();

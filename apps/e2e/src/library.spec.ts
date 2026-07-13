@@ -43,9 +43,9 @@ async function setupLibraryMocks(
   page: import('@playwright/test').Page,
   syncPhase: 'IDLE' | 'VIDEOS' = 'IDLE',
 ) {
-  // Register specific routes BEFORE setupApiMocks so LIFO ordering means these
-  // fire first; setupApiMocks registers the catch-all /channels route last, so
-  // per-channel sub-routes registered here take priority.
+  // Must be registered AFTER setupApiMocks: Playwright invokes the
+  // last-registered matching route first, so these override the fixture's
+  // channelStore-backed /channels handler (whose store starts empty).
 
   // Channels list — single channel
   await page.route(`${BASE}/channels`, async (route) => {
@@ -132,8 +132,8 @@ async function setupLibraryMocks(
 
 test.describe('Library', () => {
   test.beforeEach(async ({ page }) => {
-    await setupLibraryMocks(page);
     await setupApiMocks(page);
+    await setupLibraryMocks(page);
     await setAuthToken(page);
     await page.goto('/library');
     await page.waitForLoadState('domcontentloaded');
@@ -155,14 +155,15 @@ test.describe('Library', () => {
 
   test('channel is auto-selected and videos render', async ({ page }) => {
     // Wait for videos to appear after auto-selection of the single channel
-    await expect(page.getByText('Test Video 1')).toBeVisible({ timeout: 10_000 });
+    // (exact: true — substring matching would also hit "Test Video 10" etc.)
+    await expect(page.getByText('Test Video 1', { exact: true })).toBeVisible({ timeout: 10_000 });
     // Virtual grid renders visible subset — just assert at least one title is in the DOM
-    await expect(page.getByText(/Test Video/)).toBeVisible();
+    await expect(page.getByText(/Test Video/).first()).toBeVisible();
   });
 
   test('search input updates URL with ?q= param', async ({ page }) => {
     // Wait for channel to be auto-selected first
-    await expect(page.getByText('Test Video 1')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Test Video 1', { exact: true })).toBeVisible({ timeout: 10_000 });
 
     // Intercept the next videos request to capture the q param
     let capturedQ: string | null = null;
@@ -182,20 +183,20 @@ test.describe('Library', () => {
   });
 
   test('type filter toggle updates URL with ?type=', async ({ page }) => {
-    await expect(page.getByText('Test Video 1')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Test Video 1', { exact: true })).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: 'Shorts' }).click();
     await expect(page).toHaveURL(/type=short/, { timeout: 5_000 });
   });
 
   test('playlists tab lists playlists', async ({ page }) => {
-    await expect(page.getByText('Test Video 1')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Test Video 1', { exact: true })).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: 'playlists' }).click();
     await expect(page.getByText('Playlist 1')).toBeVisible({ timeout: 8_000 });
     await expect(page.getByText('Playlist 2')).toBeVisible();
   });
 
   test('sync button POSTs /channels/:id/sync', async ({ page }) => {
-    await expect(page.getByText('Test Video 1')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Test Video 1', { exact: true })).toBeVisible({ timeout: 10_000 });
     const syncPost = page.waitForRequest(
       (r) => r.method() === 'POST' && r.url().includes('/channels/ch-lib-1/sync'),
     );
@@ -207,7 +208,8 @@ test.describe('Library', () => {
 
 test.describe('Library — syncing badge', () => {
   test('shows syncing badge when sync phase is VIDEOS', async ({ page }) => {
-    // Override the sync-status mock to return VIDEOS phase BEFORE navigating
+    // Fixture first, specific routes after — last-registered route wins
+    await setupApiMocks(page);
     await page.route(`${BASE}/channels`, async (route) => {
       await route.fulfill({
         json: [{ id: 'ch-lib-1', title: 'Test Channel', youtubeChannelId: 'UCtest', active: true }],
@@ -224,7 +226,6 @@ test.describe('Library — syncing badge', () => {
     await page.route(`${BASE}/channels/ch-lib-1/playlists*`, async (route) => {
       await route.fulfill({ json: { data: [], nextCursor: null } });
     });
-    await setupApiMocks(page);
     await setAuthToken(page);
     await page.goto('/library');
     await page.waitForLoadState('domcontentloaded');
