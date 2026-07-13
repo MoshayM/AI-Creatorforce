@@ -8,7 +8,12 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   timeout: 60_000,
-  expect: { timeout: 10_000 },
+  expect: {
+    timeout: 10_000,
+    // Visual snapshots (docs4/22): small tolerance absorbs sub-pixel AA noise;
+    // baselines are per-platform and generated on the dev machine.
+    toHaveScreenshot: { maxDiffPixelRatio: 0.02, animations: 'disabled' },
+  },
 
   use: {
     baseURL: 'http://localhost:3007',
