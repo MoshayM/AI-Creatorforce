@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-13 (Wave 25).
+> Last updated: 2026-07-13 (Wave 26).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -75,7 +75,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 ### 13 Performance / 44 Performance Budget
 - ✅ No blocking >1s in request path; ✅ budgets defined + CI-enforced (bundle gate, docs4/44)
 - ◐ p75 workspace ≤2.0s on 10k-item channel + 100k scroll: implemented for, not load-verified (needs test media, risk R-11)
-- ◐ Budget trend tracking: gate is pass/fail only
+- ✅ Budget trend tracking: every run writes `bundle-budget-report.json` (uploaded as CI artifact, 90d), diffed against committed `scripts/bundle-budget-baseline.json` with >10% growth WARNs; budget stays the hard gate (Wave 26)
 
 ### 14 Security
 - ✅ OWASP controls + Semgrep custom rules (`.semgrep/creatorforce.yml`); ✅ prompt-injection isolation

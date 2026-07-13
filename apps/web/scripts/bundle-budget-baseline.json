@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-07-13T13:33:55.208Z",
+  "commit": null,
+  "totalKb": 963,
+  "routes": {
+    "/(dash)/projects/[id]/page": 574,
+    "/(dash)/settings/page": 498,
+    "/(dash)/shorts-studio/videos/[importedVideoId]/page": 497,
+    "/(dash)/library/page": 492,
+    "/(dash)/shorts-studio/clips/[shortClipId]/edit/page": 483,
+    "/(dash)/shorts-studio/page": 473,
+    "/(dash)/wallet/page": 473,
+    "/(dash)/shorts-studio/clips/[shortClipId]/export/page": 472,
+    "/(dash)/approvals/page": 471,
+    "/(dash)/orgs/page": 471,
+    "/(dash)/projects/page": 470,
+    "/(dash)/growth/page": 469,
+    "/(auth)/oauth/callback/[provider]/page": 438,
+    "/(auth)/register/page": 438,
+    "/(auth)/login/page": 437,
+    "/(dash)/admin/page": 435,
+    "/(dash)/discover/page": 431,
+    "/layout": 369,
+    "/(dash)/analytics/page": 367,
+    "/(dash)/brand-kit/page": 353,
+    "/(dash)/assets/page": 350,
+    "/_not-found/page": 345,
+    "/page": 342
+  }
+}

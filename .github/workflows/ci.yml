@@ -129,9 +129,20 @@ jobs:
 
       # Performance budget gate (docs4/44): per-route first-load JS ≤ 800 KB
       # raw, total unique JS ≤ 1500 KB. Baseline 2026-07: 571 KB / 1001 KB.
+      # Also diffs against scripts/bundle-budget-baseline.json (trend WARNs).
       - name: Check bundle budget
         run: node scripts/check-bundle-budget.mjs
         working-directory: apps/web
+
+      # Trend artifact (docs4/44): per-route sizes for this run, kept 90 days
+      # so budget creep is inspectable across builds, not just pass/fail.
+      - name: Upload bundle budget report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-budget-report
+          path: apps/web/.next/bundle-budget-report.json
+          if-no-files-found: ignore
 
   security:
     name: Security Audit
