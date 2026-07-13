@@ -200,7 +200,7 @@ function SettingsContent() {
     queryFn: () => api.auth.providers().then((r) => r.data),
   });
 
-  const { data: sessions = [], refetch: refetchSessions } = useQuery<AuthSession[]>({
+  const { data: sessions = [], isLoading: sessionsLoading, refetch: refetchSessions } = useQuery<AuthSession[]>({
     queryKey: ['auth-sessions'],
     queryFn: () => api.auth.sessions().then((r) => r.data),
   });
@@ -878,7 +878,7 @@ function SettingsContent() {
             )}
           </div>
 
-          {sessions.length === 0 && (
+          {sessions.length === 0 && !sessionsLoading && (
             <div className="px-4 py-6 text-center text-sm text-gray-500">No active sessions found.</div>
           )}
 

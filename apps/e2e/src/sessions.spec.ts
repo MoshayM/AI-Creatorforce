@@ -113,7 +113,8 @@ test.describe('Settings — Sign-in & Security', () => {
   // ── Active sessions ──────────────────────────────────────────────────────────
 
   test('active sessions section renders two rows', async ({ page }) => {
-    await expect(page.getByText('Active sessions')).toBeVisible({ timeout: 8_000 });
+    // exact: true — substring matching would also hit "No active sessions found."
+    await expect(page.getByText('Active sessions', { exact: true })).toBeVisible({ timeout: 8_000 });
     await expect(page.getByText('Chrome 126 on Windows 10')).toBeVisible({ timeout: 8_000 });
     await expect(page.getByText('Safari 17 on macOS')).toBeVisible();
   });
@@ -143,7 +144,7 @@ test.describe('Settings — Sign-in & Security', () => {
   });
 
   test('"Sign out all other sessions" triggers DELETE for non-current sessions', async ({ page }) => {
-    await expect(page.getByText('Active sessions')).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText('Active sessions', { exact: true })).toBeVisible({ timeout: 8_000 });
 
     const deleteReq = page.waitForRequest(
       (r) => r.method() === 'DELETE' && r.url().includes('/auth/sessions/sess-other'),
