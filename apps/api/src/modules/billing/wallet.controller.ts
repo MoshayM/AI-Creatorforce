@@ -43,6 +43,15 @@ export class WalletController {
     return this.wallet.getTransactions(user.sub, parseInt(take ?? '50', 10) || 50);
   }
 
+  /**
+   * Active credit lots, soonest-expiring first (Phase 6 §11 expiry timeline).
+   * Never-expiring lots (purchased/grandfathered) sort last.
+   */
+  @Get('lots')
+  async lots(@CurrentUser() user: JwtPayload) {
+    return this.wallet.getActiveLots(user.sub);
+  }
+
   @Post('recharge')
   async recharge(
     @Body() dto: RechargeDto,

@@ -123,6 +123,21 @@ export function planLotDebit(lots: LotView[], amount: number, now = new Date()):
   return takes;
 }
 
+/**
+ * Timeline order for the wallet expiry view (Phase 6 §11): soonest-expiring
+ * first; never-expiring lots last, oldest-granted first among those.
+ * Pure — exported for tests.
+ */
+export function compareLotsForTimeline(
+  a: { expiresAt: Date | null; createdAt: Date },
+  b: { expiresAt: Date | null; createdAt: Date },
+): number {
+  if (a.expiresAt === null && b.expiresAt === null) return a.createdAt.getTime() - b.createdAt.getTime();
+  if (a.expiresAt === null) return 1;
+  if (b.expiresAt === null) return -1;
+  return a.expiresAt.getTime() - b.expiresAt.getTime();
+}
+
 export interface LedgerWrite {
   entryType: LedgerEntryType;
   amount: number;
@@ -260,6 +275,23 @@ export class WalletService {
       lifetimePurchased: w.lifetimePurchased,
       lifetimeUsed: w.lifetimeUsed,
     };
+  }
+
+  /**
+   * Active lots (remaining > 0, not yet expired), soonest-expiring first;
+   * never-expiring lots last (Phase 6 §11 expiry timeline).
+   */
+  async getActiveLots(userId: string) {
+    const wallet = await this.ensureWallet(userId);
+    const lots = await this.prisma.creditLot.findMany({
+      where: {
+        walletId: wallet.id,
+        remaining: { gt: 0 },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      select: { id: true, bucket: true, amount: true, remaining: true, expiresAt: true, createdAt: true },
+    });
+    return lots.sort(compareLotsForTimeline);
   }
 
   async getTransactions(userId: string, take = 50) {

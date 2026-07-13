@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { creditsForCost, lotTtlDays, planDebit, planLotDebit, type BucketBalances, type LotView } from './wallet.service';
+import { compareLotsForTimeline, creditsForCost, lotTtlDays, planDebit, planLotDebit, type BucketBalances, type LotView } from './wallet.service';
 
 const buckets = (p: number, b: number, r: number, pur: number, trial = 0): BucketBalances => ({
   trialCredits: trial,
@@ -120,5 +120,31 @@ describe('creditsForCost — §5.3 settle conversion', () => {
     expect(creditsForCost(0, 100, 2)).toBe(0);
     expect(creditsForCost(-1, 100, 2)).toBe(0);
     expect(creditsForCost(Number.NaN, 100, 2)).toBe(0);
+  });
+});
+
+describe('compareLotsForTimeline — Phase 6 §11 expiry view order', () => {
+  const at = (iso: string) => new Date(iso);
+  const lot = (expiresAt: Date | null, createdAt: Date) => ({ expiresAt, createdAt });
+
+  it('sorts soonest-expiring first, never-expiring last', () => {
+    const rows = [
+      lot(null, at('2026-01-01')),
+      lot(at('2026-08-01'), at('2026-01-01')),
+      lot(at('2026-07-15'), at('2026-01-01')),
+    ];
+    const sorted = [...rows].sort(compareLotsForTimeline);
+    expect(sorted.map((l) => l.expiresAt?.toISOString().slice(0, 10) ?? 'never'))
+      .toEqual(['2026-07-15', '2026-08-01', 'never']);
+  });
+
+  it('orders never-expiring lots oldest-granted first', () => {
+    const rows = [
+      lot(null, at('2026-06-01')),
+      lot(null, at('2026-02-01')),
+    ];
+    const sorted = [...rows].sort(compareLotsForTimeline);
+    expect(sorted.map((l) => l.createdAt.toISOString().slice(0, 10)))
+      .toEqual(['2026-02-01', '2026-06-01']);
   });
 });

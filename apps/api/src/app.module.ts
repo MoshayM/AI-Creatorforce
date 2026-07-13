@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
+import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChannelsModule } from './modules/channels/channels.module';
 import { ProjectsModule } from './modules/projects/projects.module';
@@ -87,6 +88,7 @@ import { DevPortalModule } from './modules/dev-portal/dev-portal.module';
     BiModule,
     DevPortalModule,
     MetricsModule,
+    HealthModule,
   ],
   providers: [],
 })

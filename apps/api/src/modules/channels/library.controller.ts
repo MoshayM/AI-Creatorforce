@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Param, Query, Body,
-  UseGuards, NotFoundException, HttpCode,
+  UseGuards, NotFoundException, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -47,8 +47,9 @@ export class LibraryController {
    * POST /channels/:id/sync
    * Enqueue a CHANNEL_SYNC job (idempotent — returns existing jobId if already running).
    */
+  // 202: the sync is queued, not done (Updates/16 — async ops return 202 + job id)
   @Post(':id/sync')
-  @HttpCode(200)
+  @HttpCode(HttpStatus.ACCEPTED)
   async enqueueSync(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     await this.assertOwner(id, user.sub);
 

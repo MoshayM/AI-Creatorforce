@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
 import { IsString, IsArray, IsIn, IsOptional } from 'class-validator';
 import type { ClipType } from '@prisma/client';
 import { ApplyCommandsSchema, AssistCapabilitySchema } from '@cf/shared';
@@ -94,7 +94,9 @@ export class ShortsStudioController {
 
   // ── Analyze (18.2) ──────────────────────────────────────────────────────────
 
+  // 202: analysis is queued, not done (Updates/16 — async ops return 202 + job id)
   @Post('videos/:importedVideoId/analyze')
+  @HttpCode(HttpStatus.ACCEPTED)
   async analyze(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
     return this.shorts.enqueueAnalysis(importedVideoId, user.sub);
   }

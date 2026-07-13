@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsOptional, IsObject } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -25,7 +25,9 @@ class EnqueueDto {
 export class JobsController {
   constructor(private readonly svc: JobsService) {}
 
+  // 202: the work is queued, not done (Updates/16 — async ops return 202 + job id)
   @Post()
+  @HttpCode(HttpStatus.ACCEPTED)
   enqueue(@Body() dto: EnqueueDto, @CurrentUser() _user: JwtPayload) {
     return this.svc.enqueue(dto.projectId, dto.type as JobType, dto.payload);
   }
