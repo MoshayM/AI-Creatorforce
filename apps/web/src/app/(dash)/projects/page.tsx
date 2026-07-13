@@ -87,8 +87,8 @@ export default function ProjectsPage() {
       {projects.length > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard tone="lilac" icon={<FolderOpen className="w-5 h-5" />} label="Projects" value={projects.length} />
-          <StatCard tone="pink" icon={<PlayCircle className="w-5 h-5" />} label="Active" value={projects.filter((p) => p.status === 'ACTIVE').length} sub="in production" subClassName="text-gray-500" />
-          <StatCard tone="cream" icon={<Zap className="w-5 h-5" />} label="Agent Jobs" value={projects.reduce((s, p) => s + p._count.jobs, 0)} sub="across all projects" subClassName="text-gray-500" />
+          <StatCard tone="pink" icon={<PlayCircle className="w-5 h-5" />} label="Active" value={projects.filter((p) => p.status === 'ACTIVE').length} sub="in production" subClassName="text-gray-600" />
+          <StatCard tone="cream" icon={<Zap className="w-5 h-5" />} label="Agent Jobs" value={projects.reduce((s, p) => s + p._count.jobs, 0)} sub="across all projects" subClassName="text-gray-600" />
           <StatCard tone="periwinkle" icon={<Video className="w-5 h-5" />} label="Videos" value={projects.reduce((s, p) => s + p._count.videos, 0)} />
         </div>
       )}

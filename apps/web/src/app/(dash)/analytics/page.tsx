@@ -273,7 +273,7 @@ export default function AnalyticsPage() {
               label="Videos Analysed"
               value={analytics.topPerformers.length}
               sub={analytics.period}
-              subClassName="text-gray-500"
+              subClassName="text-gray-600"
             />
             <StatCard
               tone="cream"
@@ -292,7 +292,7 @@ export default function AnalyticsPage() {
                 return ctrs.length ? `${((ctrs.reduce((s, c) => s + c, 0) / ctrs.length) * 100).toFixed(1)}%` : '—';
               })()}
               sub="across top performers"
-              subClassName="text-gray-500"
+              subClassName="text-gray-600"
             />
           </div>
 
