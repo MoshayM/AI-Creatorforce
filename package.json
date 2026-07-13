@@ -10,7 +10,8 @@
     "db:migrate": "pnpm --filter @cf/db migrate:dev",
     "db:push": "pnpm --filter @cf/db db:push",
     "db:seed": "pnpm --filter @cf/db db:seed",
-    "db:studio": "pnpm --filter @cf/db studio"
+    "db:studio": "pnpm --filter @cf/db studio",
+    "changelog": "node scripts/generate-changelog.mjs"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

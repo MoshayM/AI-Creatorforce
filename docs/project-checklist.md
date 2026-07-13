@@ -109,7 +109,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 ### 29 CI/CD / 30 Deployment / 45 Release
 - ✅ Gated pipeline (lint, typecheck, tests+coverage, build+bundle budget, audit, Semgrep, e2e); ✅ zero-downtime DB changes (expand/contract)
 - ⛔ Progressive deploy/rollback, IaC environments, autoscaling — no hosted target (local-first)
-- ✅ Feature flags: SystemConfig-backed FlagsService (env `FEATURE_FLAGS` override > DB > default, 30s cache) + audit-logged `/admin/flags` surface behind `admin:flags` permission (Wave 29). ◐ Automated changelogs: conventional commits in place, no generator
+- ✅ Feature flags: SystemConfig-backed FlagsService (env `FEATURE_FLAGS` override > DB > default, 30s cache) + audit-logged `/admin/flags` surface behind `admin:flags` permission (Wave 29). ✅ Automated changelogs: `pnpm changelog` regenerates CHANGELOG.md from conventional commits (Wave 30)
 
 ### 31 Coding Standards
 - ✅ Lint/format/type gates; ✅ architecture invariants via Semgrep; ✅ documented public APIs (Swagger + dev-docs); ✅ dedup enforced in review
