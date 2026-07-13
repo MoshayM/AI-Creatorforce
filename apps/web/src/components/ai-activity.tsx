@@ -31,7 +31,7 @@ export function useElapsedSeconds(since: string | number | null): number {
 export function ElapsedBadge({ since, className = '' }: { since: string | number; className?: string }) {
   const secs = useElapsedSeconds(since);
   return (
-    <span className={`inline-flex items-center gap-1 text-xs text-gray-400 tabular-nums ${className}`}>
+    <span className={`inline-flex items-center gap-1 text-xs text-gray-500 tabular-nums ${className}`}>
       <Timer className="w-3 h-3" />
       {formatElapsed(secs)}
     </span>
@@ -67,13 +67,13 @@ export function AiWorkingCard({ title, steps = [], hint }: AiWorkingCardProps) {
         </div>
         <div className="text-right shrink-0">
           <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none">{formatElapsed(secs)}</p>
-          <p className="text-xs text-gray-400 mt-1">elapsed</p>
+          <p className="text-xs text-gray-500 mt-1">elapsed</p>
         </div>
       </div>
 
       <div className="h-1.5 rounded-full shimmer-bar" />
 
-      <p className="text-xs text-gray-400 mt-3">
+      <p className="text-xs text-gray-500 mt-3">
         {hint ?? 'This usually takes 10–30 seconds — results appear here the moment they are ready.'}
       </p>
     </div>

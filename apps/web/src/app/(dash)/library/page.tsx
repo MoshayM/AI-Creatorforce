@@ -37,7 +37,7 @@ function useDebounced<T>(value: T, delay: number): T {
 // useSearchParams() requires a Suspense boundary for static prerendering.
 export default function LibraryPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>}>
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-gray-500" /></div>}>
       <LibraryPageInner />
     </Suspense>
   );
@@ -162,7 +162,7 @@ function LibraryPageInner() {
       </div>
 
       {!channelId && (
-        <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+        <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
           <ListVideo className="w-12 h-12 mb-3 opacity-30" />
           <p>Select a channel above to browse its library.</p>
         </div>
@@ -196,7 +196,7 @@ function LibraryPageInner() {
                 {/* Search */}
                 <div className="relative flex-1 min-w-[200px] max-w-xs">
                   <svg
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -210,7 +210,7 @@ function LibraryPageInner() {
                     onChange={(e) => { setSearchInput(e.target.value); }}
                     placeholder="Search videos…"
                     aria-label="Search videos"
-                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm bg-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-300"
                   />
                 </div>
 
@@ -246,13 +246,13 @@ function LibraryPageInner() {
 
               {/* Grid / empty state */}
               {videosLoading && (
-                <div className="flex items-center gap-2 py-20 justify-center text-gray-400">
+                <div className="flex items-center gap-2 py-20 justify-center text-gray-500">
                   <Loader2 className="w-5 h-5 animate-spin" /> Loading library…
                 </div>
               )}
 
               {!videosLoading && allVideos.length === 0 && (
-                <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-4 py-20">
+                <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4 py-20">
                   <ListVideo className="w-12 h-12 opacity-30" />
                   <p className="text-sm">No videos synced yet.</p>
                   <SyncBadge channelId={channelId} />

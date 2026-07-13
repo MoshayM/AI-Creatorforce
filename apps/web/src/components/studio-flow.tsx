@@ -104,7 +104,7 @@ function fileIcon(name: string) {
   if (/\.(mp4|mov|webm)$/i.test(name)) return <FileVideo className="w-4 h-4 text-brand-600" />;
   if (/\.(mp3|wav)$/i.test(name)) return <FileAudio className="w-4 h-4 text-purple-600" />;
   if (/\.(png|jpg|jpeg)$/i.test(name)) return <FileImage className="w-4 h-4 text-green-600" />;
-  return <FileTextIcon className="w-4 h-4 text-gray-400" />;
+  return <FileTextIcon className="w-4 h-4 text-gray-500" />;
 }
 
 function formatSize(bytes: number): string {
@@ -146,7 +146,7 @@ function StatusBadge({ state, updatedAt }: { state: 'done' | 'running' | 'failed
     );
   }
   return (
-    <span className="flex items-center gap-1 text-[11px] font-medium text-gray-400">
+    <span className="flex items-center gap-1 text-[11px] font-medium text-gray-500">
       <span className="w-2 h-2 rounded-full bg-gray-300" /> Not started
     </span>
   );
@@ -237,7 +237,7 @@ function Tile({
           <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
         </div>
         {expandable && (
-          <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className="text-gray-400 hover:text-gray-600 p-1 shrink-0" aria-label={`${selected ? 'Collapse' : 'Expand'} ${title}`}>
+          <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className="text-gray-500 hover:text-gray-600 p-1 shrink-0" aria-label={`${selected ? 'Collapse' : 'Expand'} ${title}`}>
             {selected ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
         )}
@@ -408,11 +408,11 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
             </li>
           ))}
         </ul>
-      ) : <p className="text-sm text-gray-400">Run the analysis to see trending topics.</p>}
+      ) : <p className="text-sm text-gray-500">Run the analysis to see trending topics.</p>}
 
       {/* Channel intelligence rows */}
       <div className="mt-4 border-t border-gray-100 pt-3 space-y-2">
-        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Channel intelligence</p>
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Channel intelligence</p>
 
         {/* Audience row */}
         {(() => {
@@ -512,7 +512,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
 
       {/* Production settings */}
       <div className="mt-4 border-t border-gray-100 pt-3 space-y-3">
-        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Production settings</p>
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Production settings</p>
 
         <div className="space-y-2">
           <label className="flex items-center justify-between gap-2 text-xs">
@@ -548,7 +548,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
             />
             <span className="text-gray-700">Regenerate media on next render</span>
           </label>
-          <p className="text-[11px] text-gray-400 pl-5">Ignores cached voice/music/images when rendering.</p>
+          <p className="text-[11px] text-gray-500 pl-5">Ignores cached voice/music/images when rendering.</p>
         </div>
 
         {/* Compliance status */}
@@ -566,14 +566,14 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
               </span>
             )
           ) : (
-            <span className="flex items-center gap-1.5 text-gray-400">
+            <span className="flex items-center gap-1.5 text-gray-500">
               <ShieldCheck className="w-3.5 h-3.5" />
               Runs automatically before any media generation
             </span>
           )}
         </div>
 
-        <p className="text-[11px] text-gray-400 flex items-center gap-1">
+        <p className="text-[11px] text-gray-500 flex items-center gap-1">
           <ShieldCheck className="w-3 h-3 shrink-0" />
           Compliance-gated · publishing always needs your approval
         </p>
@@ -615,7 +615,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
         )}
         {growthTopics.length > 0 && (
           <>
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">From growth analysis</p>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">From growth analysis</p>
             <div className="flex flex-wrap gap-1.5">
               {growthTopics.map((g, i) => (
                 <button
@@ -649,7 +649,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
 
         {hasAiRecs && (
           <div className="mt-3 border-t border-gray-100 pt-3 space-y-2">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">AI recommendations</p>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">AI recommendations</p>
             {trendRecs.slice(0, 3).map((rec, i) => (
               <div key={i} className="flex gap-2 text-xs text-gray-700">
                 <span className="text-brand-500 font-bold shrink-0">•</span>
@@ -707,7 +707,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
             aria-label="Script topic"
             className="mt-1 w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400"
           />
-          <p className="text-[11px] text-gray-400 mt-1">Selected suggestions appear here automatically — edit freely before running.</p>
+          <p className="text-[11px] text-gray-500 mt-1">Selected suggestions appear here automatically — edit freely before running.</p>
         </div>
         {script ? (
           scriptDraft ? (
@@ -760,12 +760,12 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
                 </button>
                 <button onClick={() => setScriptDraft(null)} className="px-4 py-2 text-xs text-gray-500">Cancel</button>
               </div>
-              <p className="text-xs text-gray-400">Saved edits flow into voice, subtitles, and video automatically.</p>
+              <p className="text-xs text-gray-500">Saved edits flow into voice, subtitles, and video automatically.</p>
             </div>
           ) : (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-400">{script.totalWordCount ?? '?'} words · {script.sections.length} sections</p>
+                <p className="text-xs text-gray-500">{script.totalWordCount ?? '?'} words · {script.sections.length} sections</p>
                 <button
                   onClick={() => setScriptDraft(JSON.parse(JSON.stringify(script)) as ScriptResult)}
                   className="flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
@@ -785,11 +785,11 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
               </div>
             </div>
           )
-        ) : <p className="text-sm text-gray-400">Pick a topic, then run — includes fact-check and the compliance gate.</p>}
+        ) : <p className="text-sm text-gray-500">Pick a topic, then run — includes fact-check and the compliance gate.</p>}
 
         {/* Publishing content section */}
         <div className="mt-3 border-t border-gray-100 pt-3">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Publishing content</p>
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Publishing content</p>
           {hasPublishing ? (
             <div className="space-y-3">
               {(metaResult?.title ?? seoResult?.title) && (
@@ -829,7 +829,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
               )}
             </div>
           ) : (
-            <p className="text-xs text-gray-400">Generated during the Video stage.</p>
+            <p className="text-xs text-gray-500">Generated during the Video stage.</p>
           )}
         </div>
       </div>
@@ -898,7 +898,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
     </div>
   ) : (
     <>
-      <p className="text-sm text-gray-400">Run to generate the narration from your (edited) script.</p>
+      <p className="text-sm text-gray-500">Run to generate the narration from your (edited) script.</p>
       <div className="border border-brand-200 bg-brand-50 rounded-xl p-3 space-y-2">
         <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5 text-brand-600" />
@@ -978,7 +978,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
           </div>
           {musicResult.notes && <p className="text-xs text-amber-600">{musicResult.notes}</p>}
         </div>
-      ) : <p className="text-xs text-gray-400">Set a mood/genre (or leave blank for AI&rsquo;s pick) and run.</p>}
+      ) : <p className="text-xs text-gray-500">Set a mood/genre (or leave blank for AI&rsquo;s pick) and run.</p>}
     </div>
   );
 
@@ -986,7 +986,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
     <div className="space-y-5">
       {/* Scenes */}
       <div>
-        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Scenes</p>
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Scenes</p>
         {videoResult?.videos?.length ? (
           <div className="space-y-2">
             {/* sceneId comes from the LLM scene plan and is not guaranteed unique */}
@@ -998,13 +998,13 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-400">Run to storyboard the script and generate every scene.</p>
+          <p className="text-sm text-gray-500">Run to storyboard the script and generate every scene.</p>
         )}
       </div>
 
       {/* Rendering */}
       <div className="border-t border-gray-100 pt-4">
-        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Rendering</p>
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Rendering</p>
         {runningPipeline ? (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs mb-1">
@@ -1057,10 +1057,10 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
       {/* Final video */}
       {renderResult?.versionId && (
         <div className="border-t border-gray-100 pt-4">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Final video</p>
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Final video</p>
           <MediaPlayer versionId={renderResult.versionId} kind="video" />
           {(renderResult.preset ?? renderResult.durationSecs) && (
-            <p className="text-[11px] text-gray-400 mt-1">
+            <p className="text-[11px] text-gray-500 mt-1">
               {renderResult.preset}{renderResult.durationSecs ? ` · ${Math.round(renderResult.durationSecs)}s` : ''}
             </p>
           )}
@@ -1069,7 +1069,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
 
       {/* Downloads · Upload package */}
       <div className="border-t border-gray-100 pt-4">
-        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Downloads · Upload package</p>
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Downloads · Upload package</p>
         {exportFiles.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {exportFiles.map((f) => (
@@ -1080,15 +1080,15 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
               >
                 {fileIcon(f.name)}
                 <span className="flex-1 truncate text-xs">{f.name}</span>
-                <span className="text-[11px] text-gray-400 shrink-0">{formatSize(f.sizeBytes)}</span>
-                <Download className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                <span className="text-[11px] text-gray-500 shrink-0">{formatSize(f.sizeBytes)}</span>
+                <Download className="w-3.5 h-3.5 text-gray-500 shrink-0" />
               </button>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-gray-400">Render the final video to generate the upload-ready package.</p>
+          <p className="text-xs text-gray-500">Render the final video to generate the upload-ready package.</p>
         )}
-        <p className="text-[11px] text-gray-400 mt-2 flex items-center gap-1">
+        <p className="text-[11px] text-gray-500 mt-2 flex items-center gap-1">
           <ShieldCheck className="w-3 h-3 shrink-0" />
           Publishing to YouTube requires your approval in Approvals.
         </p>
@@ -1326,7 +1326,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
             <button
               onClick={() => setExpanded(null)}
               aria-label="Close details"
-              className="ml-auto text-gray-400 hover:text-gray-600"
+              className="ml-auto text-gray-500 hover:text-gray-600"
             >
               <X className="w-4 h-4" />
             </button>
@@ -1335,7 +1335,7 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
         </div>
       )}
 
-      <p className="text-xs text-gray-400 text-center mt-4">
+      <p className="text-xs text-gray-500 text-center mt-4">
         Complete each step in order for the best results.
       </p>
     </div>

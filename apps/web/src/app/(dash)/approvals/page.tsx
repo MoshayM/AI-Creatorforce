@@ -65,7 +65,7 @@ function ShortsExportReview({ result }: { result: ShortsExportResult }) {
           <video src={videoUrl} controls className="w-full rounded-lg aspect-[9/16] object-cover bg-black" />
         ) : (
           <div className="w-full rounded-lg aspect-[9/16] bg-gray-200 flex items-center justify-center">
-            <Clapperboard className="w-6 h-6 text-gray-400" />
+            <Clapperboard className="w-6 h-6 text-gray-500" />
           </div>
         )}
       </div>
@@ -81,7 +81,7 @@ function ShortsExportReview({ result }: { result: ShortsExportResult }) {
         )}
         {(meta.tags?.length ?? 0) > 0 && (
           <p className="flex items-center gap-1 flex-wrap mt-2">
-            <Tag className="w-3 h-3 text-gray-400" />
+            <Tag className="w-3 h-3 text-gray-500" />
             {meta.tags!.slice(0, 8).map((t) => (
               <span key={t} className="px-1.5 py-0.5 bg-brand-50 text-brand-700 rounded text-[11px]">{t}</span>
             ))}
@@ -110,7 +110,7 @@ function GenericResultView({ result }: { result: unknown }) {
         <dl className="space-y-1.5">
           {flat.map(([k, v]) => (
             <div key={k} className="flex gap-2">
-              <dt className="text-gray-400 shrink-0 w-32 capitalize">{k.replace(/([A-Z])/g, ' $1').toLowerCase()}</dt>
+              <dt className="text-gray-500 shrink-0 w-32 capitalize">{k.replace(/([A-Z])/g, ' $1').toLowerCase()}</dt>
               <dd className="text-gray-700 min-w-0 break-words">
                 {Array.isArray(v) ? (v as string[]).join(', ') : String(v)}
               </dd>
@@ -118,10 +118,10 @@ function GenericResultView({ result }: { result: unknown }) {
           ))}
         </dl>
       ) : (
-        <p className="text-gray-400 flex items-center gap-1.5"><FileText className="w-4 h-4" /> Structured result attached</p>
+        <p className="text-gray-500 flex items-center gap-1.5"><FileText className="w-4 h-4" /> Structured result attached</p>
       )}
       <details className="mt-2">
-        <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">Raw details</summary>
+        <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-600">Raw details</summary>
         <pre className="whitespace-pre-wrap text-xs text-gray-500 mt-1 max-h-40 overflow-y-auto">{JSON.stringify(obj, null, 2)}</pre>
       </details>
     </div>
@@ -147,13 +147,13 @@ function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggl
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors cursor-pointer"
       >
-        {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+        {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
         <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${STATUS_CHIP[effectiveStatus] ?? 'bg-gray-100 text-gray-500'}`}>
           {effectiveStatus}
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-gray-900 truncate">{title}</p>
-          <p className="text-[11px] text-gray-400 truncate">
+          <p className="text-[11px] text-gray-500 truncate">
             {a.project.title} · {a.project.channel.title}
             {a.reviewedAt ? ` · reviewed ${new Date(a.reviewedAt).toLocaleString()}` : ''}
           </p>
@@ -173,9 +173,9 @@ function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggl
         <div className="px-4 pb-4 border-t border-gray-50 pt-3">
           {shorts ? <ShortsExportReview result={shorts} /> : <GenericResultView result={a.job.result} />}
           <div className="text-xs text-gray-500 space-y-0.5 -mt-2">
-            {a.notes && <p><span className="text-gray-400">Review notes:</span> “{a.notes}”</p>}
-            {a.reviewedAt && <p><span className="text-gray-400">Reviewed:</span> {new Date(a.reviewedAt).toLocaleString()}</p>}
-            <p><span className="text-gray-400">Expires{effectiveStatus === 'EXPIRED' ? 'd' : ''}:</span> {new Date(a.expiresAt).toLocaleString()}</p>
+            {a.notes && <p><span className="text-gray-500">Review notes:</span> “{a.notes}”</p>}
+            {a.reviewedAt && <p><span className="text-gray-500">Reviewed:</span> {new Date(a.reviewedAt).toLocaleString()}</p>}
+            <p><span className="text-gray-500">Expires{effectiveStatus === 'EXPIRED' ? 'd' : ''}:</span> {new Date(a.expiresAt).toLocaleString()}</p>
           </div>
         </div>
       )}
@@ -226,7 +226,7 @@ export default function ApprovalsPage() {
       {isLoading ? (
         <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-600" /></div>
       ) : approvals.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
+        <div className="text-center py-20 text-gray-500">
           <CheckCircle className="w-12 h-12 mx-auto mb-4 opacity-30" />
           <p>No pending approvals. All caught up!</p>
         </div>
@@ -265,7 +265,7 @@ export default function ApprovalsPage() {
                 <button
                   onClick={() => approveMutation.mutate({ id: a.id })}
                   disabled={approveMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 disabled:opacity-50"
                 >
                   <CheckCircle className="w-4 h-4" />
                   Approve
@@ -293,7 +293,7 @@ export default function ApprovalsPage() {
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHistoryOpen((o) => !o); } }}
             className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
           >
-            {historyOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+            {historyOpen ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
             <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
               <History className="w-4 h-4" /> Recently reviewed
             </h2>

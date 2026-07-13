@@ -134,7 +134,7 @@ export default function BrandKitPage() {
             </button>
           ))}
           {channels.length === 0 && (
-            <p className="text-sm text-gray-400">No channels connected — go to Settings → Connect YouTube.</p>
+            <p className="text-sm text-gray-500">No channels connected — go to Settings → Connect YouTube.</p>
           )}
         </div>
       </div>
@@ -202,7 +202,7 @@ export default function BrandKitPage() {
           {/* Voice Profile */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="font-semibold text-gray-900 mb-1 flex items-center gap-2"><Mic className="w-4 h-4 text-brand-500" /> Voice Profile</h2>
-            <p className="text-xs text-gray-400 mb-4">Used by VoiceAgent to generate per-section TTS specifications</p>
+            <p className="text-xs text-gray-500 mb-4">Used by VoiceAgent to generate per-section TTS specifications</p>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { label: 'Narrator Name', value: voiceName, set: setVoiceName, placeholder: 'e.g. Alex' },

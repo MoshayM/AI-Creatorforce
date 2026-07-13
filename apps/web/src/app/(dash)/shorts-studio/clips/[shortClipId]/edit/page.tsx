@@ -519,7 +519,7 @@ export default function TimelineEditorPage() {
 
   if (isLoading || !timeline) {
     return (
-      <div className="flex items-center gap-2 text-gray-400 py-24 justify-center">
+      <div className="flex items-center gap-2 text-gray-500 py-24 justify-center">
         <Loader2 className="w-5 h-5 animate-spin" /> Loading editor…
       </div>
     );
@@ -541,10 +541,10 @@ export default function TimelineEditorPage() {
             <h1 className="font-bold text-gray-900 truncate">
               {clip!.topicSegment.highlight?.titleSuggestion ?? clip!.topicSegment.title}
             </h1>
-            <p className="text-xs text-gray-400">{clip!.clipType.replace(/_/g, ' ')} · {fmt(durationMs)} · {clip!.status.replace(/_/g, ' ')}</p>
+            <p className="text-xs text-gray-500">{clip!.clipType.replace(/_/g, ' ')} · {fmt(durationMs)} · {clip!.status.replace(/_/g, ' ')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 text-xs text-gray-400">
+        <div className="flex items-center gap-3 text-xs text-gray-500">
           {saving ? <span className="flex items-center gap-1"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</span>
             : pending.length > 0 ? <button onClick={() => void flush()} className="flex items-center gap-1 text-brand-600 hover:underline"><Save className="w-3.5 h-3.5" /> {pending.length} unsaved</button>
             : <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5 text-green-500" /> Saved</span>}
@@ -601,7 +601,7 @@ export default function TimelineEditorPage() {
               {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- pointer-drag editor surface */}
               <div className="h-7 border-b border-gray-200 relative cursor-pointer bg-white" onMouseDown={startPlayheadDrag}>
                 {ticks.map((s) => (
-                  <span key={s} className="absolute top-1 text-[10px] text-gray-400 font-mono" style={{ left: s * pxPerSec + 2 }}>
+                  <span key={s} className="absolute top-1 text-[10px] text-gray-500 font-mono" style={{ left: s * pxPerSec + 2 }}>
                     {Math.floor(s / 60)}:{String(s % 60).padStart(2, '0')}
                   </span>
                 ))}
@@ -645,7 +645,7 @@ export default function TimelineEditorPage() {
               </div>
             </div>
           </div>
-          <p className="text-[11px] text-gray-400 mt-2">
+          <p className="text-[11px] text-gray-500 mt-2">
             Space play · S split · Del delete · Ctrl+Z/Ctrl+Shift+Z undo/redo · +/− zoom · ←/→ nudge playhead · drag edges to trim
           </p>
         </div>
@@ -667,7 +667,7 @@ export default function TimelineEditorPage() {
                 disabled={assistBusy !== null}
                 className="w-full flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
-                {assistBusy === cap ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4 text-gray-400" />}
+                {assistBusy === cap ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4 text-gray-500" />}
                 {label}
               </button>
             ))}
@@ -676,10 +676,10 @@ export default function TimelineEditorPage() {
               disabled={genCaptions.isPending}
               className="w-full flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
-              {genCaptions.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Captions className="w-4 h-4 text-gray-400" />}
+              {genCaptions.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Captions className="w-4 h-4 text-gray-500" />}
               Generate captions
             </button>
-            {genCaptions.isSuccess && <p className="text-[11px] text-gray-400">Caption job queued — the track updates when it finishes.</p>}
+            {genCaptions.isSuccess && <p className="text-[11px] text-gray-500">Caption job queued — the track updates when it finishes.</p>}
           </div>
 
           {suggestions && (
@@ -688,14 +688,14 @@ export default function TimelineEditorPage() {
                 {suggestions.commands.length} suggestion{suggestions.commands.length === 1 ? '' : 's'}
               </p>
               {suggestions.commands.length === 0 && (
-                <p className="text-xs text-gray-400">Nothing to change — this clip already looks tight.</p>
+                <p className="text-xs text-gray-500">Nothing to change — this clip already looks tight.</p>
               )}
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
                 {suggestions.commands.map((c, i) => (
                   <div key={i} className="flex items-start justify-between gap-2 text-xs bg-gray-50 rounded-lg px-2.5 py-1.5">
                     <span className="text-gray-600">
                       {c.type === 'CUT_RANGE' ? `Cut ${fmt(c.startMs)}–${fmt(c.endMs)}` : c.type}
-                      {'reason' in c && c.reason ? <span className="text-gray-400"> — {c.reason}</span> : null}
+                      {'reason' in c && c.reason ? <span className="text-gray-500"> — {c.reason}</span> : null}
                     </span>
                     <button
                       onClick={() => setSuggestions((s) => s ? { ...s, commands: s.commands.filter((_, j) => j !== i) } : s)}

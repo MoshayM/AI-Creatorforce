@@ -99,12 +99,12 @@ function AnalysisProgress({ importedVideoId }: { importedVideoId: string }) {
         );
       })}
       {status.counts.transcriptSegments > 0 && (
-        <span className="text-[11px] text-gray-400 inline-flex items-center gap-1">
+        <span className="text-[11px] text-gray-500 inline-flex items-center gap-1">
           <Captions className="w-3 h-3" /> {status.counts.transcriptSegments} segments
         </span>
       )}
       {status.counts.scenes > 0 && (
-        <span className="text-[11px] text-gray-400 inline-flex items-center gap-1">
+        <span className="text-[11px] text-gray-500 inline-flex items-center gap-1">
           <Film className="w-3 h-3" /> {status.counts.scenes} scenes
         </span>
       )}
@@ -180,7 +180,7 @@ export default function ShortsStudioPage() {
       </div>
 
       {!projectId && (
-        <div className="text-center py-20 text-gray-400">
+        <div className="text-center py-20 text-gray-500">
           <Clapperboard className="w-10 h-10 mx-auto mb-3 opacity-40" />
           Pick a project above to browse its channel&apos;s videos.
         </div>
@@ -198,7 +198,7 @@ export default function ShortsStudioPage() {
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setImportedOpen((o) => !o); } }}
                 className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors shadow-sm"
               >
-                {importedOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                {importedOpen ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
                 <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Imported videos</h2>
                 <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium">{imported.length}</span>
                 {importedOpen && (
@@ -230,13 +230,13 @@ export default function ShortsStudioPage() {
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenVideoIds((prev) => { const next = new Set(prev); if (next.has(v.id)) next.delete(v.id); else next.add(v.id); return next; }); } }}
                           className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
                         >
-                          {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                          {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
                           {v.thumbnailUrl && (
                             <img src={v.thumbnailUrl} alt="" className="w-16 h-9 object-cover rounded-md shrink-0" />
                           )}
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-gray-900 truncate text-sm">{v.title}</p>
-                            <p className="text-[11px] text-gray-400">
+                            <p className="text-[11px] text-gray-500">
                               {fmtDuration(v.durationMs)}
                               {v._count.topicSegments > 0 ? ` · ${v._count.topicSegments} topics` : v._count.transcriptSegments > 0 ? ' · transcribed' : ''}
                             </p>
@@ -288,7 +288,7 @@ export default function ShortsStudioPage() {
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setChannelOpen((o) => !o); } }}
               className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors shadow-sm"
             >
-              {channelOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+              {channelOpen ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
               <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Channel videos</h2>
               {(channelVideos?.items?.length ?? 0) > 0 && (
                 <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium">{channelVideos!.items.length}</span>
@@ -309,7 +309,7 @@ export default function ShortsStudioPage() {
             {channelOpen && (
               <div className="mt-2 space-y-2">
                 {loadingChannel && (
-                  <div className="flex items-center gap-2 text-gray-400 py-10 justify-center">
+                  <div className="flex items-center gap-2 text-gray-500 py-10 justify-center">
                     <Loader2 className="w-5 h-5 animate-spin" /> Loading channel videos…
                   </div>
                 )}
@@ -335,13 +335,13 @@ export default function ShortsStudioPage() {
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
                         className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors"
                       >
-                        {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                        {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
                         {v.thumbnailUrl && (
                           <img src={v.thumbnailUrl} alt="" className="w-16 h-9 object-cover rounded-md shrink-0" />
                         )}
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-900 truncate">{v.title}</p>
-                          <p className="text-[11px] text-gray-400">{fmtDuration(v.durationMs)} · {fmtViews(v.viewCount)}</p>
+                          <p className="text-[11px] text-gray-500">{fmtDuration(v.durationMs)} · {fmtViews(v.viewCount)}</p>
                         </div>
                         {alreadyImported && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
                       </div>
@@ -352,7 +352,7 @@ export default function ShortsStudioPage() {
                           )}
                           <div className="flex-1 min-w-[220px]">
                             {v.publishedAt && (
-                              <p className="text-[11px] text-gray-400">Published {new Date(v.publishedAt).toLocaleDateString()}</p>
+                              <p className="text-[11px] text-gray-500">Published {new Date(v.publishedAt).toLocaleDateString()}</p>
                             )}
                             {v.description && (
                               <p className="text-xs text-gray-600 mt-1 whitespace-pre-line line-clamp-5">{v.description}</p>

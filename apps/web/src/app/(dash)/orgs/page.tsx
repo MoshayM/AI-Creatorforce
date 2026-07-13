@@ -172,17 +172,17 @@ function BudgetCard({ org }: { org: Org }) {
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs text-gray-500">Org balance</p>
             <p className="text-lg font-bold text-gray-900">{budget.orgBalance.toLocaleString()}</p>
-            <p className="text-[11px] text-gray-400">credits</p>
+            <p className="text-[11px] text-gray-500">credits</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs text-gray-500">Period budget</p>
             <p className="text-lg font-bold text-gray-900">{period ? period.allocatedCredits.toLocaleString() : '—'}</p>
-            <p className="text-[11px] text-gray-400">{period ? (period.hardCap ? 'hard cap' : 'soft cap') : 'no current period'}</p>
+            <p className="text-[11px] text-gray-500">{period ? (period.hardCap ? 'hard cap' : 'soft cap') : 'no current period'}</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs text-gray-500">Remaining</p>
             <p className="text-lg font-bold text-gray-900">{budget.remaining !== null ? budget.remaining.toLocaleString() : '—'}</p>
-            <p className="text-[11px] text-gray-400">{period ? `${consumedPct}% consumed` : 'unlimited'}</p>
+            <p className="text-[11px] text-gray-500">{period ? `${consumedPct}% consumed` : 'unlimited'}</p>
           </div>
         </div>
       )}
@@ -280,7 +280,7 @@ function MembersCard({ org }: { org: Org }) {
       <div className="flex items-center gap-2">
         <Users className="w-4 h-4 text-brand-600" />
         <span className="text-sm font-semibold text-gray-800">Members</span>
-        <span className="text-xs text-gray-400">{members.length}</span>
+        <span className="text-xs text-gray-500">{members.length}</span>
       </div>
 
       {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
@@ -288,7 +288,7 @@ function MembersCard({ org }: { org: Org }) {
       {members.length > 0 && (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-gray-400">
+            <tr className="text-left text-xs text-gray-500">
               <th className="py-1.5 font-medium">Member</th>
               <th className="py-1.5 font-medium">Role</th>
               <th className="py-1.5 font-medium">Team</th>
@@ -397,7 +397,7 @@ function TeamsCard({ org }: { org: Org }) {
       <div className="flex items-center gap-2">
         <Layers className="w-4 h-4 text-brand-600" />
         <span className="text-sm font-semibold text-gray-800">Teams</span>
-        <span className="text-xs text-gray-400">{teams.length}</span>
+        <span className="text-xs text-gray-500">{teams.length}</span>
       </div>
       <p className="text-xs text-gray-500">
         Teams scope budgets: a budget period created for a team only gates members assigned to it.

@@ -226,7 +226,7 @@ export function CopilotPanel() {
           {/* Bill-to picker — only shown when the user belongs to an org */}
           {orgs.length > 0 && (
             <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-              <Building2 className="w-3.5 h-3.5 text-gray-400" />
+              <Building2 className="w-3.5 h-3.5 text-gray-500" />
               <label htmlFor="copilot-billing-org" className="text-[11px] text-gray-500">Bill to</label>
               <select
                 id="copilot-billing-org"
@@ -245,7 +245,7 @@ export function CopilotPanel() {
           {/* Messages */}
           <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 && (
-              <div className="text-xs text-gray-400 space-y-2">
+              <div className="text-xs text-gray-500 space-y-2">
                 <p className="font-medium text-gray-500">Try:</p>
                 <p>“What's the status of my project?”</p>
                 <p>“Show my top highlights”</p>
@@ -286,7 +286,7 @@ export function CopilotPanel() {
               </div>
             )}
             {busy && (
-              <div className="flex items-center gap-2 text-gray-400 text-xs">
+              <div className="flex items-center gap-2 text-gray-500 text-xs">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" /> thinking…
               </div>
             )}

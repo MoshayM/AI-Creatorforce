@@ -30,7 +30,7 @@ export function AuthShell({
       <div className="absolute bottom-10 right-[6%] w-56 h-56 bg-[#a794e4]/50 rounded-full" />
 
       <div className="relative w-full max-w-md bg-[#f7f4fd] rounded-[3rem] shadow-2xl px-6 pt-10 pb-8">
-        <p className="text-center text-[11px] font-semibold tracking-[0.25em] uppercase text-[#9d8adf] mb-3">{brand}</p>
+        <p className="text-center text-[11px] font-semibold tracking-[0.25em] uppercase text-[#6b54bd] mb-3">{brand}</p>
 
         <div className="text-center">
           <span className="text-lg" aria-hidden>💜</span>
@@ -39,7 +39,7 @@ export function AuthShell({
             {title}
             <span className="text-[#e8c14d] ml-2" aria-hidden>✦</span>
           </h1>
-          <p className="text-sm text-gray-500 mt-2">{subtitle}</p>
+          <p className="text-sm text-gray-600 mt-2">{subtitle}</p>
         </div>
 
         {/* Mascot overlapping the form card */}
@@ -128,7 +128,7 @@ export function SocialRow({
 }) {
   return (
     <div className="mt-5">
-      <div className="flex items-center gap-3 text-xs text-gray-400">
+      <div className="flex items-center gap-3 text-xs text-gray-500">
         <span className="flex-1 h-px bg-gray-200" />
         or continue with
         <span className="flex-1 h-px bg-gray-200" />

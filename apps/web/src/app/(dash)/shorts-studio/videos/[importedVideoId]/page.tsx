@@ -119,7 +119,7 @@ function fmt(ms: number): string {
 function scoreColor(v: number): string {
   if (v >= 70) return 'text-green-600';
   if (v >= 40) return 'text-amber-600';
-  return 'text-gray-400';
+  return 'text-gray-500';
 }
 
 type FlowPhase =
@@ -246,28 +246,28 @@ function HighlightCard({ h, open, onToggle }: { h: Highlight; open: boolean; onT
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
         className="flex items-center gap-2.5 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
       >
-        {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+        {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
         <span className="text-lg font-bold text-brand-700 shrink-0 w-8 text-center">{Math.round(h.finalScore)}</span>
         <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${CATEGORY_COLORS[h.topicSegment.category] ?? 'bg-gray-100 text-gray-600'}`}>
           {h.topicSegment.category.replace(/_/g, ' ')}
         </span>
         <p className="font-semibold text-gray-900 text-sm truncate flex-1 min-w-0">{h.titleSuggestion}</p>
         <PhaseChip phase={phase} />
-        <span className="text-xs text-gray-400 shrink-0">{fmt(h.topicSegment.startMs)}–{fmt(h.topicSegment.endMs)}</span>
+        <span className="text-xs text-gray-500 shrink-0">{fmt(h.topicSegment.startMs)}–{fmt(h.topicSegment.endMs)}</span>
       </div>
 
       {!open ? null : (
       <div className="px-5 pb-5 border-t border-gray-50 pt-3">
       <p className="text-sm text-gray-500">{h.reason}</p>
       {h.keywords.length > 0 && (
-        <p className="text-[11px] text-gray-400 mt-1.5 truncate">{h.keywords.map((k) => `#${k.replace(/\s+/g, '')}`).join(' ')}</p>
+        <p className="text-[11px] text-gray-500 mt-1.5 truncate">{h.keywords.map((k) => `#${k.replace(/\s+/g, '')}`).join(' ')}</p>
       )}
 
       <div className="grid grid-cols-3 sm:grid-cols-9 gap-2 mt-4">
         {DIMENSIONS.map(({ key, label }) => (
           <div key={key} className="text-center">
             <p className={`text-sm font-bold ${scoreColor(h[key] as number)}`}>{Math.round(h[key] as number)}</p>
-            <p className="text-[10px] text-gray-400">{label}</p>
+            <p className="text-[10px] text-gray-500">{label}</p>
           </div>
         ))}
       </div>
@@ -462,7 +462,7 @@ export default function ShortsVideoDetailPage() {
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setClipsOpen((o) => !o); } }}
             className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors shadow-sm"
           >
-            {clipsOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+            {clipsOpen ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
             <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
               <Clapperboard className="w-4 h-4" /> Clips
             </h2>
@@ -498,26 +498,26 @@ export default function ShortsVideoDetailPage() {
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
                       className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
                     >
-                      {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                      {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
                       <p className="text-sm font-medium text-gray-900 truncate flex-1 min-w-0">
                         {c.topicSegment?.highlight?.titleSuggestion ?? c.topicSegment?.title ?? c.chapter?.title ?? 'Clip'}
                       </p>
                       <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                         {c.status.replace(/_/g, ' ').toLowerCase()}
                       </span>
-                      <span className="text-[11px] text-gray-400 shrink-0">{c.timeline ? fmt(c.timeline.durationMs) : '—'}</span>
+                      <span className="text-[11px] text-gray-500 shrink-0">{c.timeline ? fmt(c.timeline.durationMs) : '—'}</span>
                     </div>
                     {open && (
                       <div className="px-4 pb-4 pt-2 border-t border-gray-50 flex items-center gap-4 flex-wrap">
                         <div className="text-xs text-gray-500 space-y-0.5 flex-1 min-w-[220px]">
-                          <p><span className="text-gray-400">Platform:</span> {c.clipType.replace(/_/g, ' ')}</p>
-                          <p><span className="text-gray-400">Source range:</span> {fmt(c.sourceStartMs)}–{fmt(c.sourceEndMs)}</p>
-                          <p><span className="text-gray-400">Captions:</span> {c.timeline?._count.captions ? `${c.timeline._count.captions} lines` : 'none yet'}</p>
+                          <p><span className="text-gray-500">Platform:</span> {c.clipType.replace(/_/g, ' ')}</p>
+                          <p><span className="text-gray-500">Source range:</span> {fmt(c.sourceStartMs)}–{fmt(c.sourceEndMs)}</p>
+                          <p><span className="text-gray-500">Captions:</span> {c.timeline?._count.captions ? `${c.timeline._count.captions} lines` : 'none yet'}</p>
                           {c.topicSegment?.highlight && (
-                            <p><span className="text-gray-400">Highlight score:</span> {Math.round(c.topicSegment.highlight.finalScore)}</p>
+                            <p><span className="text-gray-500">Highlight score:</span> {Math.round(c.topicSegment.highlight.finalScore)}</p>
                           )}
                           {c.chapter && (
-                            <p><span className="text-gray-400">From chapter:</span> {c.chapter.title}</p>
+                            <p><span className="text-gray-500">From chapter:</span> {c.chapter.title}</p>
                           )}
                         </div>
                         <div className="flex gap-2 shrink-0">
@@ -547,7 +547,7 @@ export default function ShortsVideoDetailPage() {
       )}
 
       {loading && (
-        <div className="flex items-center gap-2 text-gray-400 py-16 justify-center">
+        <div className="flex items-center gap-2 text-gray-500 py-16 justify-center">
           <Loader2 className="w-5 h-5 animate-spin" /> Loading analysis…
         </div>
       )}
@@ -555,7 +555,7 @@ export default function ShortsVideoDetailPage() {
       {!loading && tab === 'highlights' && (
         <div className="space-y-4">
           {highlights.length === 0 && (
-            <p className="text-center text-gray-400 py-16">
+            <p className="text-center text-gray-500 py-16">
               No highlights yet — run Analyze from the Shorts Studio page and wait for the pipeline to finish.
             </p>
           )}
@@ -587,7 +587,7 @@ export default function ShortsVideoDetailPage() {
       {!loading && tab === 'topics' && (
         <div className="space-y-2">
           {topics.length === 0 && (
-            <p className="text-center text-gray-400 py-16">No topics yet — run Analyze from the Shorts Studio page.</p>
+            <p className="text-center text-gray-500 py-16">No topics yet — run Analyze from the Shorts Studio page.</p>
           )}
           {topics.length > 0 && (
             <div className="flex justify-end">
@@ -615,8 +615,8 @@ export default function ShortsVideoDetailPage() {
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
                   className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
                 >
-                  {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
-                  <span className="text-xs text-gray-400 font-mono shrink-0 w-20">{fmt(t.startMs)}–{fmt(t.endMs)}</span>
+                  {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
+                  <span className="text-xs text-gray-500 font-mono shrink-0 w-20">{fmt(t.startMs)}–{fmt(t.endMs)}</span>
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600'}`}>
                     {t.category.replace(/_/g, ' ')}
                   </span>
@@ -630,7 +630,7 @@ export default function ShortsVideoDetailPage() {
                 {open && (
                   <div className="px-4 pb-4 pt-2 border-t border-gray-50">
                     <p className="text-sm text-gray-600">{t.summary}</p>
-                    <p className="text-[11px] text-gray-400 mt-2">
+                    <p className="text-[11px] text-gray-500 mt-2">
                       {fmt(t.startMs)}–{fmt(t.endMs)} · {Math.round((t.endMs - t.startMs) / 1000)}s · confidence {(t.confidence * 100).toFixed(0)}%
                     </p>
                   </div>
@@ -645,7 +645,7 @@ export default function ShortsVideoDetailPage() {
         <div className="space-y-2">
           {chapters.length === 0 && (
             <div className="text-center py-16">
-              <p className="text-gray-400 mb-4">No chapters yet.</p>
+              <p className="text-gray-500 mb-4">No chapters yet.</p>
               <button
                 onClick={() => detectChapters.mutate()}
                 disabled={detectChapters.isPending || detectChapters.isSuccess || topics.length === 0}
@@ -655,7 +655,7 @@ export default function ShortsVideoDetailPage() {
                 {detectChapters.isSuccess ? 'Detecting — check back shortly' : 'Detect chapters'}
               </button>
               {topics.length === 0 && (
-                <p className="text-xs text-gray-400 mt-2">Chapters are derived from topics — run Analyze first.</p>
+                <p className="text-xs text-gray-500 mt-2">Chapters are derived from topics — run Analyze first.</p>
               )}
             </div>
           )}
@@ -737,8 +737,8 @@ export default function ShortsVideoDetailPage() {
                   onKeyDown={(e) => { if (!editing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(); } }}
                   className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
                 >
-                  {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
-                  <span className="text-xs text-gray-400 font-mono shrink-0 w-24">{fmt(c.startMs)}–{fmt(c.endMs)}</span>
+                  {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
+                  <span className="text-xs text-gray-500 font-mono shrink-0 w-24">{fmt(c.startMs)}–{fmt(c.endMs)}</span>
                   <span className="px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full text-[11px] font-medium shrink-0">Ch. {i + 1}</span>
                   {editing ? (
                     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- wrapper exists only to stop click propagation to the row toggle
@@ -758,7 +758,7 @@ export default function ShortsVideoDetailPage() {
                     <>
                       <p className="font-medium text-gray-900 truncate text-sm flex-1 min-w-0">
                         {c.title}
-                        {c.editedByUser && <span className="ml-1.5 text-[10px] text-gray-400" title="Edited by you">✎</span>}
+                        {c.editedByUser && <span className="ml-1.5 text-[10px] text-gray-500" title="Edited by you">✎</span>}
                       </p>
                       <button
                         onClick={(e) => { e.stopPropagation(); setEditingChapterId(c.id); setChapterTitleDraft(c.title); }}
@@ -769,7 +769,7 @@ export default function ShortsVideoDetailPage() {
                       </button>
                     </>
                   )}
-                  <span className="text-[11px] text-gray-400 shrink-0">{Math.round((c.endMs - c.startMs) / 1000)}s</span>
+                  <span className="text-[11px] text-gray-500 shrink-0">{Math.round((c.endMs - c.startMs) / 1000)}s</span>
                 </div>
                 {open && (
                   <div className="px-4 pb-4 pt-2 border-t border-gray-50">
@@ -806,7 +806,7 @@ export default function ShortsVideoDetailPage() {
                         </div>
                       </div>
                     )}
-                    <p className="text-[11px] text-gray-400 mt-2">
+                    <p className="text-[11px] text-gray-500 mt-2">
                       {fmt(c.startMs)}–{fmt(c.endMs)} · confidence {(c.confidence * 100).toFixed(0)}%
                     </p>
                   </div>
@@ -844,7 +844,7 @@ export default function ShortsVideoDetailPage() {
 
           {searchVideo.data?.needsEmbeddings && (
             <div className="text-center py-12">
-              <p className="text-gray-400 mb-4">This video has no embeddings yet — search needs them.</p>
+              <p className="text-gray-500 mb-4">This video has no embeddings yet — search needs them.</p>
               <button
                 onClick={() => generateEmbeddings.mutate()}
                 disabled={generateEmbeddings.isPending || generateEmbeddings.isSuccess}
@@ -865,7 +865,7 @@ export default function ShortsVideoDetailPage() {
           {searchVideo.data && !searchVideo.data.needsEmbeddings && (
             <div className="space-y-2">
               {searchVideo.data.results.length === 0 && (
-                <p className="text-center text-gray-400 py-12">No close matches for “{searchVideo.data.query}”.</p>
+                <p className="text-center text-gray-500 py-12">No close matches for “{searchVideo.data.query}”.</p>
               )}
               {searchVideo.data.results.map((r) => (
                 <div key={r.segmentId} className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 py-3 flex items-start gap-3">
@@ -874,14 +874,14 @@ export default function ShortsVideoDetailPage() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-800">{r.text}</p>
-                    <p className="text-[11px] text-gray-400 mt-1">
+                    <p className="text-[11px] text-gray-500 mt-1">
                       {r.chapter ? <>chapter: {r.chapter} · </> : null}match {(r.score * 100).toFixed(0)}%
                     </p>
                   </div>
                 </div>
               ))}
               {searchVideo.data.results.length > 0 && searchVideo.data.embeddedSegments < searchVideo.data.totalSegments && (
-                <p className="text-[11px] text-gray-400 text-center pt-2">
+                <p className="text-[11px] text-gray-500 text-center pt-2">
                   Searched {searchVideo.data.embeddedSegments}/{searchVideo.data.totalSegments} segments — embedding run incomplete.
                 </p>
               )}
@@ -889,7 +889,7 @@ export default function ShortsVideoDetailPage() {
           )}
 
           {!searchVideo.data && !searchVideo.isPending && !searchVideo.isError && (
-            <p className="text-center text-gray-400 py-12">Type a phrase to jump to the moment it's spoken.</p>
+            <p className="text-center text-gray-500 py-12">Type a phrase to jump to the moment it's spoken.</p>
           )}
         </div>
       )}
@@ -950,7 +950,7 @@ function SocialTab({ pieces, onGenerate, generating, queued }: {
   if (pieces.length === 0) {
     return (
       <div className="text-center py-16">
-        <p className="text-gray-400 mb-4">No social content yet.</p>
+        <p className="text-gray-500 mb-4">No social content yet.</p>
         <button
           onClick={onGenerate}
           disabled={generating || queued}
@@ -959,7 +959,7 @@ function SocialTab({ pieces, onGenerate, generating, queued }: {
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
           {queued ? 'Generating — check back shortly' : 'Generate social pack'}
         </button>
-        <p className="text-xs text-gray-400 mt-2">Quote cards, a carousel, a blog post, and a newsletter — one batched AI call.</p>
+        <p className="text-xs text-gray-500 mt-2">Quote cards, a carousel, a blog post, and a newsletter — one batched AI call.</p>
       </div>
     );
   }
@@ -979,7 +979,7 @@ function SocialTab({ pieces, onGenerate, generating, queued }: {
               <div key={q.id} className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
                 <p className="text-sm text-gray-800 italic">“{q.content.quote}”</p>
                 <div className="flex items-center justify-between mt-2">
-                  <p className="text-[11px] text-gray-400">
+                  <p className="text-[11px] text-gray-500">
                     {q.content.attribution ? `${q.content.attribution} · ` : ''}{q.content.startMs != null ? fmt(q.content.startMs) : ''}
                   </p>
                   <span className="flex items-center gap-3">

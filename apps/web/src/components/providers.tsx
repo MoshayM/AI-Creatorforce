@@ -33,7 +33,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   if (!mockReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-400 text-sm">Starting mock API…</div>
+        <div className="text-gray-500 text-sm">Starting mock API…</div>
       </div>
     );
   }

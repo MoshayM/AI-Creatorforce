@@ -20,7 +20,7 @@ export function StatCard({
   label,
   value,
   sub,
-  subClassName = 'text-green-600',
+  subClassName = 'text-green-800',
 }: {
   tone: StatTone;
   icon: React.ReactNode;
@@ -34,7 +34,7 @@ export function StatCard({
       <div className={`${TONES[tone].tile} w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm mb-3`}>
         {icon}
       </div>
-      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className="text-xs font-medium text-gray-600">{label}</p>
       <p className="text-3xl font-bold text-gray-900 mt-0.5 tabular-nums">{value}</p>
       {sub && <p className={`text-xs font-medium mt-1 ${subClassName}`}>{sub}</p>}
     </div>
@@ -77,7 +77,7 @@ export function PastelDonut({
   segments: Array<{ label: string; value: number; color: string }>;
 }) {
   const total = segments.reduce((s, x) => s + x.value, 0);
-  if (total === 0) return <p className="text-sm text-gray-400 py-8 text-center">No data yet</p>;
+  if (total === 0) return <p className="text-sm text-gray-500 py-8 text-center">No data yet</p>;
 
   let acc = 0;
   const stops = segments

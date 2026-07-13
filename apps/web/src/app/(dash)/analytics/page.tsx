@@ -58,7 +58,7 @@ async function callApi<T>(path: string, method = 'GET', body?: unknown): Promise
 function ImpactBadge({ impact }: { impact: 'positive' | 'negative' | 'neutral' }) {
   if (impact === 'positive') return <span className="flex items-center gap-1 text-green-600 text-xs"><TrendingUp className="w-3 h-3" /> Positive</span>;
   if (impact === 'negative') return <span className="flex items-center gap-1 text-red-500 text-xs"><TrendingDown className="w-3 h-3" /> Negative</span>;
-  return <span className="flex items-center gap-1 text-gray-400 text-xs"><Minus className="w-3 h-3" /> Neutral</span>;
+  return <span className="flex items-center gap-1 text-gray-500 text-xs"><Minus className="w-3 h-3" /> Neutral</span>;
 }
 
 function PriorityBadge({ priority }: { priority: 'high' | 'medium' | 'low' }) {
@@ -136,9 +136,9 @@ export default function AnalyticsPage() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
         <h2 className="font-semibold text-gray-900 mb-3">AI Usage (30 days)</h2>
         {tokenUsage === 'unavailable' ? (
-          <p className="text-sm text-gray-400">unavailable</p>
+          <p className="text-sm text-gray-500">unavailable</p>
         ) : tokenUsage === null ? (
-          <p className="text-sm text-gray-400">Loading…</p>
+          <p className="text-sm text-gray-500">Loading…</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             <div>
@@ -172,7 +172,7 @@ export default function AnalyticsPage() {
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cost by video</p>
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-gray-400">
+                <tr className="text-left text-xs text-gray-500">
                   <th className="pb-1 font-medium">Video</th>
                   <th className="pb-1 font-medium text-right">Calls</th>
                   <th className="pb-1 font-medium text-right">Tokens</th>
@@ -247,7 +247,7 @@ export default function AnalyticsPage() {
       {analytics && !loadingAnalytics && (
         <div className="space-y-6 fade-in">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-500">
               {analyticsDurationMs != null && `Report generated in ${formatDuration(analyticsDurationMs)}`}
               {growthDurationMs != null && ` · growth report in ${formatDuration(growthDurationMs)}`}
             </p>
@@ -263,7 +263,7 @@ export default function AnalyticsPage() {
               tone="lilac"
               icon={<Gauge className="w-5 h-5" />}
               label="Overall Score"
-              value={<>{analytics.overallScore}<span className="text-base text-gray-400 font-medium">/100</span></>}
+              value={<>{analytics.overallScore}<span className="text-base text-gray-500 font-medium">/100</span></>}
               sub={analytics.overallScore >= 70 ? 'Healthy channel' : analytics.overallScore >= 40 ? 'Room to grow' : 'Needs attention'}
               subClassName={analytics.overallScore >= 70 ? 'text-green-600' : analytics.overallScore >= 40 ? 'text-amber-500' : 'text-red-500'}
             />
@@ -273,7 +273,7 @@ export default function AnalyticsPage() {
               label="Videos Analysed"
               value={analytics.topPerformers.length}
               sub={analytics.period}
-              subClassName="text-gray-400"
+              subClassName="text-gray-500"
             />
             <StatCard
               tone="cream"
@@ -292,7 +292,7 @@ export default function AnalyticsPage() {
                 return ctrs.length ? `${((ctrs.reduce((s, c) => s + c, 0) / ctrs.length) * 100).toFixed(1)}%` : '—';
               })()}
               sub="across top performers"
-              subClassName="text-gray-400"
+              subClassName="text-gray-500"
             />
           </div>
 
@@ -300,7 +300,7 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <h2 className="font-semibold text-gray-900 mb-2">Performance Overview</h2>
-              <p className="text-xs text-gray-400 mb-2">Click-through rate per top video</p>
+              <p className="text-xs text-gray-500 mb-2">Click-through rate per top video</p>
               {analytics.topPerformers.some((v) => Number.isFinite(v.ctr) && v.ctr > 0) ? (
                 <PastelBars
                   data={analytics.topPerformers.map((v, i) => ({
@@ -311,12 +311,12 @@ export default function AnalyticsPage() {
                   formatValue={(v) => `${v.toFixed(1)}%`}
                 />
               ) : (
-                <p className="text-sm text-gray-400 py-8 text-center">No CTR data available for this channel yet</p>
+                <p className="text-sm text-gray-500 py-8 text-center">No CTR data available for this channel yet</p>
               )}
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <h2 className="font-semibold text-gray-900 mb-2">Insight Breakdown</h2>
-              <p className="text-xs text-gray-400 mb-4">Impact of the findings across your channel</p>
+              <p className="text-xs text-gray-500 mb-4">Impact of the findings across your channel</p>
               <PastelDonut
                 segments={[
                   { label: 'Positive', value: analytics.insights.filter((i) => i.impact === 'positive').length, color: '#9fd8a5' },

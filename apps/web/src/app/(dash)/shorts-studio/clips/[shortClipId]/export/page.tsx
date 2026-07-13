@@ -148,7 +148,7 @@ export default function ClipExportPage() {
             <Loader2 className="w-5 h-5 animate-spin text-brand-600" />
             <div>
               <p className="text-sm font-medium text-gray-800">Rendering…</p>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-500">
                 Pass {status?.renderJob?.ffmpegPass ?? 1}
                 {checkpoint?.total ? ` · segment ${checkpoint.segmentsDone ?? 0}/${checkpoint.total}` : ''}
               </p>
@@ -171,7 +171,7 @@ export default function ClipExportPage() {
             </button>
           </>
         ) : (
-          <p className="text-sm text-gray-400">Not rendered yet — click "Render clip" to produce the vertical video.</p>
+          <p className="text-sm text-gray-500">Not rendered yet — click "Render clip" to produce the vertical video.</p>
         )}
       </div>
 
@@ -244,7 +244,7 @@ export default function ClipExportPage() {
               {((publishMutation.error ?? requestPublish.error ?? exportMutation.error) as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Action failed'}
             </p>
           )}
-          <p className="text-[11px] text-gray-400 mt-2">
+          <p className="text-[11px] text-gray-500 mt-2">
             Publishing runs a compliance audit and requires human approval — no clip is uploaded without both.
           </p>
         </div>
@@ -266,7 +266,7 @@ export default function ClipExportPage() {
         <div>
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Thumbnail</h2>
           {thumbs.length === 0 ? (
-            <p className="text-sm text-gray-400">Thumbnails are generated automatically after the first render.</p>
+            <p className="text-sm text-gray-500">Thumbnails are generated automatically after the first render.</p>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {thumbs.map((t) => (

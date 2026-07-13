@@ -227,7 +227,7 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
                   {/* List */}
                   <ul className="max-h-80 overflow-y-auto divide-y divide-gray-50">
                     {notifications.length === 0 ? (
-                      <li className="px-4 py-6 text-center text-sm text-gray-400">No notifications yet</li>
+                      <li className="px-4 py-6 text-center text-sm text-gray-500">No notifications yet</li>
                     ) : (
                       notifications.map((n) => (
                         <li key={n.id}>
@@ -245,7 +245,7 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
                                 {n.body && (
                                   <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{n.body}</p>
                                 )}
-                                <p className="text-[10px] text-gray-400 mt-1">{relativeTime(n.createdAt)}</p>
+                                <p className="text-[10px] text-gray-500 mt-1">{relativeTime(n.createdAt)}</p>
                               </div>
                             </div>
                           </button>
@@ -264,7 +264,7 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
               </div>
               <div className="leading-tight">
                 <p className="text-sm font-semibold text-gray-800">{userName}</p>
-                <p className="text-[11px] text-gray-400">Creator</p>
+                <p className="text-[11px] text-gray-500">Creator</p>
               </div>
             </div>
           </div>

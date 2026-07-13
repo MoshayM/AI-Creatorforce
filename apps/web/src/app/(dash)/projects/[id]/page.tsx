@@ -58,7 +58,7 @@ function BillingOrgPicker({ projectId, billingOrgId }: { projectId: string; bill
   if (orgs.length === 0) return null;
   return (
     <div className="flex items-center gap-1.5">
-      <label htmlFor="project-billing-org" className="text-xs text-gray-400">Bill to</label>
+      <label htmlFor="project-billing-org" className="text-xs text-gray-500">Bill to</label>
       <select
         id="project-billing-org"
         value={billingOrgId ?? ''}
@@ -84,7 +84,7 @@ const STATUS_BADGE: Record<string, string> = {
   WAITING_APPROVAL:  'bg-orange-100 text-orange-700',
   QUEUED:            'bg-gray-100 text-gray-600',
   PENDING:           'bg-gray-100 text-gray-500',
-  CANCELLED:         'bg-gray-100 text-gray-400',
+  CANCELLED:         'bg-gray-100 text-gray-500',
   RETRYING:          'bg-yellow-100 text-yellow-700',
   RATE_LIMITED:      'bg-amber-100 text-amber-700',
   PROVIDER_SWITCHING:'bg-indigo-100 text-indigo-700',
@@ -179,7 +179,7 @@ function ScriptViewer({ r }: { r: Record<string, unknown> }) {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           {title && <p className="font-semibold text-gray-900 text-sm">{title}</p>}
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-gray-500 mt-0.5">
             {wordCount ? `${wordCount} words` : ''}
             {sections.length ? ` · ${sections.length} sections` : ''}
             {durationMins ? ` · ~${durationMins} min` : ''}
@@ -226,11 +226,11 @@ function ScriptViewer({ r }: { r: Record<string, unknown> }) {
               <span className="text-sm font-medium text-gray-800">{section.heading}</span>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {section.durationEstimateSecs != null && (
-                  <span className="text-xs text-gray-400">{Math.round(section.durationEstimateSecs / 60)}m</span>
+                  <span className="text-xs text-gray-500">{Math.round(section.durationEstimateSecs / 60)}m</span>
                 )}
                 {expandedSections.has(idx)
-                  ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
-                  : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                  ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" />
+                  : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />}
               </div>
             </button>
             {expandedSections.has(idx) && (
@@ -443,7 +443,7 @@ function ResultPreview({ job }: { job: Job }) {
                   </p>
                 )}
               </div>
-              <span className="absolute bottom-2 right-2 text-xs text-gray-400 font-mono">{aspectRatio || '16:9'}</span>
+              <span className="absolute bottom-2 right-2 text-xs text-gray-500 font-mono">{aspectRatio || '16:9'}</span>
             </div>
 
             {/* Brief details */}
@@ -488,7 +488,7 @@ function ResultPreview({ job }: { job: Job }) {
         );
     }
   } catch {
-    return <p className="text-xs text-gray-400">Result preview unavailable</p>;
+    return <p className="text-xs text-gray-500">Result preview unavailable</p>;
   }
 }
 
@@ -581,7 +581,7 @@ export default function ProjectDetailPage() {
 
       {/* Header */}
       <div className="mb-6">
-        <Link href="/projects" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mb-4">
+        <Link href="/projects" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-600 mb-4">
           <ArrowLeft className="w-3.5 h-3.5" /> All Projects
         </Link>
         <div className="flex items-start justify-between gap-4">
@@ -624,13 +624,13 @@ export default function ProjectDetailPage() {
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setJobsOpen((o) => !o); } }}
           className={`px-6 py-4 flex items-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors rounded-t-xl ${jobsOpen ? 'border-b border-gray-100' : 'rounded-b-xl'}`}
         >
-          {jobsOpen ? <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />}
+          {jobsOpen ? <ChevronUp className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" />}
           <div>
             <h2 className="font-semibold text-gray-900 flex items-center gap-2">
               Recent Jobs
               <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium">{project.jobs.length}</span>
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">All AI agent runs for this project</p>
+            <p className="text-xs text-gray-500 mt-0.5">All AI agent runs for this project</p>
           </div>
           {jobsOpen && project.jobs.length > 0 && (
             <button
@@ -649,7 +649,7 @@ export default function ProjectDetailPage() {
           )}
         </div>
         {!jobsOpen ? null : project.jobs.length === 0 ? (
-          <div className="text-center py-14 text-gray-400">
+          <div className="text-center py-14 text-gray-500">
             <Play className="w-8 h-8 mx-auto mb-3 opacity-20" />
             <p className="text-sm">No jobs yet — run an agent above to start creating content.</p>
           </div>
@@ -685,7 +685,7 @@ export default function ProjectDetailPage() {
                       <p className="font-medium text-gray-800 text-sm">
                         {job.type}
                       </p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-gray-500">
                         {new Date(job.createdAt).toLocaleString()}
                         {job.completedAt && ` · took ${formatDuration(new Date(job.completedAt).getTime() - new Date(job.startedAt ?? job.createdAt).getTime())}`}
                       </p>
@@ -705,7 +705,7 @@ export default function ProjectDetailPage() {
                             {STATUS_LABEL[displayStatus] ?? displayStatus}
                           </span>
                           {live.detail && (
-                            <span className="text-xs text-gray-400">{live.detail}</span>
+                            <span className="text-xs text-gray-500">{live.detail}</span>
                           )}
                         </div>
                       )}
@@ -714,7 +714,7 @@ export default function ProjectDetailPage() {
                         {STATUS_LABEL[job.status] ?? job.status}
                       </span>
                       {!!job.result && (
-                        <button onClick={(e) => { e.stopPropagation(); toggle(histKey); }} className="text-gray-400 hover:text-gray-600">
+                        <button onClick={(e) => { e.stopPropagation(); toggle(histKey); }} className="text-gray-500 hover:text-gray-600">
                           {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </button>
                       )}
@@ -744,7 +744,7 @@ export default function ProjectDetailPage() {
                       {!isJobRunning && (
                         <button
                           onClick={() => toggle(logKey)}
-                          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 mb-1.5"
+                          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-600 mb-1.5"
                         >
                           {logOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                           Activity log ({logs.length} steps)

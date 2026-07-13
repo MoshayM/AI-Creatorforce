@@ -55,7 +55,7 @@ export function VideoCard({ video }: { video: LibraryVideo }) {
       {/* Body */}
       <div className="flex-1 flex flex-col px-3 py-2 min-h-0">
         <p className="text-sm font-medium text-gray-900 line-clamp-2 leading-snug">{video.title}</p>
-        <div className="mt-auto flex items-center justify-between text-[11px] text-gray-400">
+        <div className="mt-auto flex items-center justify-between text-[11px] text-gray-500">
           <span>{fmtDate(video.publishedAt)}</span>
           <span>{fmtViews(video.viewCount)}</span>
         </div>

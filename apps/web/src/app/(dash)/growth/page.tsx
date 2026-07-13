@@ -121,7 +121,7 @@ function TrialStatusCard() {
               style={{ width: `${pct}%` }}
             />
           </div>
-          <p className="text-xs text-gray-400">{pct}% remaining</p>
+          <p className="text-xs text-gray-500">{pct}% remaining</p>
         </div>
       )}
 
@@ -175,7 +175,7 @@ function UpgradeNudges() {
           <button
             onClick={() => dismissMutation.mutate(rec.id)}
             aria-label="Dismiss recommendation"
-            className="shrink-0 text-gray-400 hover:text-gray-600 p-1 rounded"
+            className="shrink-0 text-gray-500 hover:text-gray-600 p-1 rounded"
           >
             <X className="w-4 h-4" />
           </button>
@@ -231,7 +231,7 @@ function OfferCenter() {
                 </p>
               )}
               {offer.validTo && (
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-500">
                   Expires {new Date(offer.validTo).toLocaleDateString()}
                 </p>
               )}
@@ -378,21 +378,21 @@ function ReferralCenter() {
         {earnings && (
           <div className="flex flex-wrap gap-3">
             <div className="flex flex-col bg-gray-50 rounded-lg px-3 py-2 min-w-[80px]">
-              <span className="text-xs text-gray-400">Total earned</span>
+              <span className="text-xs text-gray-500">Total earned</span>
               <span className="text-lg font-bold text-gray-800">{fmtCredits(earnings.totalCredits)}</span>
-              <span className="text-[10px] text-gray-400">credits</span>
+              <span className="text-[10px] text-gray-500">credits</span>
             </div>
             <div className="flex flex-col bg-green-50 rounded-lg px-3 py-2 min-w-[80px]">
-              <span className="text-xs text-gray-400">Qualified</span>
+              <span className="text-xs text-gray-500">Qualified</span>
               <span className="text-lg font-bold text-green-700">{earnings.qualifiedCount}</span>
             </div>
             <div className="flex flex-col bg-yellow-50 rounded-lg px-3 py-2 min-w-[80px]">
-              <span className="text-xs text-gray-400">Pending</span>
+              <span className="text-xs text-gray-500">Pending</span>
               <span className="text-lg font-bold text-yellow-700">{earnings.pendingCount}</span>
             </div>
             {earnings.flaggedCount > 0 && (
               <div className="flex flex-col bg-red-50 rounded-lg px-3 py-2 min-w-[80px]">
-                <span className="text-xs text-gray-400">Under review</span>
+                <span className="text-xs text-gray-500">Under review</span>
                 <span className="text-lg font-bold text-red-600">{earnings.flaggedCount}</span>
               </div>
             )}
@@ -404,7 +404,7 @@ function ReferralCenter() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-gray-700">
               <thead>
-                <tr className="text-gray-400 border-b border-gray-100">
+                <tr className="text-gray-500 border-b border-gray-100">
                   <th className="text-left pb-2 font-medium">Date</th>
                   <th className="text-left pb-2 font-medium">Status</th>
                   <th className="text-right pb-2 font-medium">Reward</th>
@@ -469,7 +469,7 @@ function ReferralCenter() {
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
             <Trophy className="w-4 h-4 text-amber-500" />
             <span className="text-sm font-semibold text-gray-800">Referral Leaderboard</span>
-            <span className="text-xs text-gray-400">(top 10)</span>
+            <span className="text-xs text-gray-500">(top 10)</span>
           </div>
           <div className="divide-y divide-gray-50">
             {leaderboard.slice(0, 10).map((entry) => (
@@ -477,7 +477,7 @@ function ReferralCenter() {
                 key={entry.rank}
                 className={`flex items-center gap-3 px-4 py-2.5 ${entry.userLabel.includes('(you)') ? 'bg-brand-50' : ''}`}
               >
-                <span className={`text-sm font-bold w-6 text-center ${entry.rank <= 3 ? 'text-amber-500' : 'text-gray-400'}`}>
+                <span className={`text-sm font-bold w-6 text-center ${entry.rank <= 3 ? 'text-amber-500' : 'text-gray-500'}`}>
                   {entry.rank}
                 </span>
                 <span className="flex-1 text-sm text-gray-700 truncate">{entry.userLabel}</span>

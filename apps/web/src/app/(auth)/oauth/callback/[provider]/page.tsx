@@ -129,7 +129,7 @@ function OAuthCallbackInner() {
             </p>
             <Link
               href="/login"
-              className="mt-2 inline-block px-5 py-2.5 bg-[#8b74d8] hover:bg-[#7a63cb] text-white rounded-full text-sm font-semibold shadow-lg shadow-[#8b74d8]/40 transition-colors"
+              className="mt-2 inline-block px-5 py-2.5 bg-[#7a63cb] hover:bg-[#6b54bd] text-white rounded-full text-sm font-semibold shadow-lg shadow-[#8b74d8]/40 transition-colors"
             >
               Go to Login
             </Link>
@@ -142,7 +142,7 @@ function OAuthCallbackInner() {
             <p className="text-sm text-red-600">{callbackState.message}</p>
             <Link
               href="/login"
-              className="mt-2 inline-block px-5 py-2.5 bg-[#8b74d8] hover:bg-[#7a63cb] text-white rounded-full text-sm font-semibold shadow-lg shadow-[#8b74d8]/40 transition-colors"
+              className="mt-2 inline-block px-5 py-2.5 bg-[#7a63cb] hover:bg-[#6b54bd] text-white rounded-full text-sm font-semibold shadow-lg shadow-[#8b74d8]/40 transition-colors"
             >
               Try again
             </Link>

@@ -109,7 +109,7 @@ export default function DiscoverPage() {
       {result && !isPending && (
         <div className="space-y-6 fade-in">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-500">
               Analysis date: {result.analysisDate}
               {durationMs != null && ` · analyzed in ${formatDuration(durationMs)}`}
             </p>
@@ -138,7 +138,7 @@ export default function DiscoverPage() {
                   ))}
                 </div>
                 {t.peakTime && (
-                  <p className="text-xs text-gray-400 mt-2">Peak engagement: {t.peakTime}</p>
+                  <p className="text-xs text-gray-500 mt-2">Peak engagement: {t.peakTime}</p>
                 )}
               </div>
             ))}
@@ -164,7 +164,7 @@ export default function DiscoverPage() {
       )}
 
       {!result && !isPending && (
-        <div className="text-center py-20 text-gray-400">
+        <div className="text-center py-20 text-gray-500">
           <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-30" />
           <p className="text-sm">Enter a niche and click <strong>Analyze</strong> to see trending topics</p>
           <p className="text-xs mt-2 opacity-70">Supported: Tech, Finance, Cooking, Fitness, Gaming, Travel, Education, Business, Beauty</p>

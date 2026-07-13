@@ -125,7 +125,7 @@ export default function AdminDashboardPage() {
       <div className="p-8 flex flex-col items-center justify-center h-full text-center">
         <ShieldAlert className="w-10 h-10 text-gray-300 mb-3" />
         <p className="text-sm font-semibold text-gray-600">Admin access required</p>
-        <p className="text-xs text-gray-400 mt-1">This dashboard is available to platform owners and super admins.</p>
+        <p className="text-xs text-gray-500 mt-1">This dashboard is available to platform owners and super admins.</p>
       </div>
     );
   }
@@ -135,7 +135,7 @@ export default function AdminDashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Enterprise Dashboard</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Revenue, AI economics, forecasts and provider health</p>
+          <p className="text-sm text-gray-500 mt-0.5">Revenue, AI economics, forecasts and provider health</p>
         </div>
         <button
           type="button"
@@ -152,15 +152,15 @@ export default function AdminDashboardPage() {
       )}
 
       {loading && !metrics ? (
-        <p className="text-sm text-gray-400 py-16 text-center">Loading enterprise metrics…</p>
+        <p className="text-sm text-gray-500 py-16 text-center">Loading enterprise metrics…</p>
       ) : metrics ? (
         <>
           {/* ── KPI cards ─────────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard tone="lilac" icon={<DollarSign className="w-5 h-5" />} label="MRR" value={money(metrics.mrr)} sub={`ARR ${money(metrics.arr)}`} subClassName="text-gray-500" />
-            <StatCard tone="pink" icon={<Users className="w-5 h-5" />} label="ARPU (30d)" value={money(metrics.arpu)} sub={`LTV ${money(metrics.ltv)}`} subClassName="text-gray-500" />
-            <StatCard tone="cream" icon={<TrendingUp className="w-5 h-5" />} label="Churn (30d)" value={pct(metrics.churn)} sub="cancelled / active" subClassName="text-gray-400" />
-            <StatCard tone="periwinkle" icon={<PiggyBank className="w-5 h-5" />} label="Cache savings (30d)" value={usd(metrics.cacheSavingsUsd)} sub={`AI cost ${usd(metrics.aiCostUsd)}`} subClassName="text-gray-500" />
+            <StatCard tone="lilac" icon={<DollarSign className="w-5 h-5" />} label="MRR" value={money(metrics.mrr)} sub={`ARR ${money(metrics.arr)}`} subClassName="text-gray-600" />
+            <StatCard tone="pink" icon={<Users className="w-5 h-5" />} label="ARPU (30d)" value={money(metrics.arpu)} sub={`LTV ${money(metrics.ltv)}`} subClassName="text-gray-600" />
+            <StatCard tone="cream" icon={<TrendingUp className="w-5 h-5" />} label="Churn (30d)" value={pct(metrics.churn)} sub="cancelled / active" subClassName="text-gray-600" />
+            <StatCard tone="periwinkle" icon={<PiggyBank className="w-5 h-5" />} label="Cache savings (30d)" value={usd(metrics.cacheSavingsUsd)} sub={`AI cost ${usd(metrics.aiCostUsd)}`} subClassName="text-gray-600" />
           </div>
 
           {/* ── Revenue + models ──────────────────────────────────────────── */}
@@ -183,14 +183,14 @@ export default function AdminDashboardPage() {
                 <Cpu className="w-4 h-4 text-[#9d6ff0]" /> Most-used AI models (30d, by cost)
               </h2>
               {metrics.topModels.length === 0 ? (
-                <p className="text-sm text-gray-400 py-8 text-center">No AI usage yet</p>
+                <p className="text-sm text-gray-500 py-8 text-center">No AI usage yet</p>
               ) : (
                 <ul className="divide-y divide-gray-50">
                   {metrics.topModels.map((m) => (
                     <li key={m.model} className="flex items-center justify-between py-2.5">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-800 truncate">{m.model}</p>
-                        <p className="text-[11px] text-gray-400 tabular-nums">
+                        <p className="text-[11px] text-gray-500 tabular-nums">
                           {((m.tokensIn + m.tokensOut) / 1000).toFixed(1)}k tokens
                         </p>
                       </div>
@@ -219,7 +219,7 @@ export default function AdminDashboardPage() {
               </button>
             </div>
             {forecasts.length === 0 ? (
-              <p className="text-sm text-gray-400 py-6 text-center">
+              <p className="text-sm text-gray-500 py-6 text-center">
                 No forecasts yet — they generate daily, or trigger one now.
               </p>
             ) : (
@@ -230,7 +230,7 @@ export default function AdminDashboardPage() {
                     <p className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
                       {formatForecastValue(f.metric, f.predictedValue)}
                     </p>
-                    <p className="text-[11px] text-gray-400 mt-1 tabular-nums">
+                    <p className="text-[11px] text-gray-500 mt-1 tabular-nums">
                       {formatForecastValue(f.metric, f.confidenceLow)} – {formatForecastValue(f.metric, f.confidenceHigh)}
                       {' · '}{f.method.replace('_', ' ')}
                     </p>
@@ -246,12 +246,12 @@ export default function AdminDashboardPage() {
               <Activity className="w-4 h-4 text-[#9d6ff0]" /> AI providers
             </h2>
             {providers.length === 0 ? (
-              <p className="text-sm text-gray-400 py-6 text-center">Provider registry unavailable for your role</p>
+              <p className="text-sm text-gray-500 py-6 text-center">Provider registry unavailable for your role</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-gray-400">
+                    <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500">
                       <th className="py-2 pr-4 font-semibold">Provider</th>
                       <th className="py-2 pr-4 font-semibold">Status</th>
                       <th className="py-2 pr-4 font-semibold">Health</th>

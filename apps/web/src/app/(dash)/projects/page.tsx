@@ -87,8 +87,8 @@ export default function ProjectsPage() {
       {projects.length > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard tone="lilac" icon={<FolderOpen className="w-5 h-5" />} label="Projects" value={projects.length} />
-          <StatCard tone="pink" icon={<PlayCircle className="w-5 h-5" />} label="Active" value={projects.filter((p) => p.status === 'ACTIVE').length} sub="in production" subClassName="text-gray-400" />
-          <StatCard tone="cream" icon={<Zap className="w-5 h-5" />} label="Agent Jobs" value={projects.reduce((s, p) => s + p._count.jobs, 0)} sub="across all projects" subClassName="text-gray-400" />
+          <StatCard tone="pink" icon={<PlayCircle className="w-5 h-5" />} label="Active" value={projects.filter((p) => p.status === 'ACTIVE').length} sub="in production" subClassName="text-gray-500" />
+          <StatCard tone="cream" icon={<Zap className="w-5 h-5" />} label="Agent Jobs" value={projects.reduce((s, p) => s + p._count.jobs, 0)} sub="across all projects" subClassName="text-gray-500" />
           <StatCard tone="periwinkle" icon={<Video className="w-5 h-5" />} label="Videos" value={projects.reduce((s, p) => s + p._count.videos, 0)} />
         </div>
       )}
@@ -123,6 +123,7 @@ export default function ProjectsPage() {
 
             <div className="space-y-3">
               <select
+                aria-label="Channel"
                 value={form.channelId}
                 onChange={(e) => setForm((f) => ({ ...f, channelId: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -145,7 +146,7 @@ export default function ProjectsPage() {
                   onChange={(e) => setForm((f) => ({ ...f, niche: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-500 mt-1">
                   {form.contentType === 'MUSIC' ? 'e.g. Gospel, R&B, Worship' :
                    form.contentType === 'SHORT' ? 'e.g. Tech Tips, Life Hacks' :
                    'e.g. Technology, Finance, Cooking'}
@@ -171,7 +172,7 @@ export default function ProjectsPage() {
       {isLoading ? (
         <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-600" /></div>
       ) : projects.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
+        <div className="text-center py-20 text-gray-500">
           <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-30" />
           <p>No projects yet. Create your first campaign!</p>
         </div>
@@ -197,7 +198,7 @@ export default function ProjectsPage() {
                 <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
                   <Youtube className="w-4 h-4" />
                   {p.channel.title}
-                  {p.niche && <span className="text-gray-400">· {p.niche}</span>}
+                  {p.niche && <span className="text-gray-500">· {p.niche}</span>}
                 </div>
                 <div className="flex gap-4 text-sm text-gray-500">
                   <span className="flex items-center gap-1"><Activity className="w-3 h-3" />{p._count.jobs} jobs</span>

@@ -111,7 +111,7 @@ export default function AssetsPage() {
       {error && <p className="text-sm text-red-500">{error}</p>}
 
       {selectedProject && !loading && assets.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-gray-500">
           <Layers className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p className="text-sm">No assets yet for this project.</p>
           <p className="text-xs mt-1">Run Voice Spec, Image Brief, or Music Brief from the project pipeline.</p>
@@ -142,7 +142,7 @@ export default function AssetsPage() {
                         {status.label}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-500">
                       {asset.versions.length} version{asset.versions.length !== 1 ? 's' : ''}
                       {latestVersion?.provider ? ` · ${latestVersion.provider}` : ''}
                       {latestVersion?.durationMs ? ` · ${Math.round(latestVersion.durationMs / 1000)}s` : ''}

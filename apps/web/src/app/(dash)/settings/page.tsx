@@ -469,11 +469,11 @@ function SettingsContent() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-900 truncate">{ch.title}</p>
                   {ch.customUrl && (
-                    <p className="text-xs text-gray-400 truncate">{ch.customUrl.startsWith('@') ? ch.customUrl : `@${ch.customUrl}`}</p>
+                    <p className="text-xs text-gray-500 truncate">{ch.customUrl.startsWith('@') ? ch.customUrl : `@${ch.customUrl}`}</p>
                   )}
                   <p className="text-sm text-gray-500">{ch.subscriberCount.toLocaleString()} subscribers</p>
                   {ch.lastSyncedAt && (
-                    <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                       <Clock className="w-3 h-3" />
                       Last sync {new Date(ch.lastSyncedAt).toLocaleDateString()}
                     </p>
@@ -546,7 +546,7 @@ function SettingsContent() {
                         <CheckCircle className="w-3 h-3 text-green-500 shrink-0" />
                         Read public channel data only (connected by URL, no Google sign-in)
                       </li>
-                      <li className="text-xs text-gray-400 flex items-center gap-1.5">
+                      <li className="text-xs text-gray-500 flex items-center gap-1.5">
                         <AlertCircle className="w-3 h-3 shrink-0" />
                         Choose a level and sign in with Google to unlock analysis, uploads or full management
                       </li>
@@ -591,12 +591,12 @@ function SettingsContent() {
                   <img src={ch.thumbnailUrl} alt={ch.title} className="w-10 h-10 rounded-full object-cover grayscale" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                    <Youtube className="w-5 h-5 text-gray-400" />
+                    <Youtube className="w-5 h-5 text-gray-500" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-600 truncate">{ch.title}</p>
-                  <p className="text-sm text-gray-400">{ch.subscriberCount.toLocaleString()} subscribers · Signed out</p>
+                  <p className="text-sm text-gray-500">{ch.subscriberCount.toLocaleString()} subscribers · Signed out</p>
                 </div>
 
                 {confirmRemove === ch.id ? (
@@ -674,10 +674,10 @@ function SettingsContent() {
                       : <><LinkIcon2 className="w-4 h-4" /> Connect with Google</>}
                   </button>
                 </div>
-                <p className="text-xs text-gray-400 max-w-sm text-center">
+                <p className="text-xs text-gray-500 max-w-sm text-center">
                   You choose how much access to grant and can change it anytime. Publishing always requires your approval.
                 </p>
-                <p className="text-xs text-gray-400">— or —</p>
+                <p className="text-xs text-gray-500">— or —</p>
                 <button
                   onClick={() => setShowUrlForm((v) => !v)}
                   className="text-sm text-brand-600 hover:underline"
@@ -766,7 +766,7 @@ function SettingsContent() {
                     Add
                   </button>
                 </div>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-500">
                   Examples: <code>https://youtube.com/@MrBeast</code> · <code>@mkbhd</code> · <code>UCxxxxxx</code>
                 </p>
               </div>
@@ -822,7 +822,7 @@ function SettingsContent() {
                   {linkedAccount ? (
                     <p className="text-xs text-gray-500 truncate">{linkedAccount.email}</p>
                   ) : (
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-500">
                       {providerEnabled ? 'Not connected' : 'Not configured'}
                     </p>
                   )}
@@ -847,7 +847,7 @@ function SettingsContent() {
                     Connect
                   </button>
                 ) : (
-                  <span className="text-xs text-gray-400 italic">Not configured</span>
+                  <span className="text-xs text-gray-500 italic">Not configured</span>
                 )}
               </div>
             );
@@ -879,7 +879,7 @@ function SettingsContent() {
           </div>
 
           {sessions.length === 0 && (
-            <div className="px-4 py-6 text-center text-sm text-gray-400">No active sessions found.</div>
+            <div className="px-4 py-6 text-center text-sm text-gray-500">No active sessions found.</div>
           )}
 
           {sessions.map((session) => {
@@ -890,7 +890,7 @@ function SettingsContent() {
 
             return (
               <div key={session.id} className="flex items-start gap-3 px-4 py-3">
-                <Monitor className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                <Monitor className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm text-gray-700 truncate">{deviceLabel}</p>
@@ -900,7 +900,7 @@ function SettingsContent() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-500 mt-0.5">
                     {session.ip} &middot; Last active {new Date(session.lastUsedAt).toLocaleString()}
                   </p>
                 </div>
@@ -962,7 +962,7 @@ function SettingsContent() {
                 <div key={entry.key} className="p-4 flex items-center gap-4">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800">{entry.label}</p>
-                    <p className="text-xs text-gray-400 font-mono mt-0.5">
+                    <p className="text-xs text-gray-500 font-mono mt-0.5">
                       {entry.key}
                     </p>
                   </div>
@@ -976,12 +976,13 @@ function SettingsContent() {
                         onChange={(e) =>
                           setApiKeyDrafts((prev) => ({ ...prev, [entry.key]: e.target.value }))
                         }
-                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono pr-8 bg-white placeholder:text-gray-400 placeholder:font-sans"
+                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono pr-8 bg-white placeholder:text-gray-500 placeholder:font-sans"
                       />
                       <button
                         type="button"
                         onClick={() => setShowKeys((p) => ({ ...p, [entry.key]: !isVisible }))}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        aria-label={isVisible ? 'Hide key' : 'Show key'}
+                        className="absolute right-0.5 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-gray-600"
                       >
                         {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -1026,7 +1027,7 @@ function SettingsContent() {
             <p className="text-xs text-gray-500">Credit balance</p>
             <p className="text-2xl font-bold text-gray-900">{(walletBalance?.balanceCredits ?? 0).toLocaleString()}</p>
             {walletBalance && walletBalance.balanceCredits > 0 && (
-              <p className="text-[11px] text-gray-400 mt-0.5">
+              <p className="text-[11px] text-gray-500 mt-0.5">
                 {walletBalance.buckets.purchasedCredits.toLocaleString()} purchased
                 {(walletBalance.buckets.trialCredits ?? 0) > 0 && <> · {walletBalance.buckets.trialCredits.toLocaleString()} trial</>}
                 {walletBalance.buckets.bonusCredits > 0 && <> · {walletBalance.buckets.bonusCredits.toLocaleString()} bonus</>}
@@ -1037,6 +1038,7 @@ function SettingsContent() {
           </div>
           <div className="flex items-center gap-2">
             <select
+              aria-label="Recharge amount"
               value={rechargeUsd}
               onChange={(e) => setRechargeUsd(Number(e.target.value))}
               className="text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white"

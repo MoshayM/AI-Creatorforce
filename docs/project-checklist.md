@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-13 (Wave 22).
+> Last updated: 2026-07-13 (Wave 23).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -91,7 +91,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 ### 17 UI/UX / 18 Components / 19 Design System
 - ✅ Auto-load/scroll/focus; ✅ estimates before paid actions; ✅ responsive; ✅ shared components, injected data, virtualized lists
 - ✅ Tokens in tailwind config; no hard-coded values (lint)
-- ◐ WCAG 2.2 AA: jsx-a11y at error severity in CI (docs4/42 wave); full AA audit (screen-reader passes, contrast automation, theming) outstanding
+- ◐ WCAG 2.2 AA: jsx-a11y error gate + axe-core e2e gate over 8 core surfaces incl. color-contrast, all passing (Wave 23); screen-reader passes and theming outstanding
 
 ### 20 Observability / 28 Prometheus-Grafana / 39 Monitoring
 - ✅ Correlation end-to-end; ✅ /metrics + dashboards (infra/monitoring); ✅ SLO alerts + runbooks (docs); ✅ no secrets/PII in telemetry; ✅ health checks (Wave 13); ✅ cardinality controlled
@@ -100,7 +100,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 ### 21 Testing / 22 Playwright
 - ✅ Unit (480) + integration + e2e layers in CI; ✅ critical-flow e2e; ✅ a11y + security gates
 - ◐ Coverage threshold is a 5% floor (backstop, not target)
-- ◐ Playwright: chromium only, workers=1, no visual assertions (traces/screenshots on failure ✅)
+- ◐ Playwright: a11y assertions integrated (axe, Wave 23), traces/screenshots on failure ✅; chromium only, workers=1, no visual snapshots
 
 ### 23 ZAP / 24 Burp / 25 Snyk / 26 Dependabot / 27 Semgrep
 - ⛔ ZAP, Burp, Snyk — external accounts/licenses (risk R-10); `pnpm audit --audit-level=high` gates as interim SCA
@@ -129,7 +129,8 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 
 ### 42 Accessibility
 - ✅ jsx-a11y error-severity gate; keyboard flows on core surfaces
-- ◐ Full WCAG 2.2 AA verification, automated contrast checks, editor-control audit
+- ✅ Automated contrast + ARIA checks: axe-core (WCAG 2.2 AA tags) gates 8 surfaces in e2e; all serious/critical violations fixed (Wave 23)
+- ◐ Manual screen-reader passes and editor-control audit
 
 ### 43 Internationalization
 - ▫ Deferred until a second locale is committed (risk R-09); ✅ multi-language AI content
@@ -146,7 +147,6 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 | Gap | Needs |
 |---|---|
 | Load-verify perf budgets (13/44), long-video pipeline | Real 4–8 h test video + load run (R-11) |
-| Full WCAG AA + contrast automation (17/19/42) | Audit pass + axe/contrast CI step |
 | Playwright breadth (22) | firefox/webkit projects, sharding, visual snapshots |
 | External scanners (23/24/25) | ZAP/Burp/Snyk accounts (R-10) |
 | Hosted-deploy items (29/30/38/40/41/45) | A hosting target: aggregation, PITR, progressive delivery, DR drills |

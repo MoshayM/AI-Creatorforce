@@ -93,7 +93,7 @@ function BudgetCard() {
       </div>
 
       {!editing && budget?.status === 'NONE' && (
-        <p className="text-sm text-gray-400 italic">No budget set. Set a monthly limit to track and cap spend.</p>
+        <p className="text-sm text-gray-500 italic">No budget set. Set a monthly limit to track and cap spend.</p>
       )}
 
       {!editing && budget && budget.status !== 'NONE' && (
@@ -108,7 +108,7 @@ function BudgetCard() {
               style={{ width: `${pct}%` }}
             />
           </div>
-          <div className="flex justify-between text-xs text-gray-400">
+          <div className="flex justify-between text-xs text-gray-500">
             <span>{pct}% used</span>
             <span>{fmtCredits(budget.remaining)} remaining</span>
           </div>
@@ -191,13 +191,13 @@ function ForecastCard() {
       <div className="flex items-center gap-2">
         <CalendarClock className="w-4 h-4 text-brand-600" />
         <span className="text-sm font-semibold text-gray-800">Forecast</span>
-        <span className="text-xs text-gray-400">last {forecast?.windowDays ?? 30} days average</span>
+        <span className="text-xs text-gray-500">last {forecast?.windowDays ?? 30} days average</span>
       </div>
 
       {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
 
       {forecast && forecast.dailyBurn === 0 && (
-        <p className="text-sm text-gray-400 italic">No usage in the window yet — nothing to project.</p>
+        <p className="text-sm text-gray-500 italic">No usage in the window yet — nothing to project.</p>
       )}
 
       {forecast && forecast.dailyBurn > 0 && (
@@ -205,19 +205,19 @@ function ForecastCard() {
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs text-gray-500">Daily burn</p>
             <p className="text-lg font-bold text-gray-900">{forecast.dailyBurn.toLocaleString()}</p>
-            <p className="text-[11px] text-gray-400">credits/day</p>
+            <p className="text-[11px] text-gray-500">credits/day</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs text-gray-500">Balance lasts</p>
             <p className="text-lg font-bold text-gray-900">
               {forecast.daysToEmpty !== null ? `~${Math.round(forecast.daysToEmpty)}d` : '—'}
             </p>
-            <p className="text-[11px] text-gray-400">{forecast.emptyOn ? `empty ${forecast.emptyOn}` : 'no burn'}</p>
+            <p className="text-[11px] text-gray-500">{forecast.emptyOn ? `empty ${forecast.emptyOn}` : 'no burn'}</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs text-gray-500">Month-end spend</p>
             <p className="text-lg font-bold text-gray-900">{forecast.projectedMonthEndSpend.toLocaleString()}</p>
-            <p className="text-[11px] text-gray-400">projected credits</p>
+            <p className="text-[11px] text-gray-500">projected credits</p>
           </div>
         </div>
       )}
@@ -256,7 +256,7 @@ function RecommendationsCard() {
           >
             {rec.severity === 'warning'
               ? <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              : <Lightbulb className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />}
+              : <Lightbulb className="w-4 h-4 shrink-0 mt-0.5 text-gray-500" />}
             <span>{rec.message}</span>
           </li>
         ))}
@@ -284,6 +284,7 @@ function UsageSummaryCard() {
           <span className="text-sm font-semibold text-gray-800">Usage by Action</span>
         </div>
         <select
+          aria-label="Usage window"
           value={days}
           onChange={(e) => setDays(Number(e.target.value))}
           className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 bg-white"
@@ -302,7 +303,7 @@ function UsageSummaryCard() {
             Total: <span className="font-semibold text-gray-800">{fmtCredits(data.totalSpent)} credits</span> in the last {days} days
           </p>
           {data.byAction.length === 0 && (
-            <p className="text-sm text-gray-400 italic">No usage in this period.</p>
+            <p className="text-sm text-gray-500 italic">No usage in this period.</p>
           )}
           <div className="space-y-2">
             {data.byAction.map(({ action, credits }) => (
@@ -338,11 +339,11 @@ function TransactionsCard() {
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
         <span className="text-sm font-semibold text-gray-800">Recent Transactions</span>
-        <span className="text-xs text-gray-400">(last 50)</span>
+        <span className="text-xs text-gray-500">(last 50)</span>
       </div>
       {isLoading && <div className="p-4"><Loader2 className="w-5 h-5 animate-spin text-brand-600" /></div>}
       {!isLoading && txns.length === 0 && (
-        <p className="text-sm text-gray-400 italic p-4">No transactions yet.</p>
+        <p className="text-sm text-gray-500 italic p-4">No transactions yet.</p>
       )}
       <div className="divide-y divide-gray-50">
         {txns.map((tx) => (
@@ -352,7 +353,7 @@ function TransactionsCard() {
                 <span className={`text-[11px] font-medium border rounded-full px-2 py-0.5 whitespace-nowrap ${entryBadgeStyle(tx.entryType)}`}>
                   {tx.entryType.replace(/_/g, ' ')}
                 </span>
-                <span className="text-xs text-gray-400 truncate">
+                <span className="text-xs text-gray-500 truncate">
                   {new Date(tx.createdAt).toLocaleString()}
                 </span>
               </div>
@@ -361,7 +362,7 @@ function TransactionsCard() {
               <p className={`text-sm font-semibold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {tx.amount >= 0 ? '+' : ''}{fmtCredits(tx.amount)}
               </p>
-              <p className="text-[11px] text-gray-400">{fmtCredits(tx.balanceAfter)} after</p>
+              <p className="text-[11px] text-gray-500">{fmtCredits(tx.balanceAfter)} after</p>
             </div>
           </div>
         ))}
@@ -434,17 +435,18 @@ function BalanceCard() {
 
           <div className="flex gap-6 text-sm text-gray-500">
             <div>
-              <p className="text-xs text-gray-400">All-time purchased</p>
+              <p className="text-xs text-gray-500">All-time purchased</p>
               <p className="font-semibold text-gray-700">{fmtCredits(balance.lifetimePurchased)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">All-time used</p>
+              <p className="text-xs text-gray-500">All-time used</p>
               <p className="font-semibold text-gray-700">{fmtCredits(balance.lifetimeUsed)}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 pt-1">
             <select
+              aria-label="Recharge amount"
               value={rechargeUsd}
               onChange={(e) => setRechargeUsd(Number(e.target.value))}
               className="text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white"
@@ -496,7 +498,7 @@ function ExpiryTimelineCard() {
       </div>
       {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
       {!isLoading && lots.length === 0 && (
-        <p className="text-sm text-gray-400">No active credit lots.</p>
+        <p className="text-sm text-gray-500">No active credit lots.</p>
       )}
       {lots.length > 0 && (
         <ul className="divide-y divide-gray-100">
@@ -504,10 +506,10 @@ function ExpiryTimelineCard() {
             <li key={lot.id} className="flex items-center justify-between py-2">
               <div>
                 <p className="text-sm font-medium text-gray-800">
-                  {fmtCredits(lot.remaining)} <span className="text-gray-400 font-normal">of {fmtCredits(lot.amount)}</span>{' '}
+                  {fmtCredits(lot.remaining)} <span className="text-gray-500 font-normal">of {fmtCredits(lot.amount)}</span>{' '}
                   {(BUCKET_LABELS[lot.bucket] ?? lot.bucket).toLowerCase()} credits
                 </p>
-                <p className="text-[11px] text-gray-400">granted {new Date(lot.createdAt).toLocaleDateString()}</p>
+                <p className="text-[11px] text-gray-500">granted {new Date(lot.createdAt).toLocaleDateString()}</p>
               </div>
               {lot.expiresAt ? (
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${urgency(daysLeft(lot.expiresAt))}`}>
@@ -552,7 +554,7 @@ function CreditPacksCard() {
       </div>
       {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
       {!isLoading && packs.length === 0 && (
-        <p className="text-sm text-gray-400">No credit packs available right now.</p>
+        <p className="text-sm text-gray-500">No credit packs available right now.</p>
       )}
       {packs.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

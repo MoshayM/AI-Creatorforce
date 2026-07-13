@@ -57,21 +57,21 @@ function PlaylistItemsPanel({ channelId, playlist }: { channelId: string; playli
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 py-6 justify-center text-gray-400">
+      <div className="flex items-center gap-2 py-6 justify-center text-gray-500">
         <Loader2 className="w-4 h-4 animate-spin" /> Loading items…
       </div>
     );
   }
 
   if (!optimisticItems.length) {
-    return <p className="py-4 text-sm text-gray-400 text-center">No items in this playlist.</p>;
+    return <p className="py-4 text-sm text-gray-500 text-center">No items in this playlist.</p>;
   }
 
   return (
     <div className="space-y-1">
       {(isPending ? optimisticItems : allItems).map((item, idx) => (
         <div key={item.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
-          <span className="text-[11px] text-gray-400 w-5 text-right shrink-0">{idx + 1}</span>
+          <span className="text-[11px] text-gray-500 w-5 text-right shrink-0">{idx + 1}</span>
           {item.video.thumbnailUrl && (
             <img
               src={item.video.thumbnailUrl}
@@ -129,13 +129,13 @@ function PlaylistRow({ channelId, playlist }: { channelId: string; playlist: Lib
         onClick={() => { setOpen((o) => !o); }}
         className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors"
       >
-        {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+        {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
         {playlist.thumbnailUrl && (
           <img src={playlist.thumbnailUrl} alt="" className="w-14 h-9 object-cover rounded-md shrink-0" />
         )}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900 truncate">{playlist.title}</p>
-          <p className="text-[11px] text-gray-400">{playlist.itemCount} items</p>
+          <p className="text-[11px] text-gray-500">{playlist.itemCount} items</p>
         </div>
       </button>
       {open && (
@@ -167,7 +167,7 @@ export function PlaylistsTab({ channelId }: PlaylistsTabProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 py-20 justify-center text-gray-400">
+      <div className="flex items-center gap-2 py-20 justify-center text-gray-500">
         <Loader2 className="w-5 h-5 animate-spin" /> Loading playlists…
       </div>
     );
@@ -175,7 +175,7 @@ export function PlaylistsTab({ channelId }: PlaylistsTabProps) {
 
   if (!playlists.length) {
     return (
-      <div className="text-center py-20 text-gray-400">
+      <div className="text-center py-20 text-gray-500">
         <p className="text-sm">No playlists synced yet.</p>
       </div>
     );
