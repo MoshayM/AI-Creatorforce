@@ -100,8 +100,16 @@ test.describe('Project Detail', () => {
     expect(posted.type).toBe('TREND_ANALYSIS');
   });
 
+  // The Recent Jobs section collapses to a summary bar by default — expand it
+  // by clicking the bar before asserting on the rows inside.
+  async function expandRecentJobs(page: import('@playwright/test').Page) {
+    const bar = page.getByRole('button', { name: /recent jobs/i });
+    await expect(bar).toBeVisible({ timeout: 8_000 });
+    await bar.click();
+  }
+
   test('shows recent jobs list', async ({ page }) => {
-    await expect(page.getByText('Recent Jobs')).toBeVisible({ timeout: 8_000 });
+    await expandRecentJobs(page);
     // Use exact: true so case-insensitive substring matching doesn't hit button labels
     await expect(page.getByText('TREND_ANALYSIS', { exact: true })).toBeVisible();
     await expect(page.getByText('RESEARCH', { exact: true })).toBeVisible();
@@ -109,12 +117,14 @@ test.describe('Project Detail', () => {
   });
 
   test('shows job status badges', async ({ page }) => {
-    await expect(page.getByText('COMPLETED').first()).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByText('WAITING_APPROVAL')).toBeVisible();
+    await expandRecentJobs(page);
+    // Badges render humanized STATUS_LABEL text, not the raw enum
+    await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText('Awaiting Review', { exact: true })).toBeVisible();
   });
 
   test('history entries are deletable', async ({ page }) => {
-    await expect(page.getByText('Recent Jobs')).toBeVisible({ timeout: 8_000 });
+    await expandRecentJobs(page);
     const deleteButtons = page.getByRole('button', { name: /^Delete .* run$/ });
     expect(await deleteButtons.count()).toBeGreaterThan(0);
     // Confirm flow appears on click

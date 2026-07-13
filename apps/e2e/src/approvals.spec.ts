@@ -28,7 +28,9 @@ test.describe('Approval Center', () => {
   });
 
   test('approval card shows AI result preview', async ({ page }) => {
-    await expect(page.getByText(/Top 5 AI Tools/)).toBeVisible({ timeout: 8_000 });
+    // Target the labeled-field row — the title also exists inside the
+    // collapsed raw-JSON <details>, which getByText would match too
+    await expect(page.locator('dd').filter({ hasText: 'Top 5 AI Tools' })).toBeVisible({ timeout: 8_000 });
   });
 
   test('approve button is visible', async ({ page }) => {

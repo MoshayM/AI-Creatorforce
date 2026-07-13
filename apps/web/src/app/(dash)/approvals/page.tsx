@@ -98,11 +98,26 @@ function ShortsExportReview({ result }: { result: ShortsExportResult }) {
 }
 
 /** Readable fallback for other job results: flat fields as labeled rows, raw JSON behind a toggle. */
+function isDisplayable(v: unknown): boolean {
+  return ['string', 'number', 'boolean'].includes(typeof v)
+    || (Array.isArray(v) && v.every((x) => typeof x === 'string'));
+}
+
 function GenericResultView({ result }: { result: unknown }) {
   if (!result || typeof result !== 'object') return null;
   const obj = result as Record<string, unknown>;
-  const flat = Object.entries(obj).filter(([, v]) =>
-    ['string', 'number', 'boolean'].includes(typeof v) || (Array.isArray(v) && v.every((x) => typeof x === 'string')));
+  // One level of nesting is hoisted so payloads like { metadata: { title } }
+  // show the reviewer what they are approving without opening the raw JSON.
+  const flat: Array<[string, unknown]> = [];
+  for (const [k, v] of Object.entries(obj)) {
+    if (isDisplayable(v)) {
+      flat.push([k, v]);
+    } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+      for (const [ck, cv] of Object.entries(v as Record<string, unknown>)) {
+        if (isDisplayable(cv)) flat.push([`${k} ${ck}`, cv]);
+      }
+    }
+  }
 
   return (
     <div className="bg-gray-50 rounded-lg p-4 mb-4 text-sm">
