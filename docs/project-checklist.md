@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-14 (Wave 33).
+> Last updated: 2026-07-14 (Wave 34).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -56,7 +56,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 - ✅ Channel-scoped, version-traceable assets; ✅ upload validation (validation engine)
 - ✅ Brand Kit editable + consumed by stages
 - ✅ Unreferenced-asset GC: daily two-stage sweep (mark soft-deleted → purge past grace, FK + timeline-JSON reference checks, audit-logged; `asset-gc.job.ts`, Wave 22)
-- ◐ Signed CDN URLs: local-first serves via authenticated API, no CDN
+- ✅ Signed media URLs: HMAC-SHA256 expiring capability URLs (`GET .../signed-url` behind JWT+ownership → `?exp=&sig=` accepted by file routes, 15-min default TTL, constant-time verify; `signed-url.util` + 13 unit tests, Wave 34). ◐ Serving through an actual CDN still needs a CDN target (local-first)
 
 ### 10 AI Credits
 - ✅ All five criteria: transparency+acceptance, ledger reconciliation, reserve/settle/refund (incl. Wave 17 reaper release), budget alerts + hard-cap, dashboard with history/forecast/recommendations
