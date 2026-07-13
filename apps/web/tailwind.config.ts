@@ -9,18 +9,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Purple theme (design refs: login.jpg / ux.jpg)
+        // Purple theme (design refs: login.jpg / ux.jpg). Values live as CSS
+        // variables in globals.css so themes can override tokens without
+        // touching components (docs4/19 theming).
         brand: {
-          50: '#f5f3ff',
-          100: '#ede9fe',
-          200: '#ddd6fe',
-          300: '#c4b5fd',
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-          700: '#6d28d9',
-          800: '#5b21b6',
-          900: '#4c1d95',
+          50: 'rgb(var(--cf-brand-50) / <alpha-value>)',
+          100: 'rgb(var(--cf-brand-100) / <alpha-value>)',
+          200: 'rgb(var(--cf-brand-200) / <alpha-value>)',
+          300: 'rgb(var(--cf-brand-300) / <alpha-value>)',
+          400: 'rgb(var(--cf-brand-400) / <alpha-value>)',
+          500: 'rgb(var(--cf-brand-500) / <alpha-value>)',
+          600: 'rgb(var(--cf-brand-600) / <alpha-value>)',
+          700: 'rgb(var(--cf-brand-700) / <alpha-value>)',
+          800: 'rgb(var(--cf-brand-800) / <alpha-value>)',
+          900: 'rgb(var(--cf-brand-900) / <alpha-value>)',
         },
       },
     },

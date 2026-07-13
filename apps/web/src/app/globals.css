@@ -6,7 +6,36 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+
+    /* Brand token scale (docs4/19: theming via token overrides). RGB triplets
+       so tailwind can apply <alpha-value>. Override under a [data-theme]
+       scope to retheme the whole app without touching components. */
+    --cf-brand-50: 245 243 255;
+    --cf-brand-100: 237 233 254;
+    --cf-brand-200: 221 214 254;
+    --cf-brand-300: 196 181 253;
+    --cf-brand-400: 167 139 250;
+    --cf-brand-500: 139 92 246;
+    --cf-brand-600: 124 58 237;
+    --cf-brand-700: 109 40 217;
+    --cf-brand-800: 91 33 182;
+    --cf-brand-900: 76 29 149;
   }
+
+  /* Example override theme — set <html data-theme="ocean"> to activate. */
+  [data-theme='ocean'] {
+    --cf-brand-50: 240 249 255;
+    --cf-brand-100: 224 242 254;
+    --cf-brand-200: 186 230 253;
+    --cf-brand-300: 125 211 252;
+    --cf-brand-400: 56 189 248;
+    --cf-brand-500: 14 165 233;
+    --cf-brand-600: 2 132 199;
+    --cf-brand-700: 3 105 161;
+    --cf-brand-800: 7 89 133;
+    --cf-brand-900: 12 74 110;
+  }
+
   body {
     @apply bg-white text-gray-900 antialiased;
   }

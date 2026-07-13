@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-14 (Wave 32).
+> Last updated: 2026-07-14 (Wave 33).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -91,7 +91,8 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 ### 17 UI/UX / 18 Components / 19 Design System
 - ✅ Auto-load/scroll/focus; ✅ estimates before paid actions; ✅ responsive; ✅ shared components, injected data, virtualized lists
 - ✅ Tokens in tailwind config; no hard-coded values (lint)
-- ◐ WCAG 2.2 AA: jsx-a11y error gate + axe-core e2e gate over 8 core surfaces incl. color-contrast, all passing (Wave 23); screen-reader passes and theming outstanding
+- ◐ WCAG 2.2 AA: jsx-a11y error gate + axe-core e2e gate over 8 core surfaces incl. color-contrast, all passing (Wave 23); manual screen-reader passes outstanding
+- ✅ Theming via token overrides (docs4/19): brand palette lives as CSS variables in globals.css consumed by tailwind with alpha support; `[data-theme]` scope rethemes app-wide (ocean example theme + e2e retheme test); default theme verified pixel-identical via visual snapshots (Wave 33)
 
 ### 20 Observability / 28 Prometheus-Grafana / 39 Monitoring
 - ✅ Correlation end-to-end; ✅ /metrics + dashboards (infra/monitoring); ✅ SLO alerts + runbooks (docs); ✅ no secrets/PII in telemetry; ✅ health checks (Wave 13); ✅ cardinality controlled

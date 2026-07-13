@@ -20,6 +20,17 @@ test.describe('Visual snapshots', () => {
     await expect(page).toHaveScreenshot('register.png', { fullPage: true });
   });
 
+  test('token override retheme: data-theme swaps the brand palette', async ({ page }) => {
+    await page.goto('/login');
+    const brand500 = () =>
+      page.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue('--cf-brand-500').trim(),
+      );
+    expect(await brand500()).toBe('139 92 246'); // default purple
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'ocean'));
+    expect(await brand500()).toBe('14 165 233'); // ocean override
+  });
+
   test('projects list (mocked data)', async ({ page }) => {
     await setupApiMocks(page);
     await setAuthToken(page);
