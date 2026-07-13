@@ -3,12 +3,10 @@
 > Living register per `Updates/47_Risk_Register.md`: technical, product, security,
 > and operational risks with likelihood, impact, owner, mitigation, and status.
 > Review cadence: on every wave that touches a listed area; prune resolved rows.
-> Last updated: 2026-07-13 (Wave 15).
+> Last updated: 2026-07-13 (Wave 17).
 
 | ID | Risk | Category | Likelihood | Impact | Mitigation | Status |
 |----|------|----------|-----------|--------|------------|--------|
-| R-01 | Stuck jobs: a RUNNING `AgentJob` whose worker died stays RUNNING forever (BullMQ stalled-detection covers the queue side, not the DB row) | Technical | Medium | Medium | Reaper job planned (Wave 17): RUNNING rows past a deadline → FAILED + hold release | Open → Wave 17 |
-| R-02 | Double-enqueue race: no idempotency key on `AgentJob`; concurrent identical enqueues can both persist | Technical | Low | Medium | Client `Idempotency-Key` on enqueue planned (Wave 17) | Open → Wave 17 |
 | R-03 | Secrets in `.env`, no KMS; OAuth tokens envelope-encrypted but master key local | Security | Low (single-tenant local) | High at scale | Documented deliberate deviation (billing-security.md); adopt KMS before multi-tenant hosting | Accepted (local-first) |
 | R-04 | No log aggregation: stdout-only logs; incident forensics rely on Sentry + Prometheus | Operational | Medium | Medium | Structured JSON lines with correlation IDs + secret redaction shipped (Wave 15, `common/structured-logger.ts`); aggregation itself remains infra-blocked | Mitigated (aggregation infra-blocked) |
 | R-05 | Postgres RPO 24h (daily dumps, no WAL archiving/PITR) | Operational | Low | High | Runbooks document PITR upgrade path; infra-blocked locally | Accepted (documented) |
@@ -28,3 +26,5 @@
 | R-C2 | Budget periods with foreign `teamId` silently never enforcing | `assertTeamInOrg` at set time (Wave 8) |
 | R-C3 | Credit lots expiring without user warning | `LotExpiryJob` 7/3/1-day in-app notifications (Wave 11) |
 | R-C4 | No health probes for load balancers/runbooks | `/health` + `/ready` endpoints (Wave 13) |
+| R-C5 | Stuck jobs: RUNNING `AgentJob` rows of crashed workers lingered forever | `JobReaperJob` sweep (Wave 17): guarded RUNNING→FAILED past `JOB_REAPER_STALL_MINUTES` (default 120) + hold release |
+| R-C6 | Double-enqueue race on `AgentJob` | `Idempotency-Key` on `POST /jobs` and dev-API enqueue, unique column closes the race (Wave 17) |

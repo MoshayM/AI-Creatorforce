@@ -135,8 +135,11 @@ export class DevApiController {
       throw new BadRequestException(`Unknown job type '${dto.type}'`);
     }
     await this.projects.get(req.user.sub, id); // ownership gate
+    // Idempotency-Key (Wave 17): paid enqueues especially must not double-run
+    // on a client retry — a replayed key returns the original job.
     const job = await this.jobs.enqueue(id, parsed.data as JobType, dto.payload ?? {}, {
       developerKeyId: req.user.developerKeyId,
+      idempotencyKey: req.header('idempotency-key') ?? undefined,
     });
     return { id: job.id, type: job.type, status: job.status, createdAt: job.createdAt };
   }

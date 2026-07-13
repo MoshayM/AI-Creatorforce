@@ -19,11 +19,30 @@ export class JobsService {
     projectId: string,
     type: JobType,
     payload: Record<string, unknown> = {},
-    opts?: { developerKeyId?: string },
+    opts?: { developerKeyId?: string; idempotencyKey?: string },
   ) {
-    const job = await this.prisma.agentJob.create({
-      data: { projectId, type, status: 'PENDING', payload: payload as never },
-    });
+    // Enqueue idempotency (Wave 17, risk R-02): a replayed Idempotency-Key
+    // returns the original job — the unique column closes the concurrent race
+    // the pre-check alone can't.
+    const idempotencyKey = opts?.idempotencyKey?.trim() || undefined;
+    if (idempotencyKey) {
+      const existing = await this.prisma.agentJob.findUnique({ where: { idempotencyKey } });
+      if (existing) return existing;
+    }
+
+    let job;
+    try {
+      job = await this.prisma.agentJob.create({
+        data: { projectId, type, status: 'PENDING', payload: payload as never, idempotencyKey },
+      });
+    } catch (err: unknown) {
+      // P2002 = unique violation: a concurrent enqueue with the same key won.
+      if (idempotencyKey && (err as { code?: string }).code === 'P2002') {
+        const winner = await this.prisma.agentJob.findUnique({ where: { idempotencyKey } });
+        if (winner) return winner;
+      }
+      throw err;
+    }
 
     try {
       await this.queue.add(type, { jobId: job.id, projectId, type, payload, correlationId: currentCorrelationId(), developerKeyId: opts?.developerKeyId }, {

@@ -149,23 +149,27 @@ enum ProjectStatus {
 // ── Agent Jobs ────────────────────────────────────────────────────────────────
 
 model AgentJob {
-  id          String    @id @default(cuid())
-  projectId   String?
-  type        JobType
-  status      JobStatus @default(PENDING)
-  payload     Json      @default("{}")
-  result      Json?
-  error       String?
-  attempts    Int       @default(0)
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  projectId      String?
+  type           JobType
+  status         JobStatus @default(PENDING)
+  payload        Json      @default("{}")
+  result         Json?
+  error          String?
+  attempts       Int       @default(0)
+  /// Client-supplied Idempotency-Key (Wave 17, risk R-02): a duplicate enqueue
+  /// returns the original job instead of persisting a second one.
+  idempotencyKey String?   @unique
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   project   Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   agentLogs AgentLog[]
   approval  Approval?
 
+  @@index([status, updatedAt])
   @@map("agent_jobs")
 }
 
