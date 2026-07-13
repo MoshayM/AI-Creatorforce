@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-13 (Wave 31).
+> Last updated: 2026-07-14 (Wave 32).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -74,7 +74,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 
 ### 13 Performance / 44 Performance Budget
 - ✅ No blocking >1s in request path; ✅ budgets defined + CI-enforced (bundle gate, docs4/44)
-- ◐ p75 workspace ≤2.0s on 10k-item channel + 100k scroll: implemented for, not load-verified (needs test media, risk R-11)
+- ✅ p75 workspace ≤2.0s load-verified on production builds via `scripts/load-verify-workspace.mjs`: p75 1198ms @ 10k videos, 1132ms @ 100k videos (n=20 cold loads each, 2026-07-14, Wave 32). ◐ Long-video (4–8h) pipeline load test still needs real source media (risk R-11)
 - ✅ Budget trend tracking: every run writes `bundle-budget-report.json` (uploaded as CI artifact, 90d), diffed against committed `scripts/bundle-budget-baseline.json` with >10% growth WARNs; budget stays the hard gate (Wave 26)
 
 ### 14 Security
@@ -146,7 +146,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 
 | Gap | Needs |
 |---|---|
-| Load-verify perf budgets (13/44), long-video pipeline | Real 4–8 h test video + load run (R-11) |
+| Long-video pipeline load test (13) | Real 4–8 h test video (R-11); workspace p75 verified in Wave 32 |
 | External scanners (23/24/25) | ZAP/Burp/Snyk accounts (R-10) |
 | Hosted-deploy items (29/30/38/40/41/45) | A hosting target: aggregation, PITR, progressive delivery, DR drills |
 | i18n (43) | Second-locale commitment (R-09) |
