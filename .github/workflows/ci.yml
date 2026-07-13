@@ -201,10 +201,16 @@ jobs:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
   e2e:
-    name: E2E Tests (Playwright)
+    name: E2E Tests (Playwright, ${{ matrix.browser }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: [lint, typecheck, unit-tests]
+    # Cross-browser sharding (docs4/22): one job per browser keeps each run
+    # inside the timeout instead of tripling a single job.
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
 
     services:
       postgres:
@@ -297,10 +303,10 @@ jobs:
           GEMINI_API_KEY: ${{ env.GEMINI_API_KEY }}
 
       - name: Install Playwright browsers
-        run: pnpm --filter @cf/e2e exec playwright install --with-deps chromium
+        run: pnpm --filter @cf/e2e exec playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run Playwright E2E tests
-        run: pnpm --filter @cf/e2e exec playwright test
+        run: pnpm --filter @cf/e2e exec playwright test --project=${{ matrix.browser }}
         env:
           CI: 'true'
           # playwright.config.ts webServer block hardcodes NEXT_PUBLIC_API_URL=http://localhost:4007/api/v1
@@ -313,6 +319,6 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.browser }}
           path: apps/e2e/playwright-report/
           retention-days: 7

@@ -24,6 +24,15 @@ export default defineConfig({
 
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // Cross-browser projects (docs4/22) — active on CI (matrix-sharded per
+    // browser) or locally via CROSS_BROWSER=1 so the default local run stays
+    // a single ~20-min chromium pass. Visual baselines are chromium-only.
+    ...(process.env['CI'] || process.env['CROSS_BROWSER']
+      ? [
+          { name: 'firefox', use: { ...devices['Desktop Firefox'] }, testIgnore: /visual\.spec\.ts/ },
+          { name: 'webkit', use: { ...devices['Desktop Safari'] }, testIgnore: /visual\.spec\.ts/ },
+        ]
+      : []),
   ],
 
   webServer: {
