@@ -1,8 +1,8 @@
 'use client';
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Wallet, TrendingDown, PlusCircle, Loader2, AlertCircle, CheckCircle, AlertTriangle, CalendarClock, Lightbulb } from 'lucide-react';
-import { api, type BudgetState, type CreditForecast, type CreditRecommendation, type UsageSummary, type WalletTransaction } from '@/lib/api';
+import { Wallet, TrendingDown, PlusCircle, Loader2, AlertCircle, CheckCircle, AlertTriangle, CalendarClock, Lightbulb, ShoppingBag } from 'lucide-react';
+import { api, type BudgetState, type CreditForecast, type CreditLotRow, type CreditPackRow, type CreditRecommendation, type UsageSummary, type WalletTransaction } from '@/lib/api';
 import { getErrorMessage } from '@/lib/getErrorMessage';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -471,6 +471,121 @@ function BalanceCard() {
   );
 }
 
+function ExpiryTimelineCard() {
+  const { data: lots = [], isLoading } = useQuery<CreditLotRow[]>({
+    queryKey: ['wallet-lots'],
+    queryFn: () => api.wallet.lots().then((r) => r.data),
+  });
+
+  const BUCKET_LABELS: Record<string, string> = {
+    trialCredits: 'Trial',
+    promotionalCredits: 'Promotional',
+    bonusCredits: 'Bonus',
+    referralCredits: 'Referral',
+    purchasedCredits: 'Purchased',
+  };
+
+  const daysLeft = (iso: string) => Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000));
+  const urgency = (d: number) => (d <= 3 ? 'bg-red-50 text-red-700 border-red-200' : d <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-gray-100 text-gray-600 border-gray-200');
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <CalendarClock className="w-4 h-4 text-brand-600" />
+        <span className="text-sm font-semibold text-gray-800">Expiry Timeline</span>
+      </div>
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {!isLoading && lots.length === 0 && (
+        <p className="text-sm text-gray-400">No active credit lots.</p>
+      )}
+      {lots.length > 0 && (
+        <ul className="divide-y divide-gray-100">
+          {lots.map((lot) => (
+            <li key={lot.id} className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm font-medium text-gray-800">
+                  {fmtCredits(lot.remaining)} <span className="text-gray-400 font-normal">of {fmtCredits(lot.amount)}</span>{' '}
+                  {(BUCKET_LABELS[lot.bucket] ?? lot.bucket).toLowerCase()} credits
+                </p>
+                <p className="text-[11px] text-gray-400">granted {new Date(lot.createdAt).toLocaleDateString()}</p>
+              </div>
+              {lot.expiresAt ? (
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${urgency(daysLeft(lot.expiresAt))}`}>
+                  {daysLeft(lot.expiresAt) === 0 ? 'expires today' : `${daysLeft(lot.expiresAt)}d left`}
+                  <span className="font-normal"> · {new Date(lot.expiresAt).toLocaleDateString()}</span>
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold border bg-green-50 text-green-700 border-green-200">never expires</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function CreditPacksCard() {
+  const qc = useQueryClient();
+  const { data: packs = [], isLoading } = useQuery<CreditPackRow[]>({
+    queryKey: ['marketplace-packs'],
+    queryFn: () => api.marketplace.packs().then((r) => r.data),
+  });
+
+  const buyMutation = useMutation({
+    mutationFn: (packId: string) => api.wallet.rechargePack(packId),
+    onSuccess: (res) => {
+      const data = res.data as { checkoutUrl: string | null };
+      if (data.checkoutUrl) window.location.href = data.checkoutUrl;
+      else void qc.invalidateQueries({ queryKey: ['wallet-balance'] });
+    },
+  });
+
+  const fmtPrice = (pack: CreditPackRow) =>
+    new Intl.NumberFormat(undefined, { style: 'currency', currency: pack.currency.toUpperCase() }).format(pack.priceMinor / 100);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <ShoppingBag className="w-4 h-4 text-brand-600" />
+        <span className="text-sm font-semibold text-gray-800">Credit Packs</span>
+      </div>
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {!isLoading && packs.length === 0 && (
+        <p className="text-sm text-gray-400">No credit packs available right now.</p>
+      )}
+      {packs.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {packs.map((pack) => (
+            <div key={pack.id} className="border border-gray-200 rounded-lg p-3 flex flex-col gap-2">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">{pack.name}</p>
+                <p className="text-xs text-gray-500">{fmtCredits(pack.credits)} credits</p>
+              </div>
+              <div className="mt-auto flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-900">{fmtPrice(pack)}</span>
+                <button
+                  onClick={() => buyMutation.mutate(pack.id)}
+                  disabled={buyMutation.isPending}
+                  className="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 disabled:opacity-50 flex items-center gap-1"
+                >
+                  {buyMutation.isPending && buyMutation.variables === pack.id
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <PlusCircle className="w-3 h-3" />}
+                  Buy
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {buyMutation.isError && (
+        <p className="text-xs text-red-500">{getErrorMessage(buyMutation.error) || 'Purchase failed'}</p>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function WalletPage() {
@@ -485,6 +600,18 @@ export default function WalletPage() {
       <section>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Credit Balance</h2>
         <BalanceCard />
+      </section>
+
+      {/* Expiry timeline (Phase 6 §11) */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Credit Expiry</h2>
+        <ExpiryTimelineCard />
+      </section>
+
+      {/* Credit marketplace (Phase 6 §12) */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Buy Credits</h2>
+        <CreditPacksCard />
       </section>
 
       {/* Budget */}

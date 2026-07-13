@@ -182,6 +182,25 @@ export interface UsageSummary {
   byAction: Array<{ action: string; credits: number }>;
 }
 
+export interface CreditLotRow {
+  id: string;
+  bucket: string;
+  amount: number;
+  remaining: number;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export interface CreditPackRow {
+  id: string;
+  name: string;
+  credits: number;
+  priceMinor: number;
+  currency: string;
+  region: string | null;
+  sortOrder: number;
+}
+
 export interface CreditForecast {
   windowDays: number;
   totalDebited: number;
@@ -466,9 +485,16 @@ export const api = {
   wallet: {
     balance: () => apiClient.get('/wallet/balance'),
     transactions: (take = 20) => apiClient.get(`/wallet/transactions?take=${take}`),
+    lots: () => apiClient.get<CreditLotRow[]>('/wallet/lots'),
     recharge: (amountUsd: number) =>
       apiClient.post('/wallet/recharge', {
         amountUsd,
+        successUrl: `${window.location.origin}/settings?recharged=true`,
+        cancelUrl: `${window.location.origin}/settings`,
+      }, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
+    rechargePack: (packId: string) =>
+      apiClient.post('/wallet/recharge', {
+        packId,
         successUrl: `${window.location.origin}/settings?recharged=true`,
         cancelUrl: `${window.location.origin}/settings`,
       }, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
@@ -483,6 +509,10 @@ export const api = {
       apiClient.get<CreditForecast>(`/wallet/forecast?days=${days}`),
     recommendations: () =>
       apiClient.get<CreditRecommendation[]>('/wallet/recommendations'),
+  },
+  marketplace: {
+    packs: (region?: string) =>
+      apiClient.get<CreditPackRow[]>(`/marketplace/packs${region ? `?region=${encodeURIComponent(region)}` : ''}`),
   },
   orgs: {
     mine: () => apiClient.get<Org[]>('/orgs/mine'),
