@@ -18,16 +18,17 @@ module.exports = {
     '!src/main.ts',
     '!src/instrument.ts',
   ],
-  // Coverage thresholds — set ~5 points below the measured baseline (floored to nearest 5)
-  // so the gate protects against regression without breaking the build today.
-  // NOTE: thresholds were set without a live run (shell unavailable at config time);
-  // update these after running: pnpm --filter @cf/api test -- --coverage --coverageReporters=text-summary
+  // Coverage thresholds — ~2 points below the measured baseline so the gate
+  // catches real regressions without failing on noise. Measured 2026-07-13:
+  // statements 17.08 / branches 15.68 / functions 14.82 / lines 16.47.
+  // Re-measure and raise after adding tests:
+  //   pnpm --filter @cf/api test -- --coverage --coverageReporters=text-summary
   coverageThreshold: {
     global: {
-      statements: 5,
-      lines: 5,
-      functions: 5,
-      branches: 5,
+      statements: 15,
+      lines: 14,
+      functions: 12,
+      branches: 13,
     },
   },
 };
