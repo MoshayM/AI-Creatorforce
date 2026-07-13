@@ -37,6 +37,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { OrgsModule } from './modules/orgs/orgs.module';
 import { BiModule } from './modules/bi/bi.module';
 import { DevPortalModule } from './modules/dev-portal/dev-portal.module';
+import { FlagsModule } from './modules/flags/flags.module';
 
 @Module({
   imports: [
@@ -87,6 +88,7 @@ import { DevPortalModule } from './modules/dev-portal/dev-portal.module';
     OrgsModule,
     BiModule,
     DevPortalModule,
+    FlagsModule,
     MetricsModule,
     HealthModule,
   ],

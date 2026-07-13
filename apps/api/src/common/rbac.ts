@@ -17,10 +17,11 @@ export type Permission =
   | 'admin:providers'
   | 'admin:pricing'
   | 'admin:trial'
-  | 'admin:jobs';
+  | 'admin:jobs'
+  | 'admin:flags';
 
 export const ROLE_PERMISSIONS: Record<UserRole, ReadonlyArray<Permission>> = {
-  SUPER_ADMIN: ['billing:view', 'billing:refund', 'wallet:adjust', 'admin:users', 'admin:audit-logs', 'admin:revenue', 'admin:providers', 'admin:pricing', 'admin:trial', 'admin:jobs'],
+  SUPER_ADMIN: ['billing:view', 'billing:refund', 'wallet:adjust', 'admin:users', 'admin:audit-logs', 'admin:revenue', 'admin:providers', 'admin:pricing', 'admin:trial', 'admin:jobs', 'admin:flags'],
   OWNER: ['billing:view', 'admin:revenue', 'admin:providers'],
   MEMBER: [],
 };

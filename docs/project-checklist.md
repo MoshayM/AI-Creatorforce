@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-13 (Wave 27).
+> Last updated: 2026-07-13 (Wave 29).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -100,7 +100,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 ### 21 Testing / 22 Playwright
 - ✅ Unit (480) + integration + e2e layers in CI; ✅ critical-flow e2e; ✅ a11y + security gates
 - ✅ Coverage threshold pinned to measured baseline minus ~2pts (stmts 15 / lines 14 / fns 12 / branches 13; measured 17.08/16.47/14.82/15.68 on 2026-07-13) — regressions now fail CI (Wave 27)
-- ◐ Playwright: a11y assertions integrated (axe, Wave 23), traces/screenshots on failure ✅; chromium only, workers=1, no visual snapshots
+- ◐ Playwright: a11y assertions integrated (axe, Wave 23) ✅; traces/screenshots on failure ✅; visual snapshots on login/register/projects (Wave 28) ✅; chromium only, workers=1 (firefox/webkit + sharding still open)
 
 ### 23 ZAP / 24 Burp / 25 Snyk / 26 Dependabot / 27 Semgrep
 - ⛔ ZAP, Burp, Snyk — external accounts/licenses (risk R-10); `pnpm audit --audit-level=high` gates as interim SCA
@@ -109,7 +109,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 ### 29 CI/CD / 30 Deployment / 45 Release
 - ✅ Gated pipeline (lint, typecheck, tests+coverage, build+bundle budget, audit, Semgrep, e2e); ✅ zero-downtime DB changes (expand/contract)
 - ⛔ Progressive deploy/rollback, IaC environments, autoscaling — no hosted target (local-first)
-- ◐ Feature flags + automated changelogs: conventional commits in place; no flag service
+- ✅ Feature flags: SystemConfig-backed FlagsService (env `FEATURE_FLAGS` override > DB > default, 30s cache) + audit-logged `/admin/flags` surface behind `admin:flags` permission (Wave 29). ◐ Automated changelogs: conventional commits in place, no generator
 
 ### 31 Coding Standards
 - ✅ Lint/format/type gates; ✅ architecture invariants via Semgrep; ✅ documented public APIs (Swagger + dev-docs); ✅ dedup enforced in review
