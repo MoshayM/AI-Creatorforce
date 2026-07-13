@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { correlationMiddleware } from './common/correlation.context';
+import { StructuredLogger } from './common/structured-logger';
 
 // Prisma BigInt columns (Asset sizes, video statistics) must survive
 // res.json() — JSON.stringify throws on BigInt without this.
@@ -16,7 +17,8 @@ import { correlationMiddleware } from './common/correlation.context';
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // JSON lines in production (Updates/38, risk R-04); readable console in dev.
+  const app = await NestFactory.create(AppModule, { logger: new StructuredLogger() });
 
   app.use(helmet());
   // First in the chain so every downstream log, error envelope, and Sentry

@@ -3,14 +3,14 @@
 > Living register per `Updates/47_Risk_Register.md`: technical, product, security,
 > and operational risks with likelihood, impact, owner, mitigation, and status.
 > Review cadence: on every wave that touches a listed area; prune resolved rows.
-> Last updated: 2026-07-12 (Wave 13).
+> Last updated: 2026-07-13 (Wave 15).
 
 | ID | Risk | Category | Likelihood | Impact | Mitigation | Status |
 |----|------|----------|-----------|--------|------------|--------|
 | R-01 | Stuck jobs: a RUNNING `AgentJob` whose worker died stays RUNNING forever (BullMQ stalled-detection covers the queue side, not the DB row) | Technical | Medium | Medium | Reaper job planned (Wave 17): RUNNING rows past a deadline → FAILED + hold release | Open → Wave 17 |
 | R-02 | Double-enqueue race: no idempotency key on `AgentJob`; concurrent identical enqueues can both persist | Technical | Low | Medium | Client `Idempotency-Key` on enqueue planned (Wave 17) | Open → Wave 17 |
 | R-03 | Secrets in `.env`, no KMS; OAuth tokens envelope-encrypted but master key local | Security | Low (single-tenant local) | High at scale | Documented deliberate deviation (billing-security.md); adopt KMS before multi-tenant hosting | Accepted (local-first) |
-| R-04 | No log aggregation: stdout-only logs; incident forensics rely on Sentry + Prometheus | Operational | Medium | Medium | Structured JSON logging (Wave 15) makes future shipping trivial; aggregation is infra-blocked | Mitigating → Wave 15 |
+| R-04 | No log aggregation: stdout-only logs; incident forensics rely on Sentry + Prometheus | Operational | Medium | Medium | Structured JSON lines with correlation IDs + secret redaction shipped (Wave 15, `common/structured-logger.ts`); aggregation itself remains infra-blocked | Mitigated (aggregation infra-blocked) |
 | R-05 | Postgres RPO 24h (daily dumps, no WAL archiving/PITR) | Operational | Low | High | Runbooks document PITR upgrade path; infra-blocked locally | Accepted (documented) |
 | R-06 | Provider outage degradation: AI adapter chains fail closed (good) but user messaging is generic | Product | Medium | Low | Error envelope carries `code: PROVIDER`, `retryable: true` (Wave 7); UI copy improvements as follow-up | Partially mitigated |
 | R-07 | Cross-tenant isolation depends on service-level ownership checks (no DB row-level security) | Security | Low | High | Ownership-scoped service methods + e2e/unit tests; Semgrep rule candidates for missing scoping | Open (monitor) |
