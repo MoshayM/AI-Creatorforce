@@ -171,8 +171,9 @@ test.describe('Wallet', () => {
   });
 
   test('renders total credit balance', async ({ page }) => {
-    // Balance shown as formatted number "1,240"
-    await expect(page.getByText('1,240')).toBeVisible({ timeout: 8_000 });
+    // Balance shown as formatted number "1,240" — first paint of this page is
+    // slow under full-suite load, so give it the larger first-wait budget
+    await expect(page.getByText('1,240')).toBeVisible({ timeout: 15_000 });
   });
 
   test('renders bucket breakdown chips (trial + purchased)', async ({ page }) => {
