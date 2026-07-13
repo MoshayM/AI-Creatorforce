@@ -73,6 +73,43 @@ const MOCK_TRANSACTIONS = [
   },
 ];
 
+// Expiry timeline (Phase 6 §11): one lot expiring soon, one never-expiring.
+const MOCK_LOTS = [
+  {
+    id: 'lot-1',
+    bucket: 'promotionalCredits',
+    amount: 100,
+    remaining: 40,
+    expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60_000).toISOString(),
+    createdAt: '2026-06-20T00:00:00.000Z',
+  },
+  {
+    id: 'lot-2',
+    bucket: 'purchasedCredits',
+    amount: 1_000,
+    remaining: 1_000,
+    expiresAt: null,
+    createdAt: '2026-06-10T00:00:00.000Z',
+  },
+];
+
+// Marketplace (Phase 6 §12)
+const MOCK_PACKS = [
+  { id: 'pack-1', name: 'Starter', credits: 1_000, priceMinor: 999, currency: 'usd', region: null, sortOrder: 0 },
+  { id: 'pack-2', name: 'Creator', credits: 5_000, priceMinor: 3_999, currency: 'usd', region: null, sortOrder: 1 },
+];
+
+// Error envelope (Updates/32) for a provider outage — the UI must translate
+// this into actionable copy (risk R-06).
+const PROVIDER_OUTAGE_ENVELOPE = {
+  success: false,
+  statusCode: 503,
+  code: 'PROVIDER',
+  message: 'Payment provider unavailable',
+  correlationId: 'e2e-outage-1',
+  retryable: true,
+};
+
 async function setupWalletMocks(
   page: import('@playwright/test').Page,
   opts: { budgetStatus?: 'NONE' | 'OK' } = {},
@@ -110,6 +147,14 @@ async function setupWalletMocks(
   await page.route(`${BASE}/wallet/transactions*`, async (route) => {
     await route.fulfill({ json: MOCK_TRANSACTIONS });
   });
+
+  await page.route(`${BASE}/wallet/lots`, async (route) => {
+    await route.fulfill({ json: MOCK_LOTS });
+  });
+
+  await page.route(`${BASE}/marketplace/packs*`, async (route) => {
+    await route.fulfill({ json: MOCK_PACKS });
+  });
 }
 
 test.describe('Wallet', () => {
@@ -144,8 +189,9 @@ test.describe('Wallet', () => {
   });
 
   test('editing budget PUTs /wallet/budget with correct body', async ({ page }) => {
-    // Open the edit form
-    const editBtn = page.getByRole('button', { name: /edit/i }).first();
+    // Open the edit form. Exact name: /edit/i would also match "Add credits"
+    // (…cr-edit-s) on the balance card, which sits earlier in the DOM.
+    const editBtn = page.getByRole('button', { name: 'Edit', exact: true });
     await editBtn.click();
 
     // Fill in the monthly limit field
@@ -172,7 +218,7 @@ test.describe('Wallet', () => {
       }
     });
 
-    const editBtn = page.getByRole('button', { name: /edit/i }).first();
+    const editBtn = page.getByRole('button', { name: 'Edit', exact: true });
     await editBtn.click();
     const limitInput = page.getByPlaceholder('e.g. 10000');
     await limitInput.fill('5000');
@@ -184,9 +230,11 @@ test.describe('Wallet', () => {
   });
 
   test('transaction table shows entryType badges', async ({ page }) => {
-    await expect(page.getByText('TRIAL')).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByText('PURCHASE')).toBeVisible();
-    await expect(page.getByText('USAGE DEBIT')).toBeVisible();
+    // exact: getByText is case-insensitive substring by default, so 'TRIAL'
+    // would also hit the "200 Trial" bucket chip.
+    await expect(page.getByText('TRIAL', { exact: true })).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText('PURCHASE', { exact: true })).toBeVisible();
+    await expect(page.getByText('USAGE DEBIT', { exact: true })).toBeVisible();
   });
 
   test('transaction table shows positive and negative amounts', async ({ page }) => {
@@ -194,5 +242,53 @@ test.describe('Wallet', () => {
     await expect(page.getByText('+1,000')).toBeVisible({ timeout: 8_000 });
     // Negative amount — rendered without +
     await expect(page.getByText('-760')).toBeVisible();
+  });
+
+  // ── Expiry timeline (Phase 6 §11, Wave 14) ─────────────────────────────────
+
+  test('expiry timeline lists lots soonest-first with day chip and never-expires badge', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Credit Expiry' })).toBeVisible({ timeout: 8_000 });
+    // Soon-expiring promo lot: "40 of 100 promotional credits" + "3d left"
+    await expect(page.getByText(/promotional credits/)).toBeVisible();
+    await expect(page.getByText(/3d left/)).toBeVisible();
+    // Never-expiring purchased lot
+    await expect(page.getByText('never expires')).toBeVisible();
+  });
+
+  // ── Credit marketplace (Phase 6 §12, Wave 14) ──────────────────────────────
+
+  test('marketplace renders packs with price and buying POSTs recharge with packId + Idempotency-Key', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Buy Credits' })).toBeVisible({ timeout: 8_000 });
+    // Identify packs by their credits line — pack names collide with the
+    // sidebar brand ("AI CreatorForce") and role badge under substring matching.
+    await expect(page.getByText('1,000 credits', { exact: true })).toBeVisible();
+    await expect(page.getByText('$9.99')).toBeVisible();
+    await expect(page.getByText('5,000 credits', { exact: true })).toBeVisible();
+    await expect(page.getByText('$39.99')).toBeVisible();
+
+    await page.route(`${BASE}/wallet/recharge`, async (route) => {
+      await route.fulfill({ json: { checkoutUrl: null } });
+    });
+
+    const postReq = page.waitForRequest(
+      (r) => r.method() === 'POST' && r.url().includes('/wallet/recharge'),
+    );
+    await page.getByRole('button', { name: /buy/i }).first().click();
+    const req = await postReq;
+    expect((req.postDataJSON() as { packId?: string }).packId).toBe('pack-1');
+    expect(req.headers()['idempotency-key']).toBeTruthy();
+  });
+
+  // ── Provider-outage copy (risk R-06, Wave 19) ──────────────────────────────
+
+  test('a PROVIDER-coded failure shows actionable outage copy, not the raw error', async ({ page }) => {
+    await page.route(`${BASE}/wallet/recharge`, async (route) => {
+      await route.fulfill({ status: 503, json: PROVIDER_OUTAGE_ENVELOPE });
+    });
+
+    await page.getByRole('button', { name: /buy/i }).first().click();
+
+    await expect(page.getByText(/temporary provider outage/i)).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText(/nothing was charged/i)).toBeVisible();
   });
 });

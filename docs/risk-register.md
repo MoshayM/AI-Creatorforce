@@ -3,14 +3,13 @@
 > Living register per `Updates/47_Risk_Register.md`: technical, product, security,
 > and operational risks with likelihood, impact, owner, mitigation, and status.
 > Review cadence: on every wave that touches a listed area; prune resolved rows.
-> Last updated: 2026-07-13 (Wave 18).
+> Last updated: 2026-07-13 (Wave 19).
 
 | ID | Risk | Category | Likelihood | Impact | Mitigation | Status |
 |----|------|----------|-----------|--------|------------|--------|
 | R-03 | Secrets in `.env`, no KMS; OAuth tokens envelope-encrypted but master key local | Security | Low (single-tenant local) | High at scale | Documented deliberate deviation (billing-security.md); adopt KMS before multi-tenant hosting | Accepted (local-first) |
 | R-04 | No log aggregation: stdout-only logs; incident forensics rely on Sentry + Prometheus | Operational | Medium | Medium | Structured JSON lines with correlation IDs + secret redaction shipped (Wave 15, `common/structured-logger.ts`); aggregation itself remains infra-blocked | Mitigated (aggregation infra-blocked) |
 | R-05 | Postgres RPO 24h (daily dumps, no WAL archiving/PITR) | Operational | Low | High | Runbooks document PITR upgrade path; infra-blocked locally | Accepted (documented) |
-| R-06 | Provider outage degradation: AI adapter chains fail closed (good) but user messaging is generic | Product | Medium | Low | Error envelope carries `code: PROVIDER`, `retryable: true` (Wave 7); UI copy improvements as follow-up | Partially mitigated |
 | R-07 | Cross-tenant isolation depends on service-level ownership checks (no DB row-level security) | Security | Low | High | Ownership-scoped service methods + e2e/unit tests; Semgrep rule candidates for missing scoping | Open (monitor) |
 | R-08 | In-memory rate limiter on dev-API keys resets per process and doesn't share across replicas | Technical | Low (single instance) | Medium at scale | Documented in `developer-key.guard.ts`; Redis sliding window when multi-instance | Accepted (documented) |
 | R-09 | i18n absent: UI strings hard-coded English; retrofit cost grows with every new surface | Product | High (if targeting non-EN) | Medium | Externalize strings when a second locale is committed; AI content is already multi-language | Accepted (deferred) |
@@ -28,3 +27,4 @@
 | R-C5 | Stuck jobs: RUNNING `AgentJob` rows of crashed workers lingered forever | `JobReaperJob` sweep (Wave 17): guarded RUNNING→FAILED past `JOB_REAPER_STALL_MINUTES` (default 120) + hold release |
 | R-C6 | Double-enqueue race on `AgentJob` | `Idempotency-Key` on `POST /jobs` and dev-API enqueue, unique column closes the race (Wave 17) |
 | R-C7 | New paid dev-API routes could forget the sandbox-key check | Guard-level `@PaidAction()` decorator — sandbox keys rejected in `DeveloperKeyGuard` before any marked handler runs (Wave 18) |
+| R-C8 | Provider outages read as generic failures in the UI | `getErrorMessage` appends actionable copy for envelope codes `PROVIDER`/`RATE_LIMITED` (Wave 19); e2e-covered on the wallet surface |
