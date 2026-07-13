@@ -4,6 +4,7 @@ import { PermissionsGuard, RequirePermissions } from '../../common/guards/permis
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { JobsService } from './jobs.service';
+import { decodeCursor, keysetWhereDesc, clampLimit, pageResult } from '../../common/pagination/cursor';
 
 /**
  * DLQ surface (docs4/35): inspect dead jobs and replay them. Permission-string
@@ -17,16 +18,21 @@ export class AdminJobsController {
     private readonly jobs: JobsService,
   ) {}
 
-  /** Recent dead jobs (FAILED/CANCELLED), newest first. */
+  /** Recent dead jobs (FAILED/CANCELLED), newest first, cursor-paginated. */
   @Get('failed')
   @RequirePermissions('admin:jobs')
-  async failed(@Query('take') take?: string) {
-    return this.prisma.agentJob.findMany({
-      where: { status: { in: ['FAILED', 'CANCELLED'] } },
-      orderBy: { updatedAt: 'desc' },
-      take: Math.min(parseInt(take ?? '50', 10) || 50, 200),
+  async failed(@Query('take') take?: string, @Query('cursor') cursor?: string) {
+    const limit = clampLimit(take !== undefined ? parseInt(take, 10) : undefined, 50, 200);
+    const rows = await this.prisma.agentJob.findMany({
+      where: {
+        status: { in: ['FAILED', 'CANCELLED'] },
+        ...keysetWhereDesc('updatedAt', decodeCursor(cursor)),
+      },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
       select: { id: true, projectId: true, type: true, status: true, error: true, attempts: true, createdAt: true, updatedAt: true },
     });
+    return pageResult(rows, limit, (r) => r.updatedAt);
   }
 
   // 202: the replay is queued, not done (docs4/16 — async ops return 202 + job id)

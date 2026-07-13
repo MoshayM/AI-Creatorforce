@@ -155,7 +155,7 @@ export async function setupApiMocks(page: Page) {
   // ── Projects ──────────────────────────────────────────────────────────────
   await page.route(`${BASE}/projects`, async (route) => {
     if (route.request().method() === 'GET') {
-      await route.fulfill({ json: MOCK_PROJECTS });
+      await route.fulfill({ json: { data: MOCK_PROJECTS, nextCursor: null } });
     } else {
       const body = route.request().postDataJSON() as { title?: string; channelId?: string } | null;
       await route.fulfill({ status: 201, json: { id: 'proj-new', title: body?.title ?? '', channelId: body?.channelId ?? '', status: 'DRAFT', niche: null, targetLang: 'en', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } });
@@ -191,7 +191,7 @@ export async function setupApiMocks(page: Page) {
 
   // ── Approvals ─────────────────────────────────────────────────────────────
   await page.route(`${BASE}/approvals/pending`, async (route) => {
-    await route.fulfill({ json: MOCK_APPROVALS });
+    await route.fulfill({ json: { data: MOCK_APPROVALS, nextCursor: null } });
   });
 
   await page.route(/\/api\/v1\/approvals\/[^/]+\/approve$/, async (route) => {

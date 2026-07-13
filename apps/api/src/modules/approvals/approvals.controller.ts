@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -17,13 +17,21 @@ export class ApprovalsController {
   constructor(private readonly svc: ApprovalsService) {}
 
   @Get('pending')
-  listPending(@CurrentUser() user: JwtPayload) {
-    return this.svc.listPending(user.sub);
+  listPending(
+    @CurrentUser() user: JwtPayload,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.svc.listPending(user.sub, { cursor, limit: limit ? parseInt(limit, 10) : undefined });
   }
 
   @Get('history')
-  listHistory(@CurrentUser() user: JwtPayload) {
-    return this.svc.listHistory(user.sub);
+  listHistory(
+    @CurrentUser() user: JwtPayload,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.svc.listHistory(user.sub, { cursor, limit: limit ? parseInt(limit, 10) : undefined });
   }
 
   @Post(':id/approve')

@@ -191,13 +191,13 @@ export default function ApprovalsPage() {
 
   const { data: approvals = [], isLoading } = useQuery<Approval[]>({
     queryKey: ['approvals'],
-    queryFn: () => api.approvals.listPending().then((r) => r.data as Approval[]),
+    queryFn: () => api.approvals.listPending().then((r) => (r.data as { data: Approval[] }).data),
     refetchInterval: 30_000,
   });
 
   const { data: history = [] } = useQuery<Approval[]>({
     queryKey: ['approvals-history'],
-    queryFn: () => api.approvals.listHistory().then((r) => r.data as Approval[]),
+    queryFn: () => api.approvals.listHistory().then((r) => (r.data as { data: Approval[] }).data),
     refetchInterval: 60_000,
   });
 

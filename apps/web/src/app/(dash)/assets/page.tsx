@@ -57,8 +57,8 @@ export default function AssetsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    callApi<Project[]>('/projects')
-      .then(setProjects)
+    callApi<{ data: Project[] }>('/projects')
+      .then((page) => setProjects(page.data))
       .catch(() => {});
   }, []);
 
@@ -66,8 +66,8 @@ export default function AssetsPage() {
     if (!selectedProject) return;
     setLoading(true);
     setError('');
-    callApi<Asset[]>(`/assets/project/${selectedProject}`)
-      .then(setAssets)
+    callApi<{ data: Asset[] }>(`/assets/project/${selectedProject}`)
+      .then((page) => setAssets(page.data))
       .catch(e => setError(e instanceof Error ? e.message : 'Failed to load assets'))
       .finally(() => setLoading(false));
   }, [selectedProject]);

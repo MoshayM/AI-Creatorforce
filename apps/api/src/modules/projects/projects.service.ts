@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { decodeCursor, keysetWhereDesc, clampLimit, pageResult } from '../../common/pagination/cursor';
 
 export interface CreateProjectDto {
   channelId: string;
@@ -48,15 +49,18 @@ export class ProjectsService {
     });
   }
 
-  async list(userId: string) {
-    return this.prisma.project.findMany({
-      where: { userId },
+  async list(userId: string, opts: { cursor?: string; limit?: number } = {}) {
+    const take = clampLimit(opts.limit, 50, 100);
+    const rows = await this.prisma.project.findMany({
+      where: { userId, ...keysetWhereDesc('updatedAt', decodeCursor(opts.cursor)) },
       include: {
         channel: { select: { title: true, thumbnailUrl: true } },
         _count: { select: { jobs: true, videos: true } },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
     });
+    return pageResult(rows, take, (r) => r.updatedAt);
   }
 
   async get(userId: string, projectId: string) {

@@ -47,7 +47,7 @@ export default function ProjectsPage() {
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ['projects'],
-    queryFn: () => api.projects.list().then((r) => r.data as Project[]),
+    queryFn: () => api.projects.list().then((r) => (r.data as { data: Project[] }).data),
   });
 
   const { data: channels = [] } = useQuery<Channel[]>({

@@ -18,18 +18,21 @@ export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
   /**
-   * GET /notifications?unreadOnly=true&take=20
-   * Returns the user's notifications newest-first plus an unread count.
+   * GET /notifications?unreadOnly=true&take=20&cursor=
+   * Returns the user's notifications newest-first plus an unread count and
+   * a nextCursor for the following page.
    */
   @Get()
   async list(
     @CurrentUser() user: JwtPayload,
     @Query('unreadOnly') unreadOnly?: string,
     @Query('take') take?: string,
+    @Query('cursor') cursor?: string,
   ): Promise<NotificationListResult> {
     return this.notifications.list(user.sub, {
       unreadOnly: unreadOnly === 'true' || unreadOnly === '1',
       take: take !== undefined ? parseInt(take, 10) : undefined,
+      cursor,
     });
   }
 

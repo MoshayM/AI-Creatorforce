@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { decodeCursor, keysetWhereDesc, clampLimit, pageResult } from '../../common/pagination/cursor';
 
 // ── Pure helpers (exported for tests) ────────────────────────────────────────
 
@@ -66,6 +67,7 @@ export interface NotificationListResult {
     createdAt: Date;
   }>;
   unreadCount: number;
+  nextCursor: string | null;
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -137,26 +139,28 @@ export class NotificationsService {
   }
 
   /**
-   * List notifications for a user, newest first.
+   * List notifications for a user, newest first (cursor-paginated).
    *
    * @param unreadOnly  When true, only unread rows are returned.
-   * @param take        Max rows to return; clamped to LIST_MAX_TAKE.
+   * @param take        Max rows per page; clamped to LIST_MAX_TAKE.
+   * @param cursor      Keyset cursor from a previous page's nextCursor.
    */
   async list(
     userId: string,
-    opts: { unreadOnly?: boolean; take?: number } = {},
+    opts: { unreadOnly?: boolean; take?: number; cursor?: string } = {},
   ): Promise<NotificationListResult> {
-    const take = Math.min(opts.take ?? LIST_DEFAULT_TAKE, LIST_MAX_TAKE);
+    const take = clampLimit(opts.take, LIST_DEFAULT_TAKE, LIST_MAX_TAKE);
     const where = {
       userId,
       ...(opts.unreadOnly ? { readAt: null } : {}),
+      ...keysetWhereDesc('createdAt', decodeCursor(opts.cursor)),
     };
 
-    const [items, unreadCount] = await Promise.all([
+    const [rows, unreadCount] = await Promise.all([
       this.prisma.notification.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
-        take,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: take + 1,
         select: {
           id: true,
           type: true,
@@ -170,7 +174,8 @@ export class NotificationsService {
       this.prisma.notification.count({ where: { userId, readAt: null } }),
     ]);
 
-    return { items, unreadCount };
+    const page = pageResult(rows, take, (r) => r.createdAt);
+    return { items: page.data, unreadCount, nextCursor: page.nextCursor };
   }
 
   /** Mark a single notification as read. No-ops if already read or not owned. */

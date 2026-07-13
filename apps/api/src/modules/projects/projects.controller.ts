@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsOptional } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -28,8 +28,12 @@ export class ProjectsController {
   }
 
   @Get()
-  list(@CurrentUser() user: JwtPayload) {
-    return this.svc.list(user.sub);
+  list(
+    @CurrentUser() user: JwtPayload,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.svc.list(user.sub, { cursor, limit: limit ? parseInt(limit, 10) : undefined });
   }
 
   @Get(':id')

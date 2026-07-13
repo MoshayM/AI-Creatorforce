@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-13 (Wave 24).
+> Last updated: 2026-07-13 (Wave 25).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -36,7 +36,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 ### 03 Database Architecture
 - ✅ channel-first indexes; ✅ immutable versions (write-once AgentJob/AssetVersion)
 - ✅ Balance reconciles from ledger (wallet.service tests); ✅ expand/contract migrations (31 applied)
-- ◐ Cursor pagination: library/large lists yes; a few small lists still `take`-based
+- ✅ Cursor pagination everywhere: shared keyset util (`common/pagination/cursor.ts` + spec); projects, approvals (pending/history), assets, notifications, admin audit-logs/DLQ, and dev-API project lists all cursor-paginated (Wave 25). Intentional top-N queries (top models, recent jobs, latest versions) are not pagination and keep `take`.
 
 ### 04 Channel Workspace / 08 Playlists & Library
 - ✅ Shell within budget; ✅ virtual+infinite scroll (virtualization e2e)

@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -76,12 +77,22 @@ export class DevApiController {
     return all.map((c) => ({ id: c.id, title: c.title }));
   }
 
-  /** Returns the caller's projects. Requires scope: projects:read */
+  /** Returns the caller's projects, cursor-paginated. Requires scope: projects:read */
   @Get('projects')
   @RequireScope('projects:read')
-  async listProjects(@Request() req: ExpressRequest & { user: DevKeyUser }) {
-    const all = await this.projects.list(req.user.sub);
-    return all.map((p) => ({ id: p.id, title: p.title, status: p.status, niche: p.niche, updatedAt: p.updatedAt }));
+  async listProjects(
+    @Request() req: ExpressRequest & { user: DevKeyUser },
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const page = await this.projects.list(req.user.sub, {
+      cursor,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+    return {
+      data: page.data.map((p) => ({ id: p.id, title: p.title, status: p.status, niche: p.niche, updatedAt: p.updatedAt })),
+      nextCursor: page.nextCursor,
+    };
   }
 
   /** Returns one project (ownership-checked). Requires scope: projects:read */

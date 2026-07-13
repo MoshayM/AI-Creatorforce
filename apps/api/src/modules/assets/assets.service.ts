@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { AssetKind, AssetStatus } from '@prisma/client';
+import { decodeCursor, keysetWhereDesc, clampLimit, pageResult } from '../../common/pagination/cursor';
 
 @Injectable()
 export class AssetsService {
@@ -8,20 +9,23 @@ export class AssetsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async listForProject(projectId: string, userId: string) {
+  async listForProject(projectId: string, userId: string, opts: { cursor?: string; limit?: number } = {}) {
     // Verify ownership
     await this.prisma.project.findFirstOrThrow({ where: { id: projectId, userId } });
 
-    return this.prisma.asset.findMany({
-      where: { projectId, deletedAt: null },
+    const take = clampLimit(opts.limit, 100, 200);
+    const rows = await this.prisma.asset.findMany({
+      where: { projectId, deletedAt: null, ...keysetWhereDesc('createdAt', decodeCursor(opts.cursor)) },
       include: {
         versions: {
           orderBy: { version: 'desc' },
           take: 3,
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
     });
+    return pageResult(rows, take, (r) => r.createdAt);
   }
 
   async getAsset(assetId: string, userId: string) {

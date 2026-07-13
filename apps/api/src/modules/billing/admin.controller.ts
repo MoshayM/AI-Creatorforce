@@ -6,6 +6,7 @@ import { CurrentUser, type JwtPayload } from '../../common/decorators/current-us
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { BillingService } from './billing.service';
+import { decodeCursor, keysetWhereDesc, clampLimit, pageResult } from '../../common/pagination/cursor';
 
 class RefundDto {
   @IsString() @MinLength(5) reason!: string;
@@ -63,11 +64,14 @@ export class AdminController {
 
   @Get('audit-logs')
   @RequirePermissions('admin:audit-logs')
-  async auditLogs(@Query('take') take?: string) {
-    return this.prisma.auditLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(parseInt(take ?? '100', 10) || 100, 500),
+  async auditLogs(@Query('take') take?: string, @Query('cursor') cursor?: string) {
+    const limit = clampLimit(take !== undefined ? parseInt(take, 10) : undefined, 100, 500);
+    const rows = await this.prisma.auditLog.findMany({
+      where: keysetWhereDesc('createdAt', decodeCursor(cursor)),
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
     });
+    return pageResult(rows, limit, (r) => r.createdAt);
   }
 
   @Get('users')

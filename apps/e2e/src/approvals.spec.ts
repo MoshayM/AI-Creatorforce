@@ -50,7 +50,7 @@ test.describe('Approval Center', () => {
     let approved = false;
     // These new routes take priority over the ones from setupApiMocks (LIFO)
     await page.route(`${BASE}/approvals/pending`, async (route) => {
-      await route.fulfill({ json: approved ? [] : MOCK_APPROVALS });
+      await route.fulfill({ json: { data: approved ? [] : MOCK_APPROVALS, nextCursor: null } });
     });
     await page.route(/\/api\/v1\/approvals\/[^/]+\/approve$/, async (route) => {
       approved = true;
@@ -65,7 +65,7 @@ test.describe('Approval Center', () => {
   test('rejecting a request shows empty state', async ({ page }) => {
     let rejected = false;
     await page.route(`${BASE}/approvals/pending`, async (route) => {
-      await route.fulfill({ json: rejected ? [] : MOCK_APPROVALS });
+      await route.fulfill({ json: { data: rejected ? [] : MOCK_APPROVALS, nextCursor: null } });
     });
     await page.route(/\/api\/v1\/approvals\/[^/]+\/reject$/, async (route) => {
       rejected = true;

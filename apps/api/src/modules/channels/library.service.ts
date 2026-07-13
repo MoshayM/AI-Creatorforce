@@ -1,15 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import {
+  encodeCursor as encodeDateIdCursor,
+  decodeCursor as decodeDateIdCursor,
+  type PageResult,
+} from '../../common/pagination/cursor';
 
 // ── Pure cursor helpers ───────────────────────────────────────────────────────
 
 /**
  * Encode a keyset cursor for the 'recent' sort (publishedAt DESC, id DESC).
- * base64url of `${isoDate|''}|${id}` — empty string when publishedAt is null.
+ * Delegates to the shared date+id cursor (common/pagination/cursor).
  */
 export function encodeCursor(publishedAt: Date | null, id: string): string {
-  const iso = publishedAt ? publishedAt.toISOString() : '';
-  return Buffer.from(`${iso}|${id}`).toString('base64url');
+  return encodeDateIdCursor(publishedAt, id);
 }
 
 /**
@@ -17,20 +21,8 @@ export function encodeCursor(publishedAt: Date | null, id: string): string {
  * Returns null on missing or malformed input — caller treats as first page.
  */
 export function decodeCursor(cursor: string | undefined): { publishedAt: Date | null; id: string } | null {
-  if (!cursor) return null;
-  try {
-    const raw = Buffer.from(cursor, 'base64url').toString('utf8');
-    const pipeIdx = raw.indexOf('|');
-    if (pipeIdx === -1) return null;
-    const isoStr = raw.slice(0, pipeIdx);
-    const id = raw.slice(pipeIdx + 1);
-    if (!id) return null;
-    const publishedAt = isoStr ? new Date(isoStr) : null;
-    if (publishedAt && isNaN(publishedAt.getTime())) return null;
-    return { publishedAt, id };
-  } catch {
-    return null;
-  }
+  const decoded = decodeDateIdCursor(cursor);
+  return decoded ? { publishedAt: decoded.date, id: decoded.id } : null;
 }
 
 /**
@@ -96,10 +88,7 @@ export interface ListVideosOpts {
   take?: number;
 }
 
-export interface PageResult<T> {
-  data: T[];
-  nextCursor: string | null;
-}
+export type { PageResult };
 
 // ── Service ───────────────────────────────────────────────────────────────────
 

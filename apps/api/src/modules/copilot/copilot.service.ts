@@ -593,7 +593,7 @@ export class CopilotService {
       }
 
       case 'list_approvals': {
-        const pending = await this.approvals.listPending(userId);
+        const { data: pending } = await this.approvals.listPending(userId);
         const lines = pending.map((a) => {
           const result = a.job.result as { metadata?: { title?: string } } | null;
           const title = result?.metadata?.title ?? a.job.type.replace(/_/g, ' ').toLowerCase();

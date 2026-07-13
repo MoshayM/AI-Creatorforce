@@ -362,6 +362,8 @@ export interface AppNotification {
 export interface NotificationListResponse {
   items: AppNotification[];
   unreadCount: number;
+  /** Keyset cursor for the next page; null when this is the last page. */
+  nextCursor: string | null;
 }
 
 // ── Auth provider types ───────────────────────────────────────────────────────
@@ -447,7 +449,13 @@ export const api = {
     refresh: (channelId: string) => apiClient.post('/channels/refresh', { channelId }),
   },
   projects: {
-    list: () => apiClient.get('/projects'),
+    list: (opts?: { cursor?: string; limit?: number }) => {
+      const sp = new URLSearchParams();
+      if (opts?.cursor) sp.set('cursor', opts.cursor);
+      if (opts?.limit !== undefined) sp.set('limit', String(opts.limit));
+      const qs = sp.toString();
+      return apiClient.get(`/projects${qs ? `?${qs}` : ''}`);
+    },
     get: (id: string) => apiClient.get(`/projects/${id}`),
     create: (data: { channelId: string; title: string; niche?: string; targetLang?: string }) =>
       apiClient.post('/projects', data),
@@ -465,8 +473,10 @@ export const api = {
       apiClient.patch(`/jobs/project/${projectId}/override/${type}`, { result }),
   },
   approvals: {
-    listPending: () => apiClient.get('/approvals/pending'),
-    listHistory: () => apiClient.get('/approvals/history'),
+    listPending: (cursor?: string) =>
+      apiClient.get(`/approvals/pending${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    listHistory: (cursor?: string) =>
+      apiClient.get(`/approvals/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
     approve: (id: string, notes?: string) => apiClient.post(`/approvals/${id}/approve`, { notes }),
     reject: (id: string, notes?: string) => apiClient.post(`/approvals/${id}/reject`, { notes }),
   },
@@ -673,10 +683,11 @@ export const api = {
     leaderboard: () => apiClient.get<LeaderboardEntry[]>('/referral/leaderboard'),
   },
   notifications: {
-    list: (opts?: { unreadOnly?: boolean; take?: number }) => {
+    list: (opts?: { unreadOnly?: boolean; take?: number; cursor?: string }) => {
       const sp = new URLSearchParams();
       if (opts?.unreadOnly) sp.set('unreadOnly', 'true');
       if (opts?.take !== undefined) sp.set('take', String(opts.take));
+      if (opts?.cursor) sp.set('cursor', opts.cursor);
       const qs = sp.toString();
       return apiClient.get<NotificationListResponse>(`/notifications${qs ? `?${qs}` : ''}`);
     },

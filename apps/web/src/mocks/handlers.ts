@@ -627,7 +627,7 @@ export const handlers = [
   }),
 
   // ── Projects ──────────────────────────────────────────────────────────────
-  http.get(`${BASE}/projects`, () => HttpResponse.json(MOCK_PROJECTS)),
+  http.get(`${BASE}/projects`, () => HttpResponse.json({ data: MOCK_PROJECTS, nextCursor: null })),
 
   http.post(`${BASE}/projects`, async ({ request }) => {
     const body = await request.json() as { title: string; channelId: string };
@@ -730,7 +730,7 @@ export const handlers = [
   http.delete(`${BASE}/jobs/:id`, () => HttpResponse.json({ success: true })),
 
   // ── Approvals ─────────────────────────────────────────────────────────────
-  http.get(`${BASE}/approvals/pending`, () => HttpResponse.json(MOCK_APPROVALS)),
+  http.get(`${BASE}/approvals/pending`, () => HttpResponse.json({ data: MOCK_APPROVALS, nextCursor: null })),
 
   http.post(`${BASE}/approvals/:id/approve`, () =>
     HttpResponse.json({ id: 'appr-1', status: 'APPROVED' }),

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { AssetsService } from './assets.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
@@ -13,8 +13,16 @@ export class AssetsController {
   constructor(private readonly assets: AssetsService) {}
 
   @Get('project/:projectId')
-  async list(@Param('projectId') projectId: string, @CurrentUser() user: JwtPayload) {
-    return this.assets.listForProject(projectId, user.sub);
+  async list(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: JwtPayload,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.assets.listForProject(projectId, user.sub, {
+      cursor,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
   }
 
   @Get(':id')

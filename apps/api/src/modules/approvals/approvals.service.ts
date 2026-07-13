@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EventsGateway } from '../../gateway/events.gateway';
 import { JobsService } from '../jobs/jobs.service';
+import { decodeCursor, keysetWhereDesc, clampLimit, pageResult } from '../../common/pagination/cursor';
 
 @Injectable()
 export class ApprovalsService {
@@ -22,38 +23,51 @@ export class ApprovalsService {
     });
   }
 
-  async listPending(userId: string) {
-    return this.prisma.approval.findMany({
+  async listPending(userId: string, opts: { cursor?: string; limit?: number } = {}) {
+    const take = clampLimit(opts.limit, 50, 100);
+    const rows = await this.prisma.approval.findMany({
       where: {
         status: 'PENDING',
         expiresAt: { gt: new Date() },
         project: { userId },
+        ...keysetWhereDesc('createdAt', decodeCursor(opts.cursor)),
       },
       include: {
         job: { include: { agentLogs: { orderBy: { createdAt: 'desc' }, take: 5 } } },
         project: { select: { title: true, channel: { select: { title: true } } } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
     });
+    return pageResult(rows, take, (r) => r.createdAt);
   }
 
   /** Reviewed (or expired) approvals — the Approval Center's history section. */
-  async listHistory(userId: string, limit = 50) {
-    return this.prisma.approval.findMany({
+  async listHistory(userId: string, opts: { cursor?: string; limit?: number } = {}) {
+    const take = clampLimit(opts.limit, 50, 100);
+    const rows = await this.prisma.approval.findMany({
       where: {
         project: { userId },
-        OR: [
-          { status: { in: ['APPROVED', 'REJECTED', 'EXPIRED'] } },
-          { status: 'PENDING', expiresAt: { lte: new Date() } }, // lapsed but never marked
+        // AND keeps the reviewed-or-lapsed OR intact alongside the cursor's OR
+        AND: [
+          {
+            OR: [
+              { status: { in: ['APPROVED', 'REJECTED', 'EXPIRED'] } },
+              { status: 'PENDING', expiresAt: { lte: new Date() } }, // lapsed but never marked
+            ],
+          },
+          keysetWhereDesc('createdAt', decodeCursor(opts.cursor)),
         ],
       },
       include: {
         job: { select: { type: true, result: true } },
         project: { select: { title: true, channel: { select: { title: true } } } },
       },
-      orderBy: [{ reviewedAt: 'desc' }, { createdAt: 'desc' }],
-      take: limit,
+      // Keyset needs a stable non-null sort; reviewedAt is null for lapsed rows
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
     });
+    return pageResult(rows, take, (r) => r.createdAt);
   }
 
   async approve(approvalId: string, userId: string, notes?: string) {

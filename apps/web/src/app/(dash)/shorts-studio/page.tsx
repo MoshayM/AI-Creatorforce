@@ -127,7 +127,7 @@ export default function ShortsStudioPage() {
 
   const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ['projects'],
-    queryFn: () => api.projects.list().then((r) => r.data as Project[]),
+    queryFn: () => api.projects.list().then((r) => (r.data as { data: Project[] }).data),
   });
   const project = projects.find((p) => p.id === projectId) ?? null;
 
