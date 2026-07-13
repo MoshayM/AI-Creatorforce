@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-13 (Wave 21).
+> Last updated: 2026-07-13 (Wave 22).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -55,7 +55,8 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 ### 09 Asset Management
 - ✅ Channel-scoped, version-traceable assets; ✅ upload validation (validation engine)
 - ✅ Brand Kit editable + consumed by stages
-- ◐ Signed CDN URLs + GC: local-first serves via authenticated API, no CDN; unreferenced-asset GC not scheduled
+- ✅ Unreferenced-asset GC: daily two-stage sweep (mark soft-deleted → purge past grace, FK + timeline-JSON reference checks, audit-logged; `asset-gc.job.ts`, Wave 22)
+- ◐ Signed CDN URLs: local-first serves via authenticated API, no CDN
 
 ### 10 AI Credits
 - ✅ All five criteria: transparency+acceptance, ledger reconciliation, reserve/settle/refund (incl. Wave 17 reaper release), budget alerts + hard-cap, dashboard with history/forecast/recommendations
@@ -124,7 +125,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 ### 40 Backup & Recovery / 41 Disaster Recovery
 - ✅ Automated daily dumps + monitoring; ✅ DR runbooks; ✅ degradation modes (fail-closed adapter chains)
 - ⛔ PITR (risk R-05), restore drills to RPO/RTO, failover drills, game days — infra-blocked locally
-- ◐ Deletion lifecycle: cascade deletes in place; retention sweeps not scheduled
+- ✅ Deletion lifecycle: soft-delete → grace → purge enforced by scheduled GC (Wave 22)
 
 ### 42 Accessibility
 - ✅ jsx-a11y error-severity gate; keyboard flows on core surfaces
@@ -149,5 +150,4 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 | Playwright breadth (22) | firefox/webkit projects, sharding, visual snapshots |
 | External scanners (23/24/25) | ZAP/Burp/Snyk accounts (R-10) |
 | Hosted-deploy items (29/30/38/40/41/45) | A hosting target: aggregation, PITR, progressive delivery, DR drills |
-| Asset GC + retention sweeps (09/40) | Scheduled janitor jobs |
 | i18n (43) | Second-locale commitment (R-09) |

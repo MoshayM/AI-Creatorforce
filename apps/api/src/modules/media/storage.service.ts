@@ -43,6 +43,19 @@ export class StorageService {
     return createReadStream(this.resolve(key));
   }
 
+  /**
+   * Recursively remove everything under a key prefix (asset GC, Updates/09).
+   * Requires ≥2 path segments (e.g. `assets/{projectId}/{assetId}`) so a bug
+   * can never wipe a whole top-level directory, let alone the root.
+   */
+  async removePrefix(prefix: string): Promise<void> {
+    const clean = prefix.replace(/^[/\\]+|[/\\]+$/g, '');
+    if (!clean || clean.split(/[/\\]/).filter(Boolean).length < 2) {
+      throw new Error(`removePrefix requires a scoped prefix, got '${prefix}'`);
+    }
+    await fs.rm(this.resolve(clean), { recursive: true, force: true });
+  }
+
   async list(prefix: string): Promise<Array<{ name: string; sizeBytes: number }>> {
     const dir = this.resolve(prefix);
     if (!existsSync(dir)) return [];
