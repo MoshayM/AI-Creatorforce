@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-13 (Wave 20).
+> Last updated: 2026-07-13 (Wave 21).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -68,7 +68,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 - ✅ All long work jobbed (202 + job id, Wave 13); ✅ cursor resume; ✅ retry/backoff + cancel
 - ✅ Credits reserve/settle/refund; ✅ progress + events observable (WS + AgentLog)
 - ✅ Reaper (Wave 17); ✅ idempotent processing (Idempotency-Key, Wave 17)
-- ◐ DLQ: BullMQ failed-set retained; replay is manual (no tooling)
+- ✅ DLQ replay tooling: `GET /admin/jobs/failed` + `POST /admin/jobs/:id/replay` (audit-logged, `admin:jobs` permission, Wave 21)
 - ⛔ Autoscaling on queue depth — single-instance local (risk R-08 posture)
 
 ### 13 Performance / 44 Performance Budget
@@ -149,6 +149,5 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 | Playwright breadth (22) | firefox/webkit projects, sharding, visual snapshots |
 | External scanners (23/24/25) | ZAP/Burp/Snyk accounts (R-10) |
 | Hosted-deploy items (29/30/38/40/41/45) | A hosting target: aggregation, PITR, progressive delivery, DR drills |
-| DLQ replay tooling (35) | Small admin command to requeue failed jobs |
 | Asset GC + retention sweeps (09/40) | Scheduled janitor jobs |
 | i18n (43) | Second-locale commitment (R-09) |

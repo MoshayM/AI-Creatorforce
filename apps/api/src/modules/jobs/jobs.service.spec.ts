@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { JobsService } from './jobs.service';
 import type { PrismaService } from '../../common/prisma/prisma.service';
 import type { Queue } from 'bullmq';
@@ -99,5 +99,37 @@ describe('JobsService.enqueue', () => {
     expect(prisma.agentJob.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ idempotencyKey: undefined }),
     });
+  });
+
+  // Updates/35: DLQ replay
+
+  it('replays a FAILED job as a fresh enqueue with the same project/type/payload', async () => {
+    prisma.agentJob.findUnique.mockResolvedValue({
+      id: 'dead-1', projectId: 'proj-1', type: 'RENDER', status: 'FAILED', payload: { sceneCount: 4 },
+    });
+    prisma.agentJob.create.mockResolvedValue({ id: 'fresh-1' });
+    queue.add.mockResolvedValue({});
+    prisma.agentJob.updateMany.mockResolvedValue({ count: 1 });
+
+    const fresh = await service.replayFailed('dead-1');
+
+    expect(fresh.id).toBe('fresh-1');
+    expect(prisma.agentJob.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ projectId: 'proj-1', type: 'RENDER', payload: { sceneCount: 4 }, status: 'PENDING' }),
+    });
+    expect(queue.add).toHaveBeenCalled();
+  });
+
+  it('refuses to replay a job that is not dead', async () => {
+    prisma.agentJob.findUnique.mockResolvedValue({ id: 'live-1', status: 'RUNNING' });
+
+    await expect(service.replayFailed('live-1')).rejects.toThrow(BadRequestException);
+    expect(prisma.agentJob.create).not.toHaveBeenCalled();
+  });
+
+  it('404s on an unknown job id', async () => {
+    prisma.agentJob.findUnique.mockResolvedValue(null);
+
+    await expect(service.replayFailed('nope')).rejects.toThrow(NotFoundException);
   });
 });

@@ -16,7 +16,7 @@ export class JobsService {
   ) {}
 
   async enqueue(
-    projectId: string,
+    projectId: string | null,
     type: JobType,
     payload: Record<string, unknown> = {},
     opts?: { developerKeyId?: string; idempotencyKey?: string },
@@ -104,6 +104,21 @@ export class JobsService {
         completedAt: now,
       },
     });
+  }
+
+  /**
+   * DLQ replay (Updates/35): re-run a dead job as a FRESH AgentJob so the
+   * failed row stays in history (write-once). Pipeline resume semantics mean
+   * completed prior stages are reused, so replaying FULL_PRODUCTION picks up
+   * where the failure happened.
+   */
+  async replayFailed(jobId: string) {
+    const dead = await this.prisma.agentJob.findUnique({ where: { id: jobId } });
+    if (!dead) throw new NotFoundException('Job not found');
+    if (dead.status !== 'FAILED' && dead.status !== 'CANCELLED') {
+      throw new BadRequestException(`Only FAILED or CANCELLED jobs can be replayed (job is ${dead.status})`);
+    }
+    return this.enqueue(dead.projectId, dead.type, (dead.payload ?? {}) as Record<string, unknown>);
   }
 
   async cancel(jobId: string) {
