@@ -11,8 +11,12 @@ const prisma = {
     findUnique: jest.fn(),
   },
 };
+const queueClient = { status: 'ready' };
 const queue = {
   add: jest.fn(),
+  get client() {
+    return Promise.resolve(queueClient);
+  },
 };
 
 describe('JobsService.enqueue', () => {
@@ -20,6 +24,7 @@ describe('JobsService.enqueue', () => {
 
   beforeEach(() => {
     service = new JobsService(prisma as unknown as PrismaService, queue as unknown as Queue);
+    queueClient.status = 'ready';
     jest.clearAllMocks();
   });
 
@@ -56,6 +61,20 @@ describe('JobsService.enqueue', () => {
       data: { status: 'FAILED', error: expect.stringContaining('Queue unavailable') },
     });
     expect(prisma.agentJob.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('fails fast (503 + FAILED row) when the Redis connection is not ready, without calling add', async () => {
+    prisma.agentJob.create.mockResolvedValue({ id: 'job-4' });
+    prisma.agentJob.update.mockResolvedValue({});
+    queueClient.status = 'connecting';
+
+    await expect(service.enqueue('proj-1', 'FACT_CHECK')).rejects.toThrow(ServiceUnavailableException);
+
+    expect(queue.add).not.toHaveBeenCalled();
+    expect(prisma.agentJob.update).toHaveBeenCalledWith({
+      where: { id: 'job-4' },
+      data: { status: 'FAILED', error: expect.stringContaining('Queue unavailable') },
+    });
   });
 
   // Wave 17 (risk R-02): enqueue idempotency

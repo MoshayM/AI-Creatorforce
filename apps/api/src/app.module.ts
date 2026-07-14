@@ -49,7 +49,11 @@ import { FlagsModule } from './modules/flags/flags.module';
       connection: {
         host: '127.0.0.1',
         port: 6379,
-        lazyConnect: true,
+        // No lazyConnect: a lazy connect() that fails (Redis down at first
+        // enqueue) is cached by BullMQ as a forever-rejected init promise, so
+        // the queue never recovers even after Redis comes back. An eager
+        // connection retries until Redis is ready and heals on its own;
+        // JobsService fails fast while it isn't.
         enableOfflineQueue: false,
         maxRetriesPerRequest: null,
       },

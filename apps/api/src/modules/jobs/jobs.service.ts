@@ -45,6 +45,7 @@ export class JobsService {
     }
 
     try {
+      await this.assertQueueReady();
       await this.queue.add(type, { jobId: job.id, projectId, type, payload, correlationId: currentCorrelationId(), developerKeyId: opts?.developerKeyId }, {
         jobId: job.id,
         attempts: 1,
@@ -65,6 +66,31 @@ export class JobsService {
       data: { status: 'QUEUED' },
     });
     return job;
+  }
+
+  /**
+   * Fail fast instead of hanging when the queue's Redis connection isn't
+   * ready. The connection is eager and retries forever (app.module.ts), so if
+   * the API booted while Redis was down, BullMQ's client promise stays pending
+   * until Redis returns — without this guard an enqueue would block for as
+   * long as Redis is down instead of returning the 503 the UI expects.
+   */
+  private async assertQueueReady(timeoutMs = 2000): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const client = await Promise.race([
+        this.queue.client,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Redis connection not ready (timed out)')), timeoutMs);
+          timer.unref?.();
+        }),
+      ]);
+      if (client.status !== 'ready') {
+        throw new Error(`Redis connection not ready (status: ${client.status})`);
+      }
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   async get(jobId: string) {
