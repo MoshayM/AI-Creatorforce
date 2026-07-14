@@ -311,6 +311,8 @@ jobs:
       # BullModule is hardcoded to 127.0.0.1:6379 in app.module.ts; service maps to that.
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-secret-e2e
+      # OAuth token encryption (auth wave) — service refuses to boot under 32 chars.
+      TOKEN_ENCRYPTION_KEY: ci-e2e-token-encryption-key-0123456789abcdef
       API_PORT: '4007'
       NODE_ENV: production
       # Silence optional external integrations so the API starts without real keys.
@@ -349,20 +351,24 @@ jobs:
         run: pnpm --filter @cf/api build
 
       - name: Start API in background
+        # Fail HARD when the API never comes up — a silently absent API
+        # previously surfaced as inscrutable Playwright failures.
         run: |
           node apps/api/dist/main.js &
-          # Wait until the API health endpoint responds (up to 30s)
+          up=0
           for i in $(seq 1 30); do
             if curl -sf http://localhost:4007/api/v1 > /dev/null 2>&1 || \
                curl -sf http://localhost:4007/api/docs > /dev/null 2>&1; then
-              echo "API is up"; break
+              echo "API is up"; up=1; break
             fi
             echo "Waiting for API... ($i/30)"
             sleep 1
           done
+          if [ "$up" != "1" ]; then echo "API failed to start"; exit 1; fi
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           JWT_SECRET: ${{ env.JWT_SECRET }}
+          TOKEN_ENCRYPTION_KEY: ${{ env.TOKEN_ENCRYPTION_KEY }}
           API_PORT: ${{ env.API_PORT }}
           NODE_ENV: ${{ env.NODE_ENV }}
           ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
@@ -378,6 +384,10 @@ jobs:
           CI: 'true'
           # playwright.config.ts webServer block hardcodes NEXT_PUBLIC_API_URL=http://localhost:4007/api/v1
           # and starts the Next.js dev server via 'pnpm --filter @cf/web dev' automatically.
+          # The job-level NODE_ENV=production (needed by the API) must not leak
+          # into `next dev` — it makes Next look for a production build and die
+          # with required-server-files.json ENOENT.
+          NODE_ENV: development
           NEXT_PUBLIC_API_URL: 'http://localhost:4007/api/v1'
           NEXT_PUBLIC_USE_MOCK: 'false'
           SKIP_ENV_VALIDATION: 'true'
