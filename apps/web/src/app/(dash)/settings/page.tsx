@@ -444,7 +444,7 @@ function SettingsContent() {
       )}
 
       {/* ── YouTube Channels ──────────────────────────────── */}
-      <section>
+      <section id="channels" className="scroll-mt-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Youtube className="w-5 h-5 text-red-600" />
           YouTube Channels

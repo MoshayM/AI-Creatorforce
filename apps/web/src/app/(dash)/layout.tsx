@@ -2,20 +2,35 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2 } from 'lucide-react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, Youtube } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
-const NAV = [
+interface NavItem {
+  href: string;
+  icon: typeof FolderOpen;
+  label: string;
+  /** Indented sub-links rendered directly beneath the item. */
+  children?: NavItem[];
+}
+
+const NAV: NavItem[] = [
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
-  { href: '/library', icon: ListVideo, label: 'Library' },
   { href: '/wallet', icon: Wallet, label: 'Wallet' },
   { href: '/orgs', icon: Building2, label: 'Organization' },
   { href: '/growth', icon: Gift, label: 'Growth' },
   { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
   { href: '/approvals', icon: CheckSquare, label: 'Approvals' },
   { href: '/brand-kit', icon: Palette, label: 'Brand Kit' },
-  { href: '/settings', icon: Settings, label: 'Settings' },
+  {
+    href: '/settings',
+    icon: Settings,
+    label: 'Settings',
+    children: [
+      { href: '/library', icon: ListVideo, label: 'Library' },
+      { href: '/settings#channels', icon: Youtube, label: 'YouTube channel access' },
+    ],
+  },
 ];
 
 /** Display name from the JWT payload — no network call, safe in mock mode. */
@@ -157,19 +172,34 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
             <p className="text-xs text-white/70">AI Content Platform</p>
           </div>
           <nav className="flex-1 py-2 space-y-1 px-3 overflow-y-auto">
-            {[...NAV, ...(isAdmin ? [{ href: '/admin', icon: Gauge, label: 'Admin' }] : [])].map(({ href, icon: Icon, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors ${
-                  pathname.startsWith(href)
-                    ? 'bg-white/20 text-white font-semibold shadow-sm'
-                    : 'text-white/75 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {label}
-              </Link>
+            {[...NAV, ...(isAdmin ? [{ href: '/admin', icon: Gauge, label: 'Admin' } as NavItem] : [])].map(({ href, icon: Icon, label, children }) => (
+              <div key={href}>
+                <Link
+                  href={href}
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors ${
+                    pathname.startsWith(href)
+                      ? 'bg-white/20 text-white font-semibold shadow-sm'
+                      : 'text-white/75 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </Link>
+                {children?.map(({ href: subHref, icon: SubIcon, label: subLabel }) => (
+                  <Link
+                    key={subHref}
+                    href={subHref}
+                    className={`mt-1 flex items-center gap-2.5 pl-9 pr-4 py-2 rounded-xl text-[13px] transition-colors ${
+                      !subHref.includes('#') && pathname.startsWith(subHref)
+                        ? 'bg-white/20 text-white font-semibold shadow-sm'
+                        : 'text-white/70 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <SubIcon className="w-3.5 h-3.5" />
+                    {subLabel}
+                  </Link>
+                ))}
+              </div>
             ))}
           </nav>
           <div className="p-3">
