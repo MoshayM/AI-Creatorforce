@@ -156,6 +156,10 @@ model AgentJob {
   payload        Json      @default("{}")
   result         Json?
   error          String?
+  /// Machine-readable failure class driving the UI error card (typed media pipeline error code).
+  errorCode      String?
+  /// Sanitized technical payload for admin-only display; contains exitCode, stderrTail, reason.
+  errorDetails   Json?
   attempts       Int       @default(0)
   /// Client-supplied Idempotency-Key (Wave 17, risk R-02): a duplicate enqueue
   /// returns the original job instead of persisting a second one.

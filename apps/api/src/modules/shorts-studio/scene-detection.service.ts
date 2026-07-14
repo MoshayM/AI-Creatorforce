@@ -1,8 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { runFfmpegCapture } from '../media/adapters/ffmpeg.util';
+import { runFfmpegCapture, withFfmpegRetries } from '../media/adapters/ffmpeg.util';
 import { VideoImportService } from './video-import.service';
 import { AnalysisCacheService } from './analysis-cache.service';
+import { SceneDetectionError } from '../media/media.errors';
+import { appendVideoImportLog } from '../media/video-import-log.util';
 
 const SCENE_THRESHOLD = 0.3;
 /** Guard against pathological outputs on very long or very cutty videos. */
@@ -70,14 +72,22 @@ export class SceneDetectionService {
 
   /** Run ffmpeg scene-score filter and parse cut timestamps from metadata output. */
   private async detectBoundaries(sourcePath: string): Promise<Array<{ timeMs: number; score: number }>> {
-    const out = await runFfmpegCapture(
-      [
-        '-i', sourcePath,
-        '-vf', `select='gt(scene,${SCENE_THRESHOLD})',metadata=print`,
-        '-an', '-f', 'null', '-',
-      ],
-      1_800_000,
-    );
+    const out = await withFfmpegRetries(
+      () => runFfmpegCapture(
+        [
+          '-i', sourcePath,
+          '-vf', `select='gt(scene,${SCENE_THRESHOLD})',metadata=print`,
+          '-an', '-f', 'null', '-',
+        ],
+        1_800_000,
+      ),
+    ).catch((err: unknown) => {
+      void appendVideoImportLog({ stage: 'SCENE_DETECTION', sourcePath, error: err instanceof Error ? err.message : String(err) });
+      if (err instanceof Error && err.constructor.name !== 'FFmpegExecutionError' && err.constructor.name !== 'CodecNotSupportedError') {
+        throw new SceneDetectionError('Scene detection failed unexpectedly.', { message: err instanceof Error ? err.message.slice(0, 500) : String(err) });
+      }
+      throw err;
+    });
     // metadata=print emits pairs of lines:
     //   frame:12 pts:307 pts_time:10.24
     //   lavfi.scene_score=0.402

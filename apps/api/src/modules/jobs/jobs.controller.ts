@@ -6,11 +6,30 @@ import { CurrentUser, type JwtPayload } from '../../common/decorators/current-us
 import { JobsService } from './jobs.service';
 import { ScriptOutputSchema } from '@cf/shared';
 import type { JobType } from '@cf/shared';
+import { roleHasPermission } from '../../common/rbac';
+import { MEDIA_ERROR_RETRYABLE, type MediaErrorCode } from '@cf/shared';
 
 // Stage results the creator may edit inline; downstream stages read the
 // edited version via lastResult(). SCRIPT is schema-validated so edits can
 // never break voice/subtitle/video generation.
 const OVERRIDABLE_TYPES: ReadonlySet<string> = new Set(['SCRIPT', 'TREND_ANALYSIS', 'MUSIC_BRIEF', 'METADATA']);
+
+function sanitizeJob(job: Record<string, unknown>, isAdmin: boolean): Record<string, unknown> {
+  const { errorDetails, errorCode, ...rest } = job as {
+    errorDetails?: unknown;
+    errorCode?: string;
+    [key: string]: unknown;
+  };
+  const retryable = errorCode
+    ? (MEDIA_ERROR_RETRYABLE[errorCode as MediaErrorCode] ?? true)
+    : true;
+  return {
+    ...rest,
+    errorCode: errorCode ?? null,
+    retryable,
+    ...(isAdmin && errorDetails !== undefined ? { errorDetails } : {}),
+  };
+}
 
 class EnqueueDto {
   @IsString() projectId!: string;
@@ -38,8 +57,10 @@ export class JobsController {
   }
 
   @Get('project/:projectId')
-  listByProject(@Param('projectId') projectId: string) {
-    return this.svc.listByProject(projectId);
+  async listByProject(@Param('projectId') projectId: string, @CurrentUser() user: JwtPayload) {
+    const jobs = await this.svc.listByProject(projectId);
+    const isAdmin = roleHasPermission(user.role as never, 'admin:jobs');
+    return jobs.map((j) => sanitizeJob(j as unknown as Record<string, unknown>, isAdmin));
   }
 
   // Human edits to a stage result — stored as a new COMPLETED job so the
@@ -68,8 +89,10 @@ export class JobsController {
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.svc.get(id);
+  async get(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    const job = await this.svc.get(id);
+    const isAdmin = roleHasPermission(user.role as never, 'admin:jobs');
+    return sanitizeJob(job as unknown as Record<string, unknown>, isAdmin);
   }
 
   // Permanent history deletion (cancel() above only stops an active job)

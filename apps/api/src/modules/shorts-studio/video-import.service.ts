@@ -6,8 +6,10 @@ import * as os from 'os';
 import { createHash } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../media/storage.service';
-import { ffmpegPath, probeMediaInfo, isAv1Info } from '../media/adapters/ffmpeg.util';
+import { ffmpegPath, probeMediaInfo, isAv1Info, parseMediaProbe } from '../media/adapters/ffmpeg.util';
 import { YouTubeReadService, parseSrt, type TranscriptCueDTO } from './youtube-read.service';
+import { VideoValidationError, ImportPipelineError } from '../media/media.errors';
+import { appendVideoImportLog } from '../media/video-import-log.util';
 
 /** Title marking the auto-created per-channel container project for channel-first imports. */
 export const SHORTS_CONTAINER_PROJECT_TITLE = 'Shorts Studio';
@@ -189,9 +191,26 @@ export class VideoImportService {
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cf-shorts-'));
     const tmpOut = path.join(tmpDir, 'source.mp4');
     try {
-      await this.runYtDlp(video.youtubeVideoId, tmpOut);
+      await this.runYtDlp(video.youtubeVideoId, tmpOut).catch((err: unknown) => {
+        const stderrTail = err instanceof Error ? err.message.slice(0, 2000) : String(err);
+        throw new ImportPipelineError('Downloading the source video from YouTube failed.', { stderrTail, youtubeVideoId: video.youtubeVideoId });
+      });
       const stat = await fsp.stat(tmpOut);
-      if (stat.size === 0) throw new Error('Downloaded file is empty');
+      if (stat.size === 0) {
+        throw new VideoValidationError('The file contains no video stream.', { youtubeVideoId: video.youtubeVideoId });
+      }
+      // Pre-processing validation: probe the downloaded file
+      const probeText = await probeMediaInfo(tmpOut);
+      const { durationMs: probeDurationMs, videoCodec, audioCodec } = parseMediaProbe(probeText);
+      if (!videoCodec) {
+        throw new VideoValidationError('The file contains no video stream.', { youtubeVideoId: video.youtubeVideoId, probeText: probeText.slice(0, 500) });
+      }
+      if (probeDurationMs === null || probeDurationMs <= 0) {
+        throw new VideoValidationError('Could not read the video duration.', { youtubeVideoId: video.youtubeVideoId, probeDurationMs });
+      }
+      if (!audioCodec) {
+        throw new VideoValidationError('The video has no audio track — Shorts Studio needs the original audio.', { youtubeVideoId: video.youtubeVideoId });
+      }
 
       const asset = await this.prisma.asset.create({
         data: {
@@ -227,6 +246,7 @@ export class VideoImportService {
         where: { id: importedVideoId },
         data: { sourceAssetId: asset.id },
       });
+      void appendVideoImportLog({ stage: 'VIDEO_IMPORT', youtubeVideoId: video.youtubeVideoId, assetId: asset.id, sizeBytes, videoCodec, audioCodec });
       onLog?.(`Source video stored (${Math.round(sizeBytes / 1024 / 1024)} MB)`);
       return { skipped: false, assetId: asset.id, key };
     } finally {
@@ -249,9 +269,14 @@ export class VideoImportService {
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cf-shorts-h264-'));
     const tmpOut = path.join(tmpDir, 'source.mp4');
     try {
-      await this.runYtDlp(youtubeVideoId, tmpOut, YTDLP_FORMAT_H264_ONLY);
+      await this.runYtDlp(youtubeVideoId, tmpOut, YTDLP_FORMAT_H264_ONLY).catch((err: unknown) => {
+        const stderrTail = err instanceof Error ? err.message.slice(0, 2000) : String(err);
+        throw new ImportPipelineError('Downloading the source video from YouTube failed.', { stderrTail, youtubeVideoId });
+      });
       const stat = await fsp.stat(tmpOut);
-      if (stat.size === 0) throw new Error('Downloaded file is empty');
+      if (stat.size === 0) {
+        throw new VideoValidationError('The file contains no video stream.', { youtubeVideoId });
+      }
       if (isAv1Info(await probeMediaInfo(tmpOut))) throw new Error('H.264 rendition unavailable (got AV1 again)');
 
       const latest = await this.prisma.assetVersion.findFirst({

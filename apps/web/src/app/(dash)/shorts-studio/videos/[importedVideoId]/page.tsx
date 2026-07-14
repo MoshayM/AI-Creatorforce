@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2, Sparkles, ListTree, Trophy, Scissors, CheckCircle2, Clapperboard, Pencil, Upload, ShieldCheck, ExternalLink, XCircle, ChevronDown, ChevronRight, BookOpen, Check, Search, Share2, Copy, Image as ImageIcon } from 'lucide-react';
 import { api } from '@/lib/api';
+import { JobErrorCard } from '@/components/job-error-card';
 
 interface Topic {
   id: string;
@@ -145,7 +146,7 @@ function usePublishFlow(highlightId: string, qc: ReturnType<typeof useQueryClien
     setPhase({ step: 'working', label });
     for (;;) {
       if (cancelled.current) throw new Error('cancelled');
-      const job = (await api.jobs.get(jobId)).data as { status: string; error?: string };
+      const job = (await api.jobs.get(jobId)).data as { status: string; error?: string; errorCode?: string | null; retryable?: boolean };
       if (job.status === 'COMPLETED') return;
       if (job.status === 'FAILED') throw new Error(job.error ?? `${label} failed`);
       await sleep(4000);
@@ -328,14 +329,20 @@ function HighlightCard({ h, open, onToggle }: { h: Highlight; open: boolean; onT
         </p>
       )}
       {phase.step === 'error' && (
-        <p className="text-xs text-red-600 mt-2 flex items-center gap-1.5">
-          <XCircle className="w-3.5 h-3.5" /> {phase.message} — click Publish to resume (finished steps are skipped).
-        </p>
+        <JobErrorCard
+          error={`${phase.message} — click Publish to resume (finished steps are skipped).`}
+          errorCode="JOB_FAILED"
+          onRetry={() => void run()}
+          className="mt-2"
+        />
       )}
       {generate.isError && (
-        <p className="text-xs text-red-500 mt-2">
-          {(generate.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Failed to generate clips'}
-        </p>
+        <JobErrorCard
+          error={(generate.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Failed to generate clips'}
+          errorCode="JOB_FAILED"
+          onRetry={() => generate.mutate()}
+          className="mt-2"
+        />
       )}
       </div>
       )}
@@ -694,9 +701,15 @@ export default function ShortsVideoDetailPage() {
                   {syncChapters.isSuccess ? `Synced ${syncChapters.data.chapters} ✓` : 'Sync to YouTube'}
                 </button>
                 {syncChapters.isError && (
-                  <span className="text-xs text-red-500">
-                    {(syncChapters.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Sync failed'}
-                  </span>
+                  <JobErrorCard
+                    error={(syncChapters.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Sync failed'}
+                    errorCode="JOB_FAILED"
+                    onRetry={() => {
+                      if (window.confirm('Publish these chapter timestamps into the video\'s YouTube description? This edits the live video.')) {
+                        syncChapters.mutate();
+                      }
+                    }}
+                  />
                 )}
               </span>
               <span className="flex items-center gap-3">
@@ -857,9 +870,12 @@ export default function ShortsVideoDetailPage() {
           )}
 
           {searchVideo.isError && (
-            <p className="text-center text-red-500 text-sm py-8">
-              {(searchVideo.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Search failed'}
-            </p>
+            <JobErrorCard
+              error={(searchVideo.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Search failed'}
+              errorCode="JOB_FAILED"
+              onRetry={() => { if (searchQuery.trim()) searchVideo.mutate(searchQuery.trim()); }}
+              className="my-4"
+            />
           )}
 
           {searchVideo.data && !searchVideo.data.needsEmbeddings && (

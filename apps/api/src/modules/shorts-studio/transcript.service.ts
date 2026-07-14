@@ -3,10 +3,11 @@ import { promises as fsp } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { runFfmpeg } from '../media/adapters/ffmpeg.util';
+import { runFfmpeg, withFfmpegRetries } from '../media/adapters/ffmpeg.util';
 import { YouTubeReadService, type TranscriptCueDTO } from './youtube-read.service';
 import { VideoImportService } from './video-import.service';
 import { AnalysisCacheService } from './analysis-cache.service';
+import { TranscriptionError } from '../media/media.errors';
 
 interface WhisperSegment {
   start: number; // seconds
@@ -114,11 +115,13 @@ export class TranscriptService {
       // ~20-minute chunks; chunk timestamps are stitched using the exact
       // audio duration Whisper reports back per chunk.
       onLog?.('Extracting audio track…');
-      await runFfmpeg([
+      await withFfmpegRetries(() => runFfmpeg([
         '-i', sourcePath, '-vn', '-ac', '1', '-b:a', '64k',
         '-f', 'segment', '-segment_time', '1200', '-reset_timestamps', '1',
         path.join(tmpDir, 'chunk-%03d.mp3'),
-      ]);
+      ])).catch((err: unknown) => {
+        throw new TranscriptionError('Audio extraction for transcription failed.', { message: err instanceof Error ? err.message.slice(0, 500) : String(err) });
+      });
       const chunks = (await fsp.readdir(tmpDir)).filter((f) => f.startsWith('chunk-')).sort();
       if (chunks.length === 0) return null;
 

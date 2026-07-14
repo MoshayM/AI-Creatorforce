@@ -2,6 +2,7 @@ import { execFile, spawn } from 'child_process';
 import { existsSync, promises as fs } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { FFmpegMissingError, FFmpegExecutionError, CodecNotSupportedError } from '../media.errors';
 
 let _ffmpegPath: string | null | undefined;
 
@@ -16,13 +17,45 @@ export function ffmpegPath(): string | null {
   return _ffmpegPath;
 }
 
+/** Classify ffmpeg stderr into a user-safe reason string. */
+function classifyStderr(stderr: string): { reason: string; codec: boolean } {
+  if (/Decoder .* not found|Unknown decoder|Unrecognized|Invalid data found/i.test(stderr)) {
+    return { reason: 'The video/audio codec is not supported by the processing engine.', codec: true };
+  }
+  if (/No such file|does not exist/i.test(stderr)) {
+    return { reason: 'Input file missing.', codec: false };
+  }
+  return { reason: 'The video engine exited with an error.', codec: false };
+}
+
 export function runFfmpeg(args: string[], timeoutMs = 600_000): Promise<void> {
   const bin = ffmpegPath();
-  if (!bin) return Promise.reject(new Error('ffmpeg binary not available'));
+  if (!bin) {
+    return Promise.reject(new FFmpegMissingError(
+      'ffmpeg binary not found — install ffmpeg-static or set FFMPEG_PATH.',
+      { command: 'ffmpeg ' + args.join(' ') },
+    ));
+  }
+  const t0 = Date.now();
   return new Promise((resolve, reject) => {
     execFile(bin, ['-y', '-hide_banner', '-loglevel', 'error', ...args], { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 }, (err, _stdout, stderr) => {
-      if (err) reject(new Error(`ffmpeg failed: ${(stderr || err.message).slice(0, 500)}`));
-      else resolve();
+      if (!err) { resolve(); return; }
+      const stderrTail = (stderr || err.message).slice(-2000);
+      const timedOut = !!(err as NodeJS.ErrnoException & { killed?: boolean }).killed;
+      const durationMs = Date.now() - t0;
+      const command = 'ffmpeg ' + ['-y', '-hide_banner', '-loglevel', 'error', ...args].join(' ');
+      const exitCode = (err as NodeJS.ErrnoException & { code?: number | string }).code;
+      const details: Record<string, unknown> = { exitCode, stderrTail, command, durationMs, ...(timedOut ? { timedOut: true } : {}) };
+      if (timedOut) {
+        reject(new FFmpegExecutionError('Processing exceeded the time limit.', details));
+        return;
+      }
+      const { reason, codec } = classifyStderr(stderrTail);
+      if (codec) {
+        reject(new CodecNotSupportedError(reason, details));
+      } else {
+        reject(new FFmpegExecutionError(reason, details));
+      }
     });
   });
 }
@@ -34,12 +67,33 @@ export function runFfmpeg(args: string[], timeoutMs = 600_000): Promise<void> {
  */
 export function runFfmpegCapture(args: string[], timeoutMs = 120_000): Promise<string> {
   const bin = ffmpegPath();
-  if (!bin) return Promise.reject(new Error('ffmpeg binary not available'));
+  if (!bin) {
+    return Promise.reject(new FFmpegMissingError(
+      'ffmpeg binary not found — install ffmpeg-static or set FFMPEG_PATH.',
+      { command: 'ffmpeg ' + args.join(' ') },
+    ));
+  }
+  const t0 = Date.now();
   return new Promise((resolve, reject) => {
     execFile(bin, ['-y', '-hide_banner', ...args], { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       const combined = `${stdout ?? ''}\n${stderr ?? ''}`;
-      if (err) reject(new Error(`ffmpeg failed: ${(stderr || err.message).slice(0, 500)}`));
-      else resolve(combined);
+      if (!err) { resolve(combined); return; }
+      const stderrTail = (stderr || err.message).slice(-2000);
+      const timedOut = !!(err as NodeJS.ErrnoException & { killed?: boolean }).killed;
+      const durationMs = Date.now() - t0;
+      const command = 'ffmpeg ' + ['-y', '-hide_banner', ...args].join(' ');
+      const exitCode = (err as NodeJS.ErrnoException & { code?: number | string }).code;
+      const details: Record<string, unknown> = { exitCode, stderrTail, command, durationMs, ...(timedOut ? { timedOut: true } : {}) };
+      if (timedOut) {
+        reject(new FFmpegExecutionError('Processing exceeded the time limit.', details));
+        return;
+      }
+      const { reason, codec } = classifyStderr(stderrTail);
+      if (codec) {
+        reject(new CodecNotSupportedError(reason, details));
+      } else {
+        reject(new FFmpegExecutionError(reason, details));
+      }
     });
   });
 }
@@ -75,6 +129,97 @@ export function isAv1Info(probeText: string): boolean {
 }
 
 /**
+ * Pure parser over the `ffmpeg -i` banner output.
+ * Extracts duration, resolution, fps, bitrate, video/audio codec.
+ */
+export function parseMediaProbe(probeText: string): {
+  durationMs: number | null;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  bitrateKbps: number | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+} {
+  // Duration: HH:MM:SS.cc
+  let durationMs: number | null = null;
+  const durMatch = probeText.match(/Duration:\s*(\d+):(\d{2}):(\d{2})\.(\d+)/);
+  if (durMatch) {
+    const h = parseInt(durMatch[1]!, 10);
+    const m = parseInt(durMatch[2]!, 10);
+    const s = parseInt(durMatch[3]!, 10);
+    const frac = parseInt(durMatch[4]!, 10);
+    // fractional part: pad/truncate to centiseconds
+    const fracMs = Math.round(frac * 10); // assuming 2 decimal places = centiseconds
+    durationMs = (h * 3600 + m * 60 + s) * 1000 + fracMs;
+  }
+
+  // Bitrate: NNN kb/s (container bitrate from Duration line)
+  let bitrateKbps: number | null = null;
+  const bitrateMatch = probeText.match(/bitrate:\s*(\d+)\s*kb\/s/);
+  if (bitrateMatch) {
+    bitrateKbps = parseInt(bitrateMatch[1]!, 10);
+  }
+
+  // Video stream: Stream #...: Video: <codec> ..., WxH ..., NN fps
+  let videoCodec: string | null = null;
+  let width: number | null = null;
+  let height: number | null = null;
+  let fps: number | null = null;
+  const videoMatch = probeText.match(/Stream #[^:]*:.*Video:\s*([\w\d]+)/);
+  if (videoMatch) {
+    videoCodec = videoMatch[1]!;
+  }
+  const resMatch = probeText.match(/,\s*(\d{2,5})x(\d{2,5})/);
+  if (resMatch) {
+    width = parseInt(resMatch[1]!, 10);
+    height = parseInt(resMatch[2]!, 10);
+  }
+  const fpsMatch = probeText.match(/,\s*([\d.]+)\s*(?:fps|tbr)/);
+  if (fpsMatch) {
+    fps = parseFloat(fpsMatch[1]!);
+  }
+
+  // Audio stream: Stream #...: Audio: <codec>
+  let audioCodec: string | null = null;
+  const audioMatch = probeText.match(/Stream #[^:]*:.*Audio:\s*([\w\d]+)/);
+  if (audioMatch) {
+    audioCodec = audioMatch[1]!;
+  }
+
+  return { durationMs, width, height, fps, bitrateKbps, videoCodec, audioCodec };
+}
+
+/**
+ * Retry wrapper for transient ffmpeg/IO failures (EBUSY, EPERM, EACCES, etc.).
+ * Never retries codec errors, validation errors, or timeouts.
+ */
+export async function withFfmpegRetries<T>(
+  fn: () => Promise<T>,
+  attempts = 3,
+  delayMs = 2000,
+): Promise<T> {
+  const TRANSIENT_RE = /EBUSY|EPERM|EACCES|EIO|Permission denied|Resource temporarily unavailable|being used by another process/i;
+
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      // Do not retry codec/validation errors or timeouts
+      const isTransient = TRANSIENT_RE.test(msg);
+      if (!isTransient) throw err;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+/**
  * Run ffmpeg reporting REAL progress (master prompt §3.5): percent is derived
  * from the `time=` marker ffmpeg writes while encoding, against the known
  * output duration — seconds encoded / seconds total, never a timer.
@@ -86,14 +231,27 @@ export function runFfmpegWithProgress(
   timeoutMs = 1_800_000,
 ): Promise<void> {
   const bin = ffmpegPath();
-  if (!bin) return Promise.reject(new Error('ffmpeg binary not available'));
+  if (!bin) {
+    return Promise.reject(new FFmpegMissingError(
+      'ffmpeg binary not found — install ffmpeg-static or set FFMPEG_PATH.',
+      { command: 'ffmpeg ' + args.join(' ') },
+    ));
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(bin, ['-y', '-hide_banner', ...args], { windowsHide: true });
     let stderrTail = '';
     let lastPct = -1;
+    const t0 = Date.now();
     const timer = setTimeout(() => {
       child.kill();
-      reject(new Error(`ffmpeg timed out after ${Math.round(timeoutMs / 1000)}s`));
+      const command = 'ffmpeg ' + ['-y', '-hide_banner', ...args].join(' ');
+      reject(new FFmpegExecutionError('Processing exceeded the time limit.', {
+        exitCode: null,
+        stderrTail: stderrTail.slice(-2000),
+        command,
+        durationMs: Date.now() - t0,
+        timedOut: true,
+      }));
     }, timeoutMs);
 
     child.stderr.on('data', (chunk: Buffer) => {
@@ -112,8 +270,20 @@ export function runFfmpegWithProgress(
     child.on('error', (err) => { clearTimeout(timer); reject(err); });
     child.on('close', (code) => {
       clearTimeout(timer);
-      if (code === 0) { onProgress(100); resolve(); }
-      else reject(new Error(`ffmpeg failed (exit ${code}): ${stderrTail.slice(-500)}`));
+      if (code === 0) { onProgress(100); resolve(); return; }
+      const command = 'ffmpeg ' + ['-y', '-hide_banner', ...args].join(' ');
+      const details: Record<string, unknown> = {
+        exitCode: code,
+        stderrTail: stderrTail.slice(-2000),
+        command,
+        durationMs: Date.now() - t0,
+      };
+      const { reason, codec } = classifyStderr(stderrTail);
+      if (codec) {
+        reject(new CodecNotSupportedError(reason, details));
+      } else {
+        reject(new FFmpegExecutionError(reason, details));
+      }
     });
   });
 }

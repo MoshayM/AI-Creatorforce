@@ -59,6 +59,8 @@ import * as os from 'os';
 import { createHash, randomUUID } from 'crypto';
 import { ChannelSyncService } from '../modules/channels/channel-sync.service';
 import { MetricsService } from '../modules/metrics/metrics.service';
+import { toJobFailure } from '../modules/media/media.errors';
+import { appendVideoImportLog } from '../modules/media/video-import-log.util';
 
 interface JobPayload {
   jobId: string;
@@ -253,21 +255,37 @@ export class SupervisorWorker extends WorkerHost {
             .catch(() => undefined);
         }
       }
-      const msg = err instanceof Error ? err.message : String(err);
+      const failure = toJobFailure(err);
+      // Structured log for failed jobs
+      void appendVideoImportLog({
+        jobId,
+        type,
+        stage: failure.errorCode,
+        code: failure.errorCode,
+        reason: (failure.errorDetails as Record<string, unknown>)['reason'] ?? '',
+        exitCode: (failure.errorDetails as Record<string, unknown>)['exitCode'] ?? null,
+        message: failure.error,
+      });
       await this.prisma.agentJob.update({
         where: { id: jobId },
-        data: { status: 'FAILED', error: msg, completedAt: new Date() },
+        data: {
+          status: 'FAILED',
+          error: failure.error,
+          errorCode: failure.errorCode,
+          errorDetails: failure.errorDetails as never,
+          completedAt: new Date(),
+        } as Parameters<typeof this.prisma.agentJob.update>[0]['data'],
       });
       // A failed render must never leave its Render row QUEUED/RENDERING
       const renderRowId = payload['renderRowId'] as string | undefined;
       if (renderRowId) {
         await this.prisma.render.update({
           where: { id: renderRowId },
-          data: { status: 'FAILED', error: { message: msg.slice(0, 500) } as never },
+          data: { status: 'FAILED', error: { message: failure.error.slice(0, 500) } as never },
         }).catch(() => undefined);
       }
-      this.events.emitJobLog(jobId, projectId, `Agent error: ${msg.slice(0, 120)}`);
-      this.events.emitJobFailed(jobId, msg, projectId);
+      this.events.emitJobLog(jobId, projectId, `Agent error: ${failure.error.slice(0, 120)}`);
+      this.events.emitJobFailed(jobId, failure.error, projectId);
       this.metrics.recordJob(type, 'failed', Date.now() - t0);
       // Do NOT rethrow — state is persisted in PostgreSQL; rethrowing causes BullMQ to
       // re-queue the job (we set attempts:1 but this is the safety valve) and triggers
@@ -1236,12 +1254,18 @@ export class SupervisorWorker extends WorkerHost {
               }
             }
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
+            const failure = toJobFailure(err);
             await this.prisma.agentJob.update({
               where: { id: child.id },
-              data: { status: 'FAILED', error: msg, completedAt: new Date() },
+              data: {
+                status: 'FAILED',
+                error: failure.error,
+                errorCode: failure.errorCode,
+                errorDetails: failure.errorDetails as never,
+                completedAt: new Date(),
+              } as Parameters<typeof this.prisma.agentJob.update>[0]['data'],
             }).catch(() => undefined);
-            this.events.emitJobFailed(child.id, msg, projectId);
+            this.events.emitJobFailed(child.id, failure.error, projectId);
             throw err;
           }
         };
@@ -1397,12 +1421,28 @@ export class SupervisorWorker extends WorkerHost {
             this.events.emitJobComplete(child.id, { result }, projectId);
             stageResults[stageType] = result;
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
+            const failure = toJobFailure(err);
+            // Structured log for media pipeline stages
+            void appendVideoImportLog({
+              jobId: child.id,
+              type: stageType,
+              stage: failure.errorCode,
+              code: failure.errorCode,
+              reason: (failure.errorDetails as Record<string, unknown>)['reason'] ?? '',
+              exitCode: (failure.errorDetails as Record<string, unknown>)['exitCode'] ?? null,
+              message: failure.error,
+            });
             await this.prisma.agentJob.update({
               where: { id: child.id },
-              data: { status: 'FAILED', error: msg, completedAt: new Date() },
+              data: {
+                status: 'FAILED',
+                error: failure.error,
+                errorCode: failure.errorCode,
+                errorDetails: failure.errorDetails as never,
+                completedAt: new Date(),
+              } as Parameters<typeof this.prisma.agentJob.update>[0]['data'],
             }).catch(() => undefined);
-            this.events.emitJobFailed(child.id, msg, projectId);
+            this.events.emitJobFailed(child.id, failure.error, projectId);
             throw err;
           }
         }

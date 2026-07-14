@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Clapperboard, Loader2, Download, Wand2, CheckCircle2, XCircle, Clock, Film, Captions, Sparkles, ChevronDown, ChevronRight, Search, X, FolderDown, ListVideo, StickyNote } from 'lucide-react';
 import { api, type LibraryVideo, type LibraryPlaylist, type LibraryVideosPage, type LibraryPlaylistsPage, type LibraryPlaylistItemsPage } from '@/lib/api';
+import { JobErrorCard } from '@/components/job-error-card';
 
 interface Channel {
   id: string;
@@ -25,8 +26,8 @@ interface ImportedVideo {
 interface AnalysisStatus {
   sourceDownloaded: boolean;
   counts: { transcriptSegments: number; scenes: number };
-  pipeline: { status: string; error: string | null } | null;
-  stages: Array<{ type: string; satisfied: boolean; job: { status: string; error: string | null } | null }>;
+  pipeline: { status: string; error: string | null; errorCode?: string | null; retryable?: boolean } | null;
+  stages: Array<{ type: string; satisfied: boolean; job: { status: string; error: string | null; errorCode?: string | null; retryable?: boolean } | null }>;
 }
 
 const CHANNEL_LS_KEY = 'cf.shorts.channelId';
@@ -54,7 +55,16 @@ const STAGE_LABELS: Record<string, string> = {
   HIGHLIGHT_DETECTION: 'Highlights',
 };
 
-function AnalysisProgress({ importedVideoId }: { importedVideoId: string }) {
+/** Human-readable progress labels for in-flight pipeline stages. */
+const PROGRESS_LABELS: Record<string, string> = {
+  VIDEO_IMPORT: 'Downloading video',
+  TRANSCRIPT_ANALYSIS: 'Generating transcript',
+  SCENE_DETECTION: 'Detecting scenes',
+  TOPIC_SEGMENTATION: 'Generating embeddings',
+  HIGHLIGHT_DETECTION: 'Creating shorts',
+};
+
+function AnalysisProgress({ importedVideoId, onRetry }: { importedVideoId: string; onRetry?: () => void }) {
   const { data: status } = useQuery<AnalysisStatus>({
     queryKey: ['shorts-analysis', importedVideoId],
     queryFn: () => api.shortsStudio.analysisStatus(importedVideoId).then((r) => r.data as AnalysisStatus),
@@ -65,42 +75,60 @@ function AnalysisProgress({ importedVideoId }: { importedVideoId: string }) {
   });
   if (!status) return null;
 
+  // Find the currently-running stage to show a progress label
+  const runningStage = status.stages.find(({ job }) => job?.status === 'RUNNING');
+  const progressLabel = runningStage ? (PROGRESS_LABELS[runningStage.type] ?? STAGE_LABELS[runningStage.type] ?? runningStage.type) : null;
+
+  const pipelineFailed = status.pipeline?.status === 'FAILED';
+
   return (
-    <div className="flex items-center gap-2 mt-2 flex-wrap">
-      {status.stages.map(({ type, satisfied, job }) => {
-        const failed = job?.status === 'FAILED';
-        const running = job?.status === 'RUNNING';
-        return (
-          <span
-            key={type}
-            title={failed ? job?.error ?? 'Failed' : undefined}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-              satisfied ? 'bg-green-100 text-green-700'
-              : failed ? 'bg-red-100 text-red-700'
-              : running ? 'bg-blue-100 text-blue-700'
-              : 'bg-gray-100 text-gray-500'
-            }`}
-          >
-            {satisfied ? <CheckCircle2 className="w-3 h-3" />
-              : failed ? <XCircle className="w-3 h-3" />
-              : running ? <Loader2 className="w-3 h-3 animate-spin" />
-              : <Clock className="w-3 h-3" />}
-            {STAGE_LABELS[type] ?? type}
+    <div className="mt-2 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        {status.stages.map(({ type, satisfied, job }) => {
+          const failed = job?.status === 'FAILED';
+          const running = job?.status === 'RUNNING';
+          return (
+            <span
+              key={type}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                satisfied ? 'bg-green-100 text-green-700'
+                : failed ? 'bg-red-100 text-red-700'
+                : running ? 'bg-blue-100 text-blue-700'
+                : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              {satisfied ? <CheckCircle2 className="w-3 h-3" />
+                : failed ? <XCircle className="w-3 h-3" />
+                : running ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <Clock className="w-3 h-3" />}
+              {STAGE_LABELS[type] ?? type}
+            </span>
+          );
+        })}
+        {status.counts.transcriptSegments > 0 && (
+          <span className="text-[11px] text-gray-500 inline-flex items-center gap-1">
+            <Captions className="w-3 h-3" /> {status.counts.transcriptSegments} segments
           </span>
-        );
-      })}
-      {status.counts.transcriptSegments > 0 && (
-        <span className="text-[11px] text-gray-500 inline-flex items-center gap-1">
-          <Captions className="w-3 h-3" /> {status.counts.transcriptSegments} segments
-        </span>
-      )}
-      {status.counts.scenes > 0 && (
-        <span className="text-[11px] text-gray-500 inline-flex items-center gap-1">
-          <Film className="w-3 h-3" /> {status.counts.scenes} scenes
-        </span>
-      )}
-      {status.pipeline?.status === 'FAILED' && status.pipeline.error && (
-        <span className="text-[11px] text-red-500 w-full">{status.pipeline.error}</span>
+        )}
+        {status.counts.scenes > 0 && (
+          <span className="text-[11px] text-gray-500 inline-flex items-center gap-1">
+            <Film className="w-3 h-3" /> {status.counts.scenes} scenes
+          </span>
+        )}
+        {progressLabel && (
+          <span className="text-[11px] text-blue-600 inline-flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" /> {progressLabel}
+          </span>
+        )}
+      </div>
+      {pipelineFailed && (
+        <JobErrorCard
+          error={status.pipeline?.error}
+          errorCode={status.pipeline?.errorCode}
+          retryable={status.pipeline?.retryable}
+          onRetry={onRetry}
+          className="mt-1"
+        />
       )}
     </div>
   );
@@ -548,7 +576,11 @@ function LibraryImportModal({
 
         <div className="px-5 py-4 border-t border-gray-100">
           {importError && (
-            <p className="text-xs text-red-500 mb-3">{importError}</p>
+            <JobErrorCard
+              error={importError}
+              errorCode="VIDEO_IMPORT_FAILED"
+              className="mb-3"
+            />
           )}
           <div className="flex items-center justify-end gap-2">
             <button
@@ -715,7 +747,7 @@ export default function ShortsStudioPage() {
                     {open && (
                       <div className="px-4 pb-4 pt-1 border-t border-gray-50 flex items-start gap-4 flex-wrap">
                         <div className="flex-1 min-w-[240px]">
-                          <AnalysisProgress importedVideoId={v.id} />
+                          <AnalysisProgress importedVideoId={v.id} onRetry={() => analyzeMutation.mutate(v.id)} />
                           <NotesEditor video={v} channelId={channelId} />
                         </div>
                         <div className="flex gap-2 shrink-0">

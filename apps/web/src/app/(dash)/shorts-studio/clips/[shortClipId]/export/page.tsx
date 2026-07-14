@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, XCircle, Upload, ShieldCheck, Package, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, Upload, ShieldCheck, Package, ExternalLink } from 'lucide-react';
 import { api, apiClient } from '@/lib/api';
+import { JobErrorCard } from '@/components/job-error-card';
 
 interface RenderStatus {
   clipStatus: string | null;
@@ -21,7 +22,7 @@ interface Thumb {
 interface PublishState {
   clipStatus: string;
   approval: { id: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED'; expiresAt: string } | null;
-  publishJob: { id: string; status: string; error: string | null; result: { youtubeVideoId?: string; url?: string } | null } | null;
+  publishJob: { id: string; status: string; error: string | null; errorCode?: string | null; retryable?: boolean; result: { youtubeVideoId?: string; url?: string } | null } | null;
 }
 
 function useBlobUrl(versionId: string | null | undefined): string | null {
@@ -155,10 +156,12 @@ export default function ClipExportPage() {
             </div>
           </>
         ) : failed ? (
-          <>
-            <XCircle className="w-5 h-5 text-red-500" />
-            <p className="text-sm text-red-600">Render failed — check the project's job log, then try again.</p>
-          </>
+          <div className="flex-1">
+            <JobErrorCard
+              errorCode="FFMPEG_EXECUTION_FAILED"
+              onRetry={() => renderMutation.mutate()}
+            />
+          </div>
         ) : status?.render ? (
           <>
             <CheckCircle2 className="w-5 h-5 text-green-500" />
@@ -236,13 +239,26 @@ export default function ClipExportPage() {
               </button>
             </div>
           )}
-          {pub?.publishJob?.status === 'FAILED' && pub.publishJob.error && (
-            <p className="text-xs text-red-500 mt-2">{pub.publishJob.error}</p>
+          {pub?.publishJob?.status === 'FAILED' && (
+            <JobErrorCard
+              error={pub.publishJob.error}
+              errorCode={pub.publishJob.errorCode}
+              retryable={pub.publishJob.retryable}
+              onRetry={() => publishMutation.mutate()}
+              className="mt-2"
+            />
           )}
           {(publishMutation.isError || requestPublish.isError || exportMutation.isError) && (
-            <p className="text-xs text-red-500 mt-2">
-              {((publishMutation.error ?? requestPublish.error ?? exportMutation.error) as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Action failed'}
-            </p>
+            <JobErrorCard
+              error={((publishMutation.error ?? requestPublish.error ?? exportMutation.error) as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Action failed'}
+              errorCode="JOB_FAILED"
+              onRetry={
+                exportMutation.isError ? () => exportMutation.mutate()
+                : requestPublish.isError ? () => requestPublish.mutate()
+                : () => publishMutation.mutate()
+              }
+              className="mt-2"
+            />
           )}
           <p className="text-[11px] text-gray-500 mt-2">
             Publishing runs a compliance audit and requires human approval — no clip is uploaded without both.
