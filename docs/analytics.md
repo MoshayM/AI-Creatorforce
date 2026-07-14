@@ -1,78 +1,125 @@
 # analytics.md — AI CreatorForce
 
-> How AI CreatorForce measures channel/video performance and converts it into the next video's plan. Powered by the Analytics Intelligence Engine (`AnalyticsAgent` + `GrowthAgent`) over data from the YouTube Analytics API.
+The Analytics Intelligence Engine measures channel and video performance by pulling data from YouTube APIs and internal usage logs, storing it in `AnalyticsSnapshot` rows, and converting it into actionable growth recommendations that seed the next video's plan. See `features.md` for the broader feature map and `database.md` for schema details.
+
+---
 
 ## 1. Data Sources
 
-- **YouTube Analytics API** (per connected channel/video): CTR, impressions, retention curve, average view duration, watch time, revenue/RPM, subscribers gained/lost, traffic sources.
-- **Platform-internal:** which agents/topics produced each video, compliance outcomes, generation cost.
-- Polling jobs (WF-6) snapshot metrics into `analytics_snapshots` on a schedule; recency increases right after publish, then tapers.
+### 1.1 YouTube Data API
 
-## 2. Metrics Tracked
+Video statistics (viewCount, likeCount, commentCount) fetched via `youtube.videos.list`. Called by `PublishingService.getVideoStats()` for post-publish polling. The `Video` model stores snapshot values of these counters (updated by analytics jobs, not authoritative for real-time reads).
 
-| Category | Metrics |
-|----------|---------|
-| Discovery | Impressions, CTR, traffic sources |
-| Retention | Retention curve, avg view duration, % watched, drop-off points |
-| Engagement | Likes, comments, shares, subscribers gained |
-| Watch time | Total watch time, trend over time |
-| Revenue | Estimated revenue, RPM, monetized playbacks |
-| Growth | Subscriber net change, source of subs |
+### 1.2 YouTube Analytics API
 
-## 3. AnalyticsAgent — Diagnosis
+Channel-level and video-level analytics: views, watch time, CTR, audience retention curves, traffic sources, demographics. Polled by `AnalyticsAgent` on ANALYTICS job execution.
 
-Input: metric snapshots for a video/channel. Output: a **growth report** that interprets, not just displays:
+### 1.3 Internal Usage Logs
 
-- **CTR analysis:** is the title/thumbnail earning clicks? Compare to channel baseline.
-- **Retention analysis:** where do viewers drop off? Map drop-offs to script sections (hook weak? mid-roll lull?).
-- **Watch-time analysis:** trend and contribution to channel watch time.
-- **Revenue analysis:** RPM trends, monetization health.
-- **Subscriber analysis:** which videos convert viewers to subscribers.
+`UsageLog` model tracks platform resource consumption per user per operation:
 
-Each finding is tied to a specific metric and an actionable cause hypothesis.
+| Resource type | Meaning |
+|---------------|---------|
+| AI_TOKENS | LLM token consumption |
+| VIDEO_GENERATED | Asset generation job completed |
+| VIDEO_PUBLISHED | Video successfully published to YouTube |
+| RESEARCH_QUERY | ResearchAgent query executed |
+| COMPLIANCE_CHECK | ComplianceAgent evaluation run |
+| VOICE_SECONDS | Voice synthesis seconds consumed |
+| IMAGE_GENERATED | Image generation job completed |
+| MUSIC_GENERATED | Music generation job completed |
+| VIDEO_CLIP_GENERATED | Video clip generation job completed |
+| RENDER_MINUTES | Rendering pipeline minutes consumed |
 
-## 4. GrowthAgent — Action & Next Steps
+These records feed internal unit economics dashboards (see Section 6) and are not exposed to creators directly.
 
-Input: growth report + channel goals. Output:
-- **Optimization suggestions:** concrete changes (e.g., stronger hook in first 15s, tighten mid-section, test new thumbnail, adjust title pattern).
-- **Next-video recommendations:** topic seeds derived from what performed, feeding back into `TrendAgent` (WF-6 → WF-1).
-- **Prioritization:** ranked by expected impact vs effort.
+---
 
-## 5. Feedback Loop
+## 2. Storage
+
+`AnalyticsSnapshot` model:
+
+- `channelId` — owning channel (required)
+- `ytVideoId` — nullable; null indicates a channel-level snapshot
+- `capturedAt` — timestamp of the snapshot
+- `metrics` — JSON blob containing raw metric values
+
+Index on `[channelId, ytVideoId, capturedAt]` supports range queries by channel, per video, in time order. The JSON `metrics` field allows forward-compatible schema evolution: new metric keys can be added without a migration.
+
+---
+
+## 3. Agents
+
+### 3.1 AnalyticsAgent
+
+Location: `packages/agents/src/analytics.agent.ts`
+
+Triggered by the ANALYTICS job type. Pulls YouTube analytics for the configured channel and time window, processes the raw data, and writes `AnalyticsSnapshot` rows. Operates stateless and idempotent — safe to re-run for a time window.
+
+### 3.2 GrowthAgent
+
+Location: `packages/agents/src/growth.agent.ts`
+
+Triggered by the GROWTH_REPORT job type. Reads `AnalyticsSnapshot` rows for a channel, identifies top- and bottom-performing content patterns, and outputs prioritized topic and optimization recommendations. Output feeds back into `TrendAgent` to seed the next video's research phase.
+
+### 3.3 AudienceAgent
+
+Location: `packages/agents/src/audience.agent.ts`
+
+Triggered by the AUDIENCE_ANALYSIS job type. Analyzes audience demographics and behavioral patterns from YouTube Analytics API data. Output informs content targeting recommendations.
+
+---
+
+## 4. API Surface
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /analytics?channelId=&from=&to=` | Returns `AnalyticsSnapshot` rows and aggregates for the specified channel and date range |
+| `GET /bi` | Business intelligence aggregates (bi module): platform-wide or per-user usage metrics for the ops team |
+| `GET /growth/report` | Current `GrowthAgent` output for the authenticated user's active channel |
+
+---
+
+## 5. Metrics Flow
 
 ```
-Published video → metrics snapshots → AnalyticsAgent (diagnose)
-   → GrowthAgent (recommend) → next topics seed TrendAgent
-   → new project → … → improved next video
+Post-publish (or scheduled trigger)
+  → ANALYTICS job enqueued → SupervisorWorker picks up
+  → AnalyticsAgent: pulls YouTube Analytics API → writes AnalyticsSnapshot rows
+  → GROWTH_REPORT job enqueued
+  → GrowthAgent: reads snapshots → produces growth insight
+  → Insight surfaced to creator in UI
+  → Top-performing topic patterns fed back to TrendAgent for next video plan
 ```
 
-Over time, the platform learns which patterns work for a specific channel (stored in the channel's profile/voice data) and biases recommendations accordingly — without manufacturing fake engagement.
+---
 
-## 6. Dashboards (creator-facing)
+## 6. Internal Platform Observability
 
-- **Channel overview:** KPI cards (CTR, watch time, subs, revenue) with trend lines (Recharts).
-- **Video detail:** retention curve overlaid on script sections; CTR vs baseline; revenue.
-- **Recommendations panel:** prioritized actions + suggested next topics.
-- **A/B thumbnail results:** CTR by variant.
+Separate from creator-facing analytics, the platform collects operational metrics for the ops team:
+
+- `MetricsInterceptor` on every API route records `http_request_duration_ms` histogram via `prom-client`.
+- `GET /metrics` on the API exposes Prometheus-format metrics for scraping.
+- Grafana dashboards at `infra/monitoring/grafana/` cover queue depth, agent cost per video, compliance pass rates, provider error rates, job latency, and budget burn.
+- Alert definitions at `infra/monitoring/alerts.yml`.
+
+These metrics are not accessible to creators.
+
+---
 
 ## 7. Honest Analytics Principles
 
-- Never recommend deceptive tactics (clickbait that misrepresents, engagement manipulation, fake interactions).
-- Recommendations aim at genuine improvements to content quality and discoverability.
-- Retention advice focuses on making the content actually better/clearer, not on tricking the algorithm.
+- Recommendations must never suggest policy-violating or deceptive tactics.
+- Retention and CTR advice targets genuine content quality improvements, not algorithm manipulation.
+- Diagnosis must reference the specific metric it is based on — no unsupported causal claims.
+- Snapshots are strictly scoped to the owning channel and tenant (no cross-tenant reads). See `security.md`.
 
-## 8. Internal Platform Analytics (ops)
+---
 
-Separate from creator analytics, the platform tracks operational metrics (Prometheus/Grafana): job latency, queue depth, agent cost per video, compliance pass rates, provider error rates, budget burn. Used for reliability and unit economics, not exposed to creators.
+## 8. Planned / Not Yet Implemented
 
-## 9. Data Retention & Privacy
-
-- Analytics snapshots retained per plan/retention policy; creator can export/delete.
-- Analytics data is the creator's; scoped per channel; never cross-tenant. See `security.md`.
-
-## 10. Invariants for Code Agents
-
-1. Analytics recommendations must never suggest policy-violating or deceptive tactics.
-2. Snapshots are scoped to the owning channel/tenant.
-3. Diagnosis must reference the specific metric it's based on (no unsupported claims).
-4. The growth loop feeds TrendAgent; keep that contract stable.
+- Scheduled analytics polling (currently triggered manually or post-publish only)
+- YouTube Analytics API deep pull for retention curves and watch-time breakdowns
+- Comparative benchmarking against niche channel averages
+- Notification-triggered analytics refresh on significant metric changes
+- Creator-facing retention curve visualization overlaid on script sections

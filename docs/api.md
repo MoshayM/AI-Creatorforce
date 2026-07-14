@@ -1,328 +1,274 @@
 # api.md — AI CreatorForce
 
-## 1. Conventions
+This document is the canonical reference for the AI CreatorForce REST API. All routes are served under `/api/v1` by the NestJS backend in `apps/api`. Related reading: [architecture.md](architecture.md), [database.md](database.md), [security.md](security.md), [compliance.md](compliance.md), [youtube-publishing.md](youtube-publishing.md), [monetization-framework.md](monetization-framework.md).
+
+---
+
+## Conventions
 
 - **Base URL:** `/api/v1`
 - **Format:** JSON. `Content-Type: application/json`.
-- **Auth:** session cookie (Auth.js) for the web app; `Authorization: Bearer <JWT>` for service/API access. See `security.md`.
-- **Validation:** every request body/query validated with Zod; 422 on failure with field errors.
-- **Async pattern:** long operations return `202 Accepted` with a `jobId`; clients poll `GET /jobs/:id` or subscribe over WS/SSE.
-- **Idempotency:** mutating endpoints accept an `Idempotency-Key` header.
-- **Pagination:** cursor-based — `?cursor=&limit=` → `{ data, nextCursor }`.
-- **Errors:** consistent envelope.
+- **Auth:** `Authorization: Bearer <JWT>` on all routes except `/health`, `/auth/*` (register / login / refresh / logout / OAuth), and `/metrics`. The `/metrics` endpoint is protected by network policy (not JWT).
+- **JWT guard:** `JwtAuthGuard` is applied globally; exceptions are listed above.
+- **Response format:** standard NestJS JSON (data objects or arrays).
+- **Error format:** `{ statusCode, message, error }`.
+- **Pagination:** cursor-based — `?cursor=&limit=` returns `{ data, nextCursor }`. No `OFFSET` pagination on large tables.
+- **Async pattern:** long operations return `202 Accepted` with a `jobId`; clients poll `GET /jobs/:id` or subscribe over WebSocket for progress events.
+- **Idempotency:** `POST /wallet/recharge` and other mutating wallet calls require an `Idempotency-Key` header. `AgentJob` deduplication uses the `idempotencyKey` field — a duplicate enqueue returns the original job without re-running it.
+- **Swagger UI:** available at `/api/docs` (non-production environments). OpenAPI JSON at `/api/docs-json`.
 
-```jsonc
-// Error envelope
-{
-  "error": {
-    "code": "COMPLIANCE_BLOCKED",
-    "message": "Content blocked by compliance gate.",
-    "details": [{ "field": "script", "reason": "Unverified factual claim at 02:14" }],
-    "correlationId": "req_01H..."
-  }
-}
-```
+---
 
-Standard codes: `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `VALIDATION_FAILED`, `RATE_LIMITED`, `BUDGET_EXCEEDED`, `COMPLIANCE_BLOCKED`, `PROVIDER_ERROR`, `CONFLICT`, `INTERNAL`.
+## Authentication
 
-## 2. Auth & Account
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/auth/register` | Email sign-up → `{ accessToken, refreshToken }` |
-| POST | `/auth/login` | Email sign-in → `{ accessToken, refreshToken }` |
-| POST | `/auth/refresh` | Rotate refresh token (single-use; reuse revokes the whole session family) |
-| POST | `/auth/logout` | Revoke current session (server-side; access token dies immediately) |
-| GET | `/auth/sessions` | List active sessions (device, ip, `current` flag) |
+| Method | Path | Body / Notes |
+|---|---|---|
+| POST | `/auth/register` | `{ email, password, name?, deviceFingerprint? }` → `{ accessToken, refreshToken }` |
+| POST | `/auth/login` | `{ email, password }` → `{ accessToken, refreshToken }` |
+| POST | `/auth/refresh` | `{ refreshToken }` → new token pair. Single-use; reuse revokes the session family. |
+| POST | `/auth/logout` | `{ refreshToken? }` — revokes current session |
+| GET | `/auth/oauth/:provider` | Starts OAuth flow. Providers: `google`, `apple`, `facebook` |
+| GET | `/auth/oauth/:provider/callback` | Handles OAuth redirect callback |
+| GET | `/auth/sessions` | List active sessions (device, IP, `current` flag) |
 | DELETE | `/auth/sessions/:id` | Revoke a session family |
-| GET | `/auth/providers` | Which social providers are configured (`google`/`apple`/`facebook`) |
-| POST | `/auth/:provider/start` | Begin OAuth (PKCE + state + nonce); `mode: 'link'` attaches to signed-in user |
-| POST | `/auth/:provider/callback` | Exchange code → sign-in tokens, `{ linked: true }`, or 409 `LINK_REQUIRED` |
-| POST | `/auth/apple/return` | Apple form_post landing → 302 back to the SPA callback |
-| GET | `/auth/links` | Linked sign-in methods for the current user |
-| DELETE | `/auth/link/:provider` | Unlink a method (409 if it is the last one) |
-| GET | `/me` | Current user + plan + usage |
-| GET | `/me/usage` | Token/credit usage vs limits |
 
-See `Docs3/docs4/15_Authentication.md` for flows, linking rules, and session semantics.
+See [security.md](security.md) for OAuth linking rules and session semantics.
 
-## 3. Channels (YouTube)
+---
 
-| Method | Path | Purpose |
-|--------|------|---------|
+## Channels
+
+| Method | Path | Notes |
+|---|---|---|
 | GET | `/channels` | List connected channels |
-| POST | `/channels/connect` | Start YouTube OAuth connect flow |
-| GET | `/channels/oauth/callback` | OAuth redirect handler |
-| DELETE | `/channels/:id` | Disconnect & revoke tokens |
-| GET | `/channels/:id` | Channel details + sync status |
+| POST | `/channels` | Connect a channel (triggers OAuth + sync) |
+| GET | `/channels/:id` | Channel detail + sync status |
+| PATCH | `/channels/:id` | Update channel metadata |
+| DELETE | `/channels/:id` | Disconnect + revoke tokens |
+| GET | `/channels/:id/library-videos` | Paginated library videos (cursor-based, supports `?q=&type=&sort=`) |
+| GET | `/channels/:id/library-playlists` | Synced playlists |
 
-### 3.1 Channel Library (synced, cursor-paginated — `docs4/08`)
+Channel sync is enqueued on channel creation / OAuth link. Tokens are encrypted at rest; see [security.md](security.md).
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/channels/:id/sync` | Enqueue resumable full-library sync → `{ jobId }` (idempotent per channel) |
-| GET | `/channels/:id/sync-status` | Sync phase + progress (`VIDEOS`/`PLAYLISTS`/`DONE`/`ERROR`, cursors persisted per page) |
-| GET | `/channels/:id/videos?cursor=&q=&type=&sort=` | Keyset-paginated videos → `{ data, nextCursor }` (never OFFSET) |
-| GET | `/channels/:id/playlists?cursor=` | Synced playlists |
-| GET | `/channels/:id/playlists/:pid/items?cursor=` | Playlist items in position order |
-| PATCH | `/channels/:id/playlists/:pid/order` | Persist local reorder `{ itemIds }` |
+---
 
-## 4. Trend Intelligence
+## Projects
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/trends/discover` | Run discovery → `202 {jobId}` |
-| GET | `/trends/board` | Latest scored opportunity board |
-| GET | `/trends/:topicId` | Topic detail + scores + rationale |
-| POST | `/trends/:topicId/promote` | Promote topic into a project |
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/projects` | List projects (scoped to authenticated user) |
+| POST | `/projects` | Create project — requires `channelId` in body |
+| GET | `/projects/:id` | Project detail |
+| PATCH | `/projects/:id` | Update project |
+| DELETE | `/projects/:id` | Delete project |
 
-## 5. SEO Intelligence
+---
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/seo/keywords` | Keyword discovery |
-| POST | `/seo/metadata` | Generate metadata draft |
-| POST | `/seo/score` | Score given metadata |
+## Jobs
 
-## 6. Audience Intelligence
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/jobs` | Enqueue a job — body: `{ type, projectId, payload, idempotencyKey? }` |
+| GET | `/jobs/:id` | Job status + result (poll or use WebSocket for push) |
+| GET | `/jobs` | List jobs — filter by `?projectId=` |
+| GET | `/admin/jobs` | Admin: all jobs (SUPER_ADMIN only) |
+| POST | `/admin/jobs/:id/retry` | Admin: retry a failed job |
+| POST | `/admin/jobs/:id/cancel` | Admin: cancel a running job |
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/audience/profile` | Build audience profile |
-| POST | `/audience/hooks` | Generate hook variants |
-| POST | `/audience/retention` | Retention strategy |
+Duplicate enqueue with the same `idempotencyKey` returns the original job without re-running it.
 
-## 7. Content Intelligence
+---
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/content/research` | Run ResearchAgent → research pack |
-| POST | `/content/script` | Generate script → `202 {jobId}` |
-| POST | `/content/factcheck` | Fact-check a script |
-| GET | `/content/:projectId/script` | Fetch current script |
-| PATCH | `/content/:projectId/script` | Edit script (triggers WF-7 re-review) |
+## Compliance
 
-## 8. Compliance
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/compliance/check` | `{ title, script, description?, tags? }` → `ComplianceResult` (passed, score, flags[], reviewerAI, summary) |
+| POST | `/compliance/enforce` | Same as `/check` but throws `400` if result is not passed |
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/compliance/review` | Run compliance gate on a bundle |
-| GET | `/compliance/:projectId` | Latest compliance report |
+No content reaches the publishing engine without a passed `ComplianceResult`. `ComplianceAgent` cannot be bypassed. See [compliance.md](compliance.md).
 
-Response includes `complianceScore`, `monetizationRisk`, `copyrightRisk`, `recommendation`, and `flags[]`.
+---
 
-## 9. Music Intelligence
+## Approvals
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/music/brief` | Generate music brief/prompt |
-| POST | `/music/generate` | Trigger generation job (Suno/Udio/Stable Audio) |
-| GET | `/music/:assetId` | Asset status + R2 reference |
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/approvals` | List approvals — filter by `?projectId=` |
+| POST | `/approvals/:id/approve` | `{ notes? }` — approve. Sets status to `APPROVED`. |
+| POST | `/approvals/:id/reject` | `{ notes? }` — reject. Sets status to `REJECTED`. |
 
-## 10. Video Intelligence
+Expired approvals block publish; a new approval must be created. `POST /publishing/publish` throws `403` if no valid `APPROVED` approval exists for the content.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/video/sceneplan` | Scene plan + shot list |
-| POST | `/video/prompts` | Provider prompts (Veo/Kling/Runway/Pika/Luma) |
-| POST | `/video/generate` | Trigger video generation job |
-| GET | `/video/:assetId` | Asset status + R2 reference |
+---
 
-## 11. Thumbnail Intelligence
+## Publishing
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/thumbnails/concepts` | Generate concepts + prompts |
-| POST | `/thumbnails/generate` | Generate variants |
-| POST | `/thumbnails/:projectId/select` | Choose A/B winner |
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/publishing/publish` | `{ videoId, channelId, title, description, tags[], categoryId?, scheduledAt?, videoFilePath, approvalId }` — requires a valid `APPROVED` Approval. Throws `403` if unmet. |
+| GET | `/publishing/stats/:channelId/:youtubeVideoId` | Post-publish analytics snapshot |
 
-## 12. Metadata & Publishing
+See [youtube-publishing.md](youtube-publishing.md) for the full publish gate sequence.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/metadata/finalize` | Produce publish-ready metadata + disclosures |
-| POST | `/publish` | Publish/schedule (gate-checked) → `202 {jobId}` |
-| GET | `/publish/:projectId` | Publish receipt/status |
-| POST | `/publish/:projectId/schedule` | Set/update schedule |
+---
 
-`POST /publish` returns `409 COMPLIANCE_BLOCKED` or `409 APPROVAL_REQUIRED` if gates unmet.
+## Shorts Studio
 
-## 13. Analytics & Growth
+All routes are JWT-guarded with ownership checks per project. Routes under `/shorts-studio` map to the `ShortsStudioModule`.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/analytics/:channelId/overview` | Channel KPIs |
-| GET | `/analytics/video/:videoId` | Per-video diagnostics |
-| POST | `/growth/report` | Generate growth report |
-| GET | `/growth/recommendations` | Next-video recommendations |
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/shorts-studio/channels/:channelId/videos` | List channel videos from YouTube (`?pageToken=` for pagination) |
+| POST | `/shorts-studio/import` | `{ channelId or projectId, youtubeVideoId }` — create `ImportedVideo` |
+| GET | `/shorts-studio/:projectId/videos` | List imported videos for a project |
+| GET | `/shorts-studio/:projectId/recommendations` | Clip recommendations |
+| POST | `/shorts-studio/:projectId/generate` | `{ clipTypes[] }` — generate clips |
 
-## 14. Projects & Jobs
+Additional endpoints under `/shorts-studio/:projectId/*`: timeline editing, AI assistant suggestions, thumbnail management, export, semantic search, chapter sync, social content generation, and clip publish flow. Full Shorts Studio pipeline spec: `docs/` and root `ai.md`.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/projects` | List content projects |
-| POST | `/projects` | Create project |
-| GET | `/projects/:id` | Project detail (full bundle + state) |
-| POST | `/projects/:id/run` | Run a workflow (full/script/assets/publish) |
-| GET | `/jobs/:id` | Job status/result |
-| GET | `/jobs?projectId=` | Jobs for a project |
+---
 
-## 15. Billing
+## Billing & Wallet
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/billing/plan` | Current plan |
-| POST | `/billing/checkout` | Stripe checkout session |
-| POST | `/billing/portal` | Stripe customer portal |
-| POST | `/billing/webhook` | Stripe webhook (signature-verified) |
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/wallet/balance` | Balance + per-bucket breakdown (promo / bonus / referral / purchased) |
+| GET | `/wallet/transactions` | Credit ledger entries (`?take=`) |
+| GET | `/wallet/lots` | Credit lots with expiry |
+| POST | `/wallet/recharge` | `{ amountUsd? or packId, successUrl, cancelUrl }` + `Idempotency-Key` header → Stripe Checkout URL. Credits granted only by the verified Stripe webhook. |
+| POST | `/wallet/budget` | `{ monthlyLimit, alertThreshold?, hardCap? }` — set per-user monthly cap |
+| GET | `/wallet/insights` | Rule-based optimization tips (budget pace, low balance, expiring lots) |
+| POST | `/billing/webhook` | Stripe webhook — public endpoint, signature-verified |
+| GET | `/billing/subscription` | Current subscription plan and status |
 
-## 16. Realtime
+See [monetization-framework.md](monetization-framework.md) for credit economics, lot consumption order, and reserve/settle semantics.
 
-- **WebSocket:** `/ws` — subscribe to `project:{id}` and `job:{id}` channels for status, progress, and agent trace events.
-- **SSE fallback:** `GET /projects/:id/stream`.
+---
 
-Event shape:
-```jsonc
+## Organizations
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/orgs` | `{ name, billingEmail? }` — create org; caller becomes `ORG_ADMIN`; org wallet provisioned in same transaction |
+| GET | `/orgs/:id` | Org detail |
+| PATCH | `/orgs/:id` | Update org |
+| POST | `/orgs/:id/members` | `{ userId, role }` — add or update member |
+| DELETE | `/orgs/:id/members/:userId` | Remove member |
+| GET | `/orgs/:id/budget` | Current budget-period status |
+| POST | `/orgs/:id/budget` | Create a budget period — requires `MANAGE_BUDGET` permission |
+
+---
+
+## Trial & Growth
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/trial/status` | Trial grant status, remaining trial credits, expiry |
+| POST | `/trial/start` | Activate trial |
+| GET | `/growth/referral-code` | Get-or-create referral code (8-char, deterministic) |
+| POST | `/growth/referral/apply` | `{ code }` — apply a referral code |
+| GET | `/growth/report` | Growth analytics report |
+
+---
+
+## Analytics
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/analytics` | `?channelId=&from=&to=` — channel KPIs and analytics snapshots |
+| GET | `/bi` | Business intelligence aggregates |
+
+---
+
+## Developer Portal
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/dev-portal/keys` | Create an API key — `{ name, scopes[] }` |
+| GET | `/dev-portal/keys` | List developer keys |
+| DELETE | `/dev-portal/keys/:id` | Revoke a key |
+| POST | `/dev-portal/webhooks` | Register an outbound webhook |
+| GET | `/dev-portal/webhooks` | List webhooks |
+| DELETE | `/dev-portal/webhooks/:id` | Delete a webhook |
+
+**External API** (`/dev-api/*`): authenticated by developer key (not user JWT). Sandbox keys are rejected on production AI actions. Scopes: `projects:read`, `jobs:read`, `jobs:write`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/dev-api/v1/projects` | List projects (owner-scoped via key) |
+| GET | `/dev-api/v1/projects/:id` | Project detail |
+| GET | `/dev-api/v1/projects/:id/jobs` | Jobs for a project |
+| GET | `/dev-api/v1/jobs/:id` | Job status + result |
+| POST | `/dev-api/v1/projects/:id/jobs` | Enqueue a job — first paid AI action; scope `jobs:write` required |
+
+---
+
+## Copilot
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/copilot` | `{ messages[], context? }` — conversational AI assistant turn |
+| POST | `/intents` | `{ command, confirmed? }` — unified intent execution (UI, chat, voice same path) |
+| GET | `/token-usage` | Token usage summary by model and by video |
+
+---
+
+## Settings & Notifications
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/settings` | Current user settings |
+| PATCH | `/settings` | Update settings |
+| GET | `/notifications` | In-app notifications (`?unreadOnly=`) + unread count |
+| PATCH | `/notifications/:id` | Mark a notification as read |
+
+---
+
+## Admin (SUPER_ADMIN only)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/flags` | List feature flags |
+| PATCH | `/flags` | Update feature flags |
+| POST | `/ai-ops/prompts` | Activate a prompt version |
+| GET | `/admin/audit-logs` | Append-only audit log |
+| POST | `/billing/admin/refund` | Full or partial Stripe refund with proportional credit claw-back; audited |
+| POST | `/billing/admin/wallet-adjust` | Grant or claw back credits with reason; audited |
+
+---
+
+## Observability
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/health` | Liveness check — returns `{ status: 'ok' }`. No auth required. |
+| GET | `/metrics` | Prometheus metrics scrape endpoint. Protected by network policy. `MetricsInterceptor` records `http_request_duration_ms` histogram per route. |
+
+---
+
+## Idempotency
+
+`POST /wallet/recharge` requires an `Idempotency-Key` header. Any mutating wallet operation that can be retried by the client should include this header to prevent duplicate credit grants.
+
+`AgentJob` deduplication: supplying `idempotencyKey` in the job payload causes duplicate enqueue calls to return the original job record without creating a new BullMQ job.
+
+---
+
+## Real-Time (WebSocket)
+
+The NestJS WebSocket gateway (via `@nestjs/websockets` + `socket.io-client`) pushes job-progress events to connected browsers. Clients subscribe to `project:{id}` and `job:{id}` channels. Event shape:
+
+```json
 { "type": "job.progress", "jobId": "...", "step": "compliance", "status": "running", "progress": 0.4 }
 ```
 
-## 17. Rate Limits & Budgets
+The WebSocket gateway is not documented in the OpenAPI/Swagger spec.
 
-- Per-user request rate limits (Redis token bucket) returned via `X-RateLimit-*` headers.
-- AI/video/music generation checks plan budget before dispatch; `402/409 BUDGET_EXCEEDED` if insufficient. See `monetization-framework.md`.
+---
 
-## 18. Webhooks (outbound, optional for agencies)
+## Planned / Not Yet Implemented
 
-`project.completed`, `publish.succeeded`, `publish.failed`, `compliance.blocked` — signed with an HMAC secret.
-
-## 19. Versioning
-
-URI-versioned (`/api/v1`). Breaking changes ship under a new version; deprecations announced via `Deprecation` and `Sunset` headers.
-
-## 20. Shorts Studio
-
-Module spec: repo-root `ai.md`. All routes prefixed `/shorts-studio`, JWT-guarded, ownership-checked per project.
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/shorts-studio/channels/:channelId/videos` | Page through the channel's uploads (`?pageToken=`) |
-| GET | `/shorts-studio/videos/:youtubeVideoId/metadata` | Fetch metadata without importing (`?channelId=`) |
-| POST | `/shorts-studio/videos/import` | `{ projectId, youtubeVideoId }` → ImportedVideo |
-| GET | `/shorts-studio/projects/:projectId/videos` | List imported videos with analysis counts |
-| POST | `/shorts-studio/videos/:id/analyze` | Enqueue the SHORTS_ANALYZE pipeline (import → transcript → scenes → topics → highlights → chapters → embeddings) |
-| GET | `/shorts-studio/videos/:id/analysis-status` | Aggregated per-stage status + output counts |
-| GET | `/shorts-studio/videos/:id/transcript` | TranscriptSegment[] |
-| GET | `/shorts-studio/videos/:id/scenes` | VideoScene[] |
-| GET | `/shorts-studio/videos/:id/topics` | TopicSegment[] with highlight scores |
-| GET | `/shorts-studio/videos/:id/highlights` | Highlight[] ranked by finalScore |
-| GET | `/shorts-studio/videos/:id/recommendations` | Top-N clip recommendations (`?limit=5\|10\|20`, no AI call) |
-| GET | `/shorts-studio/videos/:id/chapters` | Chapter[] — contiguous YouTube-style chapters (Ai-video edit.md §5, Phase 5) |
-| POST | `/shorts-studio/videos/:id/detect-chapters` | Enqueue standalone CHAPTER_DETECTION (for videos analyzed before chapters shipped; self-skips if chapters exist) |
-| PATCH | `/shorts-studio/chapters/:chapterId` | `{ title?, summary? }` — manual edit, sets `editedByUser` so re-detection keeps it |
-| GET | `/shorts-studio/videos/:id/search` | NL search over transcript embeddings (`?q=&limit=`): top matches with timestamps, chapter context, cosine score. One embedding call per query, no LLM |
-| GET | `/shorts-studio/search` | Cross-video library search (`?q=`): matches grouped per video, ranked by best moment (§11) |
-| POST | `/shorts-studio/social-content/:id/render-quote-card` | Render a QUOTE_CARD to a 1080×1080 PNG (IMAGE asset); idempotent; file via `GET /media/versions/:versionId/file` |
-| POST | `/shorts-studio/videos/:id/generate-embeddings` | Enqueue standalone EMBEDDING_GENERATION (resumable — only un-embedded segments are sent) |
-| POST | `/shorts-studio/videos/:id/small-videos` | Batched chapter → SMALL_VIDEO candidates (16:9, 1–10 min, zero AI); same clip/timeline/render/export path as Shorts. Chapters under 60s are skipped |
-| POST | `/shorts-studio/videos/:id/church-pack` | Enqueue CHURCH_PACK_GENERATION: bible refs + discussion questions + devotional per chapter, ONE batched LLM call (§11/§12.4). Chapters with a devotional are skipped on re-run; results ride on `GET .../chapters` |
-| POST | `/shorts-studio/videos/:id/sync-chapters` | Publish the "0:00 Title" chapter block into the live YouTube description (replaces an existing block, keeps the rest). Needs ≥3 chapters; sets `chaptersSyncedAt`. CHAPTER_DETECTION also runs the reverse: a description that already defines chapters is imported as `source: IMPORTED` at zero tokens |
-| GET | `/shorts-studio/videos/:id/social-content` | SocialContent[] — quote cards, carousel, blog post, newsletter (§10) |
-| POST | `/shorts-studio/videos/:id/social-content` | Enqueue SOCIAL_CONTENT_GENERATION: the full text pack in ONE batched call over chapters + top highlights (+ their transcript excerpts, so quotes are verbatim). Self-skips when content exists |
-| POST | `/shorts-studio/highlights/:id/generate-clips` | `{ clipTypes: ClipType[] }` → candidate ShortClip[] + seeded timelines |
-| GET | `/shorts-studio/projects/:projectId/clips` | List ShortClip[] for a project |
-| GET | `/shorts-studio/videos/:id/clips` | List ShortClip[] for one imported video |
-| GET | `/shorts-studio/clips/:id/timeline` | Timeline with tracks + items + captions + source asset refs |
-| PATCH | `/shorts-studio/timelines/:id` | `{ commands: TimelineCommand[] }` — TRIM/SPLIT/DELETE/MERGE/DUPLICATE/MOVE/RESIZE/CUT_RANGE, audited |
-| POST | `/shorts-studio/timelines/:id/ai-suggestions` | `{ capability }` → proposed TimelineCommand[] (remove-silence \| remove-fillers \| improve-pacing) |
-| POST | `/shorts-studio/timelines/:id/ai-suggestions/apply` | Apply reviewed suggestions (audited as AI_ASSISTANT) |
-| GET | `/shorts-studio/timelines/:id/history` | ShortsTimelineEdit audit trail |
-| POST | `/shorts-studio/clips/:id/captions` | Enqueue CAPTION_GENERATION job (transcript → styled ShortsCaption rows) |
-| POST | `/shorts-studio/clips/:id/render` | Enqueue SHORTS_RENDER job (reframe + concat + caption burn-in, NVENC w/ CPU fallback) |
-| GET | `/shorts-studio/clips/:id/render-status` | ShortsRenderJob status + rendered asset ref |
-| GET | `/shorts-studio/clips/:id/thumbnails` | Thumbnail variations (generated automatically after first render) |
-| POST | `/shorts-studio/thumbnails/:id/set-primary` | Pick the primary thumbnail |
-| POST | `/shorts-studio/clips/:id/export` | Enqueue SHORTS_EXPORT (render + metadata.json + thumbnail ref → SHORTS_FINAL_EXPORT package) |
-| GET | `/shorts-studio/clips/:id/exports` | ShortsExportHistory[] |
-| POST | `/shorts-studio/clips/:id/request-publish` | Create the human-approval gate on the export (reviewed on /approvals) |
-| POST | `/shorts-studio/clips/:id/publish` | Enqueue SHORTS_PUBLISH — requires APPROVED approval; job re-runs the compliance gate before YouTube upload |
-| GET | `/shorts-studio/clips/:id/publish-status` | Approval + publish job state + youtubeVideoId |
-
-Pipeline stages run as child `AgentJob`s of the `SHORTS_ANALYZE` root and self-skip when their output rows already exist (resume semantics, `ai.md` §16). Requires `yt-dlp` (`YT_DLP_PATH`) for source download; Whisper ASR fallback uses `OPENAI_API_KEY`.
-
-
-## 21. Copilot, Intents & Token Governor
-
-Spec: repo-root `Ai-video edit.md` (§8, §12, §15) — one execution path for UI, chat, and voice; plan/status in `docs/video-hub.md`. All routes JWT-guarded.
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/copilot/chat` | Conversational turn: `{ messages, inputMode?: 'text'\|'voice', confirmedCommand?, pendingCommand? }` → `{ reply, language, executed?, needsConfirmation?, fromCache?, tokensUsed? }`. Repeated phrases resolve from the intent cache (zero tokens); confirmation-gated commands (`EXPENSIVE_ACTIONS`) always return `needsConfirmation` first. |
-| POST | `/intents` | Unified UI entry point: `{ command: CopilotCommand, confirmed?: boolean }` → ActionResult `{ intentId, status: 'executed'\|'needs_confirmation', fromCache, tokensUsed, payload }`. Same executor, gates, and audit trail as chat/voice — intent parity by construction. |
-| GET | `/intents/:id` | Fetch the ActionRecord audit row for an executed intent (owner-scoped). |
-| GET | `/token-usage/summary` | `?days=30` → total tokens/cost, per-model breakdown (all AI calls in the process, agents included), copilot cache-hit rate (§12.3 target ≥80%), and `byVideo` — top-15 per-video cost rows (§12.2.8). Feeds the Analytics "AI Usage" card + cost-by-video table. |
-
-## 22. Wallet, Recharge & Admin (billing spec)
-
-Spec: `docs2/AI-CreatorForce-Billing-Payment-Security-Spec.md`; plan/status in `docs/billing-security.md`. JWT-guarded; admin routes additionally require RBAC permissions (`common/rbac.ts`).
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/wallet/balance` | Balance + bucket breakdown (promo/bonus/referral/purchased) |
-| GET | `/wallet/transactions` | Credit-ledger entries (`?take=`) |
-| POST | `/wallet/recharge` | `{ amountUsd, successUrl, cancelUrl }` + mandatory `Idempotency-Key` header → Stripe Checkout URL. Credits granted only by the verified webhook |
-| GET | `/admin/billing/revenue` | `admin:revenue` — gross/credits by gateway |
-| GET | `/admin/audit-logs` | `admin:audit-logs` |
-| GET | `/admin/users` | `admin:users` — roles + wallet/plan |
-| POST | `/admin/wallet/adjust` | `wallet:adjust` — grant/claw back credits with reason; audited with before/after |
-| POST | `/admin/payments/:id/refund` | `billing:refund` — full/partial Stripe refund with proportional credit claw-back (clamped to balance, shortfall recorded); audited |
-| POST | `/admin/users/:id/recharges-frozen` | `admin:users` — lift/apply the §7 dispute recharge freeze; audited |
-| GET | `/admin/providers` | `admin:providers` — AI provider registry: status, health score, failure rate, current cost rates, recent health events (Phase 5 §5) |
-| GET/POST/PATCH | `/admin/pricing-rules` | `admin:pricing` — credit pricing rules, most-specific-wins; create/update rejected below `MIN_PROFIT_MARGIN` (fail closed); audited. Rule prices are locked at reservation time |
-| POST | `/admin/profit/preview` | `admin:pricing` — margin verdict for a hypothetical `{action, creditCost}` (Phase 5 §8) |
-| GET | `/trial/status` | Trial grant status, remaining trial credits, expiry (Phase 6 §5) |
-| GET | `/trial/limits` | Effective trial-tier restrictions + whether they apply to me |
-| GET/PATCH | `/admin/trial-config` | `admin:trial` — trial credits/expiry + per-feature limits; audited |
-| GET | `/admin/abuse-signals` | `admin:trial` — fingerprint/IP abuse decisions (Phase 6 §6) |
-| POST | `/admin/trial/:userId/approve` | `admin:trial` — grant a PENDING_REVIEW trial after manual review |
-| GET | `/upgrade/recommendations` | Behavior-driven upgrade nudges (frequency-capped); refreshes on read (Phase 6 §8) |
-| POST | `/upgrade/recommendations/:id/dismiss` | Dismiss a nudge (suppresses that reason for 14 days) |
-| GET/POST | `/admin/offers` | `admin:trial` — campaigns (FIRST_RECHARGE/WELCOME/LOYALTY/WINBACK/LOW_CREDIT with `targetRule`); creation margin-gated (fail closed); grants double-idempotent (Phase 6 §9/§10.1) |
-| GET | `/offers` | My Offer Center: active campaigns I qualify for (behavior-targeted) |
-| POST | `/offers/:id/redeem` | Redeem a direct-grant offer (idempotent per user); recharge-attached offers apply automatically at settle |
-| GET | `/marketplace/packs` | Credit packs (`?region=` filters; global packs always included) (Phase 6 §12) |
-| GET/POST/PATCH | `/admin/credit-packs` | `admin:pricing` — packs; creation margin-gated on real credit economics; audited |
-| GET/PUT | `/wallet/budget` | Per-user monthly budget: limit, alert threshold, hard cap. Hard cap enforced fail-closed inside `WalletService.reserve()` (`docs4/10` §Budgets) |
-| GET | `/wallet/usage-summary?days=` | Month/period spend grouped by action intent |
-| GET | `/wallet/forecast?days=` | Window-average burn projection: daily burn, days-to-empty, projected month-end spend (`docs4/10` Phase 2) |
-| GET | `/wallet/recommendations` | Rule-based optimization tips: budget pace, low balance, expiring lots, dominant action, cache-hit rate |
-| POST | `/orgs` | Create organisation — caller becomes ORG_ADMIN; org shared wallet provisioned in the same transaction (Phase 5 §10) |
-| GET | `/orgs/mine` | My orgs with my role in each |
-| GET/POST | `/orgs/:id/members` | List members (with email/name) / add-or-update by email (MANAGE_ORG); roles ORG_ADMIN, BILLING_ADMIN, TEAM_MANAGER, MEMBER + `approvalRequired`; `teamId` validated against the org (Wave 8) |
-| GET/POST | `/orgs/:id/teams` | List teams (any member) / create a team (MANAGE_ORG) — teams scope budget periods and member assignment (Wave 8) |
-| GET/PUT | `/orgs/:id/budget?teamId=` | Current budget-period status + org balance / create a period (MANAGE_BUDGET); hard cap blocks spend at exhaustion; `teamId` validated against the org (Wave 8) |
-| GET | `/orgs/:id/reports/usage?from=&to=&teamId=&format=json\|csv` | Per-member usage rollup (VIEW_REPORTS) |
-| GET | `/dev/usage?days=` | Per-developer-key analytics: request totals + sparse per-day counts, plus attributed AI spend `tokens` {tokensIn, tokensOut, costUsd, calls} (Waves 10+12) |
-| GET | `/api/dev-docs` (+ `-json`) | Public developer-API OpenAPI doc, served in every environment — `-json` is the SDK-generation source (Wave 10) |
-| GET | `/dev-api/v1/projects`, `/projects/:id`, `/projects/:id/jobs`, `/jobs/:id` | Public API resource reads (scopes `projects:read` / `jobs:read`; ownership via key owner) (Wave 12) |
-| POST | `/dev-api/v1/projects/:id/jobs` | Public API job enqueue — first paid AI action; scope `jobs:write`, sandbox keys rejected; run's token usage attributed to the key (Wave 12) |
-| POST | `/referral/code` | Get-or-create my referral code (deterministic, 8-char) (Phase 6 §10.2) |
-| POST | `/referral/redeem` | Apply a code once (self/duplicate/inactive rejected); registration auto-applies `?ref=` codes |
-| GET | `/referral/earnings` | My code, totals, per-referral status (PENDING→QUALIFIED on first recharge→REWARDED; FLAGGED withheld on shared-fingerprint fraud) |
-| GET | `/referral/leaderboard` | Top referrers (masked emails) |
-| GET/POST | `/admin/referrals` | `admin:trial` — review queue; `POST /admin/referrals/:id/review` approves (idempotent replay of payout) or rejects |
-| GET | `/notifications` | In-app notifications (`?unreadOnly=`) + unread count; 24h dedupe window (Phase 6 §15) |
-| POST | `/notifications/:id/read` / `/notifications/read-all` | Mark read (204) |
-| GET | `/admin/analytics/conversion-funnel` | `admin:trial` — signups → trials → first recharge → subscription with conversion percentages (Phase 6 §14) |
-| POST | `/admin/routing/simulate` | `admin:pricing` — dry-run provider routing: ranked candidates, est. cost/credits, would-route verdict; no spend (Phase 5 §16) |
-
-AI cost controls (Phase 5 §6/§12): deterministic `callAI` calls and all embeddings are served cache-first from Redis (`AI_RESPONSE_CACHE_ENABLED`, TTLs via `AI_RESPONSE_CACHE_TTL_SECONDS` / `AI_EMBEDDING_CACHE_TTL_SECONDS`); hits cost $0, are attributed via `token_usage.fromCache`, and are counted in `cf_ai_cache_hits_total`.
-
-## 23. Observability & DR (ops)
-
-`GET /metrics` (no `/api` prefix, version-neutral) serves Prometheus metrics (`cf_` prefix); protect with `METRICS_TOKEN` bearer in shared environments. Alert rules, SLOs, and the Grafana overview dashboard live in `infra/monitoring/`; backup/restore scripts and incident runbooks (RTO 1h / RPO 24h) in `infra/dr/`.
-
-Roles: `SUPER_ADMIN` > `OWNER` > `MEMBER`; elevated identities come from `SUPER_ADMIN_EMAILS` / `OWNER_EMAILS` env config (never hardcoded). The `credit_ledger` is append-only and idempotent — every balance is reconstructable from it.
-
-Reserve→settle (§5.3, opt-in `BILLING_ENFORCE_CREDITS`): jobs hold `JOB_RESERVE_CREDITS` and copilot turns `COPILOT_RESERVE_CREDITS` before AI runs; the real cost (accumulated via the AI usage context) settles as a `USAGE_DEBIT` of `ceil(costUsd × CREDITS_PER_USD × AI_CREDIT_MARKUP)`; failures release the hold. Holds expire after `HOLD_TTL_MINUTES` so crashes never strand credits.
-
-Every turn lands in the `actions` audit table (source `UI`/`COPILOT`/`VOICE`, status, `fromCache`, `tokensUsed`); spoken turns also record `voice_commands` (raw transcript + resolved intent); `copilot_sessions` keeps compressed per-user intent history. The `token_usage` ledger is populated by a global usage hook on the shared aiClient — no AI call goes unmetered. Rows carry `userId`/`jobId`/`projectId`/`importedVideoId` attribution from an AsyncLocalStorage context (`common/ai-usage.context.ts`) set by the supervisor around each job dispatch, by the copilot around each chat turn, and by semantic search around query embeddings — no per-call plumbing.
+- **Full Swagger decorator coverage** — partial; not all controllers are fully decorated.
+- **Per-route rate limiting** — Helmet is present; per-route rate limiter is not yet configured.
+- **WebSocket API documentation** — the Socket.io gateway handles real-time job progress but is not reflected in the OpenAPI spec.

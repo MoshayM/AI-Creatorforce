@@ -1,100 +1,107 @@
 # uiux.md — AI CreatorForce
 
-## 1. Design Principles
+This file documents the frontend tech stack, design principles, navigation structure, and interaction patterns for the AI CreatorForce web application. For feature-level descriptions see [features.md](features.md); for underlying dependencies and package versions see [techstack.md](techstack.md).
 
-- **Pipeline made visible.** The product is a pipeline; the UI should always show where a project is and what's next.
-- **Human-in-control.** Approval moments are clear, deliberate, and never accidental.
-- **Trust through transparency.** Show sources, compliance reasons, provenance, and cost—not just outputs.
-- **Calm density.** Pro tool, not a toy: information-rich but uncluttered; progressive disclosure.
-- **Fast feedback.** Long jobs stream progress; nothing feels frozen.
+---
 
-## 2. Visual System
+## Design Principles
 
-- **Stack:** Next.js + Tailwind + shadcn/ui (accessible, owned-in-repo components).
-- **Theme:** dark-first with light option; high-contrast, accessible (WCAG AA).
-- **Typography:** one clean sans for UI; monospace for prompts/technical fields.
-- **Color semantics:** green = pass/healthy, amber = revise/medium risk, red = block/high risk, neutral = informational. Used consistently for compliance and scores.
-- **Density:** cards for entities (topics, projects, assets), tables for lists, side panels for detail.
-- Follow the project's frontend design conventions; avoid templated default looks.
+- **Pipeline made visible.** The product is a pipeline; the UI always shows where a project is and what's next.
+- **Channel-first.** All workflows begin with channel selection, not project selection.
+- **Minimal friction for the primary workflow.** Create → script → approve → publish is the happy path; everything else is secondary.
+- **Real-time feedback.** Job progress is pushed via Socket.io. No polling, nothing feels frozen.
+- **Human-in-the-loop made explicit.** The approval step is visually prominent and never hidden or incidental.
+- **Trust through transparency.** Sources, compliance reasons, provenance, and credit cost are shown alongside outputs — not buried.
 
-## 3. Information Architecture
+---
+
+## Tech Stack (UI Layer)
+
+| Concern | Library / Version |
+|---|---|
+| Framework | Next.js 15 App Router |
+| Component model | Server Components by default; Client Components (`'use client'`) only when interactive |
+| Primitives | Radix UI (Dialog, DropdownMenu, Progress, Tabs, Toast) |
+| Styling | Tailwind CSS 3.4 + tailwind-merge + clsx |
+| Icons | Lucide React |
+| Server state | TanStack Query v5 |
+| Virtualized lists | TanStack Virtual v3 |
+| Forms | react-hook-form + @hookform/resolvers/zod (validates against shared Zod schemas from `@cf/shared`) |
+| Real-time | socket.io-client |
+| Date formatting | date-fns v4 |
+| Session management | next-auth v4 (coordinates with API JWT) |
+| API mocking (dev) | MSW v2 (`public/mockServiceWorker.js`) |
+
+---
+
+## Sidebar Navigation Structure
 
 ```
-Top nav: Dashboard · Discover · Projects · Assets · Analytics · Approvals · Settings/Billing
-Project workspace (left rail = pipeline steps; main = active step; right = context/sources/cost)
+Dashboard / Overview
+Channels (channel selector)
+Shorts Studio (channel-first)
+Projects / Content pipeline
+Analytics
+Growth / Referrals
+Developer Portal
+Settings
+  - Library
+  - YouTube Channel access
+Notifications
 ```
 
-## 4. Key Screens
+Settings contains Library and YouTube Channel access as nested sub-links (not top-level items).
 
-### Dashboard
-- KPI cards (CTR, watch time, subs, revenue trends — Recharts).
-- "Needs your attention": pending approvals, blocked-by-compliance items, failed jobs.
-- Quick actions: new project, discover trends.
+---
 
-### Discover (Trend Board)
-- Grid of scored opportunity cards: trend/competition/revenue/virality/recommendation scores with color cues.
-- Filters (niche, region, evergreen vs trending). "Promote to project" CTA.
-- Card detail drawer: rationale, signals, competitor context.
+## Shorts Studio UI
 
-### Project Workspace (the heart)
-- **Left rail pipeline:** Discover → Topic → SEO → Audience → Research → Script → Fact-check → Compliance → Assets → Metadata → Review → Publish → Analytics. Current step highlighted; gates marked.
-- **Script editor:** sectioned (Hook/Problem/Story/Evidence/Solution/CTA) with timestamps, visual cues, inline citations, and a "human-add-value" checklist nudging original input.
-- **Right context panel:** sources (ResearchAgent), fact-check verdicts, cost meter, agent trace.
+The Shorts Studio is channel-first: the user selects a channel before any library content is shown.
 
-### Compliance Panel
-- Big status (Pass / Revise / Block) with color.
-- `complianceScore`, `monetizationRisk`, `copyrightRisk`, advertiser-friendly.
-- Flag list: each flag shows location, reason, and how to fix. Block flags clearly non-overridable.
+**Library picker:** An explicit video selection modal — nothing is imported automatically. The picker splits Shorts and Videos (playlists grouped under Videos). Users select which videos to import.
 
-### Asset Studio
-- Tabs: Music · Video · Thumbnail.
-- Each shows the agent brief/prompt, provider selector, generation button (with credit cost shown), progress, and results with provenance.
-- Thumbnail A/B: side-by-side variants with CTR predictions; pick winner.
+**Per-video reference notes:** Each imported video card shows a sticky-note indicator when the user has attached reference notes. Notes are per-video and user-authored.
 
-### Approval Center
-- Queue of items awaiting human approval at each checkpoint.
-- Approve requires viewing the bundle; explicit confirm. Approving is logged.
+**Import entry point:** A dashed row beneath the imported video list, or an empty-state button, opens the picker. The import action is not placed in the page header.
 
-### Job / Progress Center
-- Live list of running jobs (WS/SSE): step, status, progress, cost. Retry/cancel where allowed.
+**Timeline editor:** Drag-and-drop clip ordering within the ShortsTimeline component.
 
-### Analytics
-- Channel overview + per-video detail (retention curve overlaid on script sections).
-- Recommendations panel (GrowthAgent) with prioritized actions and next topics.
+---
 
-### Settings / Billing
-- Channels (connect/disconnect, scopes, status).
-- Voice profiles, brand kit.
-- Plan & usage meter (tokens/credits vs limits), Stripe portal.
-- Team & roles (Beta+).
+## Real-Time Job Progress
 
-## 5. Interaction Patterns
+Socket.io connects to the API gateway. Job status changes are pushed to connected clients without polling. The progress bar component uses Radix Progress. Toast notifications (Radix Toast) fire on job completion or failure.
 
-- **Async-first:** actions that enqueue jobs show optimistic "queued" state, then stream progress. Never block the UI on a long call.
-- **Gates as moments:** compliance block and approval are dedicated, unmistakable UI states—not buried buttons.
-- **Cost visibility:** any action that spends credits/tokens shows the estimated cost first.
-- **Editing invalidates approval:** the UI clearly warns that editing an approved item resets compliance + approval (WF-7).
-- **Inline reasons:** every refusal/block explains why and what to do.
+---
 
-## 6. Empty / Error / Loading States
+## Forms
 
-- **Empty:** guide to the next action (connect a channel, discover a trend).
-- **Loading:** skeletons + streamed step updates; honest progress, never fake spinners.
-- **Error:** plain-language cause + recovery (reconnect channel, retry job, adjust budget).
-- **Blocked:** distinct, calm treatment; emphasize remediation, not punishment.
+All forms use react-hook-form with Zod schema validation (schemas sourced from `@cf/shared`). The submit button is disabled until the form is valid. Server-side errors are surfaced in the form error state, not as page-level alerts.
 
-## 7. Accessibility
+---
 
-- WCAG AA: keyboard navigable, focus states, sufficient contrast, ARIA on custom components, reduced-motion support. Color is never the sole signal (pair with icon/label).
+## Accessibility
 
-## 8. Responsive
+- `eslint-plugin-jsx-a11y` is enforced in linting (dev dependency in web package).
+- `a11y.spec.ts` in the E2E suite runs automated accessibility checks on key pages.
+- Radix UI primitives handle keyboard navigation and ARIA attributes for all interactive components.
+- Color is never the sole signal — icons or labels always accompany color cues.
 
-- Desktop-first (creators work on large screens) but responsive down to tablet; core review/approval usable on mobile.
+---
 
-## 9. Microcopy Tone
+## Performance
 
-- Direct, encouraging, honest. Celebrate genuine wins; never nudge toward deceptive tactics. Compliance copy is matter-of-fact and constructive.
+- Server Components for static and data-fetching UI; Client Components only for interactivity. This minimizes client-side JS.
+- TanStack Virtual v3 is used for long lists (library videos, job queues) to avoid DOM flooding.
+- Bundle budget enforced in CI via `scripts/check-bundle-budget.mjs`: 800 KB per-route first-load JS, 1500 KB total.
+- `next/image` is used for all images; allowed remote domains include `yt3.googleusercontent.com` and `i.ytimg.com`.
 
-## 10. Components to Build (shadcn-based, indicative)
+---
 
-ScoreBadge, RiskPill, PipelineRail, ScriptSectionEditor, CitationChip, ComplianceFlagList, CostMeter, JobProgressRow, ThumbnailABCompare, ApprovalDialog, ProviderSelect, RetentionChart.
+## Planned / Not Yet Implemented
+
+- Design token system and component library documentation.
+- Dark mode.
+- i18n / localization (the `targetLang` field exists on the Project model; UI layer not yet wired).
+- Mobile-responsive audit (currently desktop-first; tablet support is partial).
+- Storybook for component development and visual documentation.

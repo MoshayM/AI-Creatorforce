@@ -1,63 +1,136 @@
 # roadmap.md — AI CreatorForce
 
-> Strategic timeline. Build mechanics live in `build.md`; this is the product/market view. Dates are relative milestones, not hard commitments.
+This file describes the strategic product timeline for AI CreatorForce. Build mechanics and current implementation state live in [build.md](build.md); feature descriptions live in [features.md](features.md).
 
-## Vision Arc
-
-From "AI script helper" → "complete AI workforce for compliant, original YouTube growth." Each milestone deepens the loop: discover → create → comply → produce → publish → learn → improve.
+> Strategic timeline. Build mechanics live in `build.md`; this is the product/market view.
 
 ---
 
-## Milestone 0 — Foundations (pre-MVP)
-- Monorepo, infra scaffold, AI Client, schema, auth, YouTube connect.
-- Compliance gate designed and tested first (it is the spine).
-- Outcome: skeleton that can run one agent end-to-end safely.
+## Vision Arc
 
-## Milestone 1 — MVP (the core loop)
-- Idea → Script → Fact-check → Compliance → Metadata → Publish (human-approved).
-- Basic Trend/SEO/Audience. Asset *briefs* (manual external generation).
-- Free + Creator plans, budget enforcement.
-- **Success:** real creators publish original, compliant videos faster.
+AI CreatorForce becomes the operating system for YouTube creators — from a single-creator tool to an agency-grade multi-channel platform with AI autonomy where it is appropriate (research, scripting, optimization) and human control where it matters (publish, compliance approval).
 
-## Milestone 2 — Beta (assets + intelligence)
-- In-app music/video/thumbnail generation with provenance.
-- Analytics + Growth loop; creator dashboards.
-- n8n long workflows with human checkpoints.
-- Teams/RBAC, multiple channels, Pro plan, A/B thumbnails.
-- **Success:** measurable CTR/retention improvement; full pipeline in one place.
+---
 
-## Milestone 3 — Public Launch (scale + agencies)
-- Agency tier (many channels, pooled credits, webhooks, SSO, audit export, MFA).
-- Scaling + quota-aware scheduling + provider load-balancing.
-- Cost/margin dashboards, overage billing.
-- DR, security hardening, pen test, marketing site, onboarding.
-- **Success:** reliable at scale; sustainable unit economics.
+## Core Principles (Unchanging)
 
-## Milestone 4 — Post-Launch (depth & differentiation)
-Candidate directions (prioritize by data):
-- **Channel memory:** per-channel learning of what works, biasing recommendations (honestly).
-- **Voice/brand consistency:** stronger voice profiles, brand kits across all assets.
-- **Series & calendar:** plan multi-video series and publishing cadence.
-- **Collaboration:** review threads, comments, role-based approvals.
-- **More providers / formats:** podcasts→video, repurposing long-form into Shorts (originality-preserving).
-- **Localization:** multi-language scripts/metadata with per-region SEO.
-- **Marketplace (optional):** vetted prompt/style packs (compliance-screened).
+See [project.md](project.md) for full detail. In brief:
 
-## Explicit Non-Goals (kept stable across roadmap)
-- No spam/content-farm tooling.
-- No fully autonomous publish without prior human approval.
-- No copyright/disclosure/advertiser-policy evasion.
-- No fake-engagement features.
+- Original, monetizable content only.
+- Human-in-the-loop on publish — always.
+- Compliance as a hard gate, never a suggestion.
+- No fabricated facts.
+- Creator productivity, not spam.
+
+These are non-goals for every phase: spam/content-farm tooling, fully autonomous publish without prior human approval, copyright/disclosure evasion, fake-engagement features.
+
+---
+
+## Phase 1 — Core Platform (COMPLETED)
+
+- Auth, channel connect (OAuth, encrypted tokens), project management.
+- Full content pipeline: Research → Script → FactCheck → Compliance → Metadata → SEO → Approval → Publish.
+- `ComplianceAgent` hard gate — no publish path bypasses it.
+- Billing and credits foundation: wallet, subscription tiers (FREE/STARTER/PRO/AGENCY), Stripe integration, hard-cap budget enforcement.
+- Developer portal (API keys, webhooks).
+- GitHub Actions CI with lint, typecheck, unit tests, build, SAST, DAST, E2E.
+
+---
+
+## Phase 2 — Shorts Studio (COMPLETED)
+
+- Channel-first Shorts Studio (select channel before any library content appears).
+- Library picker with explicit video selection modal — no automatic import.
+- Per-video user reference notes with sticky-note indicator.
+- Transcript analysis, scene detection, topic segmentation, chapter detection (AI) + YouTube chapter import.
+- Clip recommendations and Shorts generation.
+- `ShortsTimeline` editor with drag-drop clip ordering and AI editing assistant.
+- Social content factory (QUOTE_CARD / CAROUSEL / BLOG_POST / NEWSLETTER).
+- Chapter sync to YouTube description.
+- Export + publish flow.
+
+---
+
+## Phase 3 — Enterprise and Growth (COMPLETED)
+
+- Organizations + Teams with shared wallet and `BudgetPeriod` credit allocation.
+- Referral program (`ReferralCode` + referral credit grants).
+- Trial engine (`TrialGrant`, `TrialLimitsService`, `UpgradeEngineService`).
+- Marketplace + offers (`MarketplaceService`, `OffersService`).
+- BI analytics module.
+- Org/team RBAC.
+- `GrowthReportJob`.
+
+---
+
+## Phase 4 — Media Pipeline (IN PROGRESS)
+
+Built so far:
+- Voice, Image, Music, Video, Subtitle agents implemented.
+- Render pipeline: `Timeline` model → ffmpeg → `RenderPreset` (DRAFT_PROXY / YT_1080P / YT_4K / SHORTS_1080X1920).
+- `Asset` / `AssetVersion` with versioning and `r2Key` field.
+- `EditPlanAgent`.
+
+Still needed to complete Phase 4:
+- Cloudflare R2 SDK wiring (`r2Key` field is ready, integration is not).
+- External video generation provider integrations (Veo/Kling/Runway/Pika/Luma) — `AssetVersion.provider` field is ready.
+- External music generation providers (Suno/Udio/Stable Audio).
+- End-to-end render-to-publish flow: in-app generated video file → YouTube upload. `PublishingService.publish()` currently requires a user-supplied `videoFilePath`.
+
+---
+
+## Phase 5 — Automation and Scale (PLANNED)
+
+- n8n workflow runtime deployment: long human-paused automations (full WF-1 with human checkpoints). The `n8n/` folder has exported workflow definitions; no deployed instance yet.
+- Auto-publish scheduling: opt-in, post-compliance, post-approval only.
+- Multi-region deployment.
+- Horizontal BullMQ worker scaling (heavy/light pool separation, scale by queue depth).
+- Rate limiting and quota management per subscription tier.
+- Staging environment.
+- Production infrastructure-as-code (Kubernetes manifests or equivalent).
+
+---
+
+## Phase 6 — AI Autonomy and Intelligence (PLANNED)
+
+- Deeper AI copilot: intent classification → full workflow orchestration.
+- Cross-channel intelligence and benchmarking.
+- Advanced audience segmentation.
+- Auto-generated content calendars.
+- Real-time trend integration.
+
+---
+
+## Phase 7 — Platform and Ecosystem (PLANNED)
+
+- Partner/agency white-labeling.
+- Additional AI provider support: DeepSeek/Grok/Mistral/OpenRouter in `aiClient`.
+- i18n / localization (`targetLang` field exists on the `Project` model; UI layer not wired).
+- Public developer API GA.
+
+---
+
+## Current Gaps in Completed Phases
+
+These items are gaps within phases marked COMPLETED — they were not delivered as part of those phases and remain outstanding:
+
+- n8n runtime deployment (designed in Phase 1 scope, not deployed).
+- In-app video file generation from render pipeline to YouTube upload (Phase 2 Shorts publish requires user-supplied file).
+- Cloudflare R2 storage wiring.
+- External video and music generation providers.
+- Staging environment.
+- Production infrastructure-as-code.
+- Stripe live billing testing (integration built; production keys not configured).
+
+---
 
 ## Guiding Metrics by Phase
-| Phase | North-star |
-|-------|-----------|
-| MVP | Time idea→publish; compliance first-pass rate |
-| Beta | CTR/retention lift after 30 days; pipeline completion rate |
-| Launch | Reliability (uptime, queue health); cost per published video; expansion to higher tiers |
-| Post-launch | Creator retention; videos published per active user |
 
-## Dependencies & Risks
-- **Provider/policy volatility:** YouTube and AI/video/music providers change terms, quotas, pricing. The AI Client + config-driven model/provider selection + the living compliance rule set absorb this. Verify policies at each milestone.
-- **Cost control:** generation costs can spike; budgets/metering/caching are launch-critical, not optional.
-- **Quality bar:** originality and value are the brand; never trade them for throughput.
+| Phase | North-star metric |
+|---|---|
+| Phase 1 (Core Platform) | Time idea → publish; compliance first-pass rate |
+| Phase 2 (Shorts Studio) | Shorts published per active user; library import adoption |
+| Phase 3 (Enterprise) | Org/team activation rate; referral conversion rate |
+| Phase 4 (Media Pipeline) | End-to-end render-to-publish success rate; asset generation cost per video |
+| Phase 5 (Automation) | Queue throughput reliability; auto-publish opt-in rate |
+| Phase 6+ | Creator retention; videos published per active user; cross-channel lift |

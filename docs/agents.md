@@ -1,130 +1,225 @@
 # agents.md — AI CreatorForce
 
+This document is the canonical reference for every AI agent in the platform: the shared base class, the full agent catalogue, the AI client contract, validation rules, compliance specifics, tracing, and the checklist for adding new agents. Read alongside [workflows.md](workflows.md), [prompts.md](prompts.md), and [architecture.md](architecture.md).
+
+---
+
 ## 1. Agent Model
 
-AI CreatorForce uses a **supervised multi-agent** design. A `SupervisorAgent` decomposes a creator goal into a plan of sub-agent tasks and sequences them. Sub-agents are **stateless, idempotent, single-responsibility** functions: typed input → provider call (via the AI Client) → Zod-validated typed output. A `QualityControlAgent` audits outputs that fail validation or quality heuristics.
+AI CreatorForce uses a **supervised multi-agent** design. The `SupervisorWorker` (see §7) decomposes a creator goal into a plan of sub-agent tasks and sequences them via BullMQ. Sub-agents are **stateless, idempotent, single-responsibility**: they accept a typed input, call an AI provider via the shared `aiClient`, and return a Zod-validated typed output. A `QualityControlAgent` audits outputs that fail validation or quality heuristics and either repairs them or routes them to human review.
 
-### Shared contract
+---
+
+## 2. BaseAgent
+
+**File:** `packages/agents/src/base-agent.ts`
+
+All agents extend `BaseAgent<TInput, TOutput>`. The base class enforces the shared calling convention and cannot be bypassed.
+
+**Abstract fields (must be defined by each subclass):**
+
+| Field | Type | Purpose |
+|---|---|---|
+| `name` | `string` | Agent identifier used in traces and logs |
+| `systemPrompt` | `string` | Prompt key reference (format: `agentname.tasktype@version`) |
+
+**Abstract method:**
 
 ```ts
-interface Agent<I, O> {
-  name: string;
-  inputSchema: ZodType<I>;
-  outputSchema: ZodType<O>;
-  promptRef: string;        // versioned key into packages/prompts
-  defaultProvider: Provider; // overridable per task
-  run(input: I, ctx: AgentContext): Promise<O>;
+abstract run(input: TInput, ctx: AgentContext): Promise<TOutput>;
+```
+
+**Protected methods (provided by BaseAgent):**
+
+| Method | Delegates to | Use when |
+|---|---|---|
+| `callAI(messages, opts)` | `packages/shared` `callAI` | Free-form text response |
+| `callStructured(messages, schema, opts)` | `packages/shared` `callAIStructured` | Typed, schema-validated response |
+
+Neither method calls a provider SDK directly. All provider calls flow through the shared `aiClient`.
+
+---
+
+## 3. AgentContext
+
+```ts
+interface AgentContext {
+  jobId: string;
+  projectId: string;
+  userId: string;
 }
 ```
 
-`AgentContext` carries: correlation ID, user/channel, budget remaining, trace span, and the AI Client handle. Every `run` emits a trace event `{agent, model, tokens, latencyMs, costUsd, promptVersion}`.
+Passed into every `run()` call. Used for correlation in traces, logs, and the `AgentLog` DB record.
 
-Rules (also in `claude.md`): no agent calls a provider SDK directly; output is always validated; on validation failure, retry up to `MAX_AGENT_RETRIES`, then escalate to `QualityControlAgent`.
+---
 
-## 2. Agent Roster
+## 4. Agent Catalogue
 
-| Agent | Engine | Responsibility | Key Output |
-|-------|--------|----------------|-----------|
-| SupervisorAgent | — | Plan, sequence, route, aggregate | Execution plan + final bundle |
-| TrendAgent | Trend Intelligence | Discover & score opportunities | Scored topic candidates |
-| SEOAgent | SEO Intelligence | Keywords, metadata, ranking difficulty | Titles/desc/tags/chapters + SEO score |
-| AudienceAgent | Audience Intelligence | Psychology, hooks, retention strategy | Hooks, emotional angle, audience profile |
-| ScriptAgent | Content Intelligence | Long-form & Shorts scripts | Structured script |
-| ResearchAgent | Content Intelligence | Gather sourced facts/evidence | Source-cited research pack |
-| FactCheckAgent | Content/Compliance | Verify claims against sources | Claim verdicts + confidence |
-| ComplianceAgent | Compliance Intelligence | Policy/copyright/monetization review | Compliance report + scores |
-| MusicAgent | Music Intelligence | Music brief & generation prompts | Music prompt, genre, BPM, mood |
-| VideoAgent | Video Intelligence | Scene plan, shot list, video prompts | Storyboard + provider prompts |
-| ThumbnailAgent | Thumbnail Intelligence | Thumbnail concepts & prompts | Thumbnail prompts + CTR prediction |
-| MetadataAgent | SEO/Publishing | Finalize publish metadata | Title/desc/tags/hashtags/chapters |
-| PublishingAgent | Publishing | Upload/schedule via YouTube API | Publish receipt + video ID |
-| AnalyticsAgent | Analytics Intelligence | Interpret channel/video metrics | Growth report |
-| GrowthAgent | Analytics Intelligence | Turn analytics into next-video plan | Recommendations + next topics |
-| QualityControlAgent | — | Audit/repair failing outputs | Pass/fail + corrected output |
+All 18 agents, their source files, the BullMQ job types they serve, their output schema, and key dependencies.
 
-## 3. Agent Specifications
+| Agent | Class file | Job types served | Output schema | Key dependency |
+|---|---|---|---|---|
+| ResearchAgent | `research.agent.ts` | `RESEARCH` | `ResearchResultSchema` | External search/web tools |
+| ScriptAgent | `script.agent.ts` | `SCRIPT` | `ScriptSchema` | ResearchAgent output |
+| FactCheckAgent | `factcheck.agent.ts` | `FACT_CHECK` | `FactCheckResultSchema` | Script + research pack |
+| ComplianceAgent | `compliance.agent.ts` | `COMPLIANCE` | `ComplianceResultSchema` | Full content bundle |
+| MetadataAgent | `metadata.agent.ts` | `METADATA` | `MetadataSchema` | SEO output + approved title |
+| SEOAgent | `seo.agent.ts` | `SEO_OPTIMIZATION` | `SEOResultSchema` | Topic + audience profile |
+| TrendAgent | `trend.agent.ts` | `TREND_DISCOVERY` | `TrendResultSchema` | Cached trend signals |
+| AudienceAgent | `audience.agent.ts` | `AUDIENCE_STRATEGY` | `AudienceStrategySchema` | Topic + channel profile |
+| AnalyticsAgent | `analytics.agent.ts` | `ANALYTICS` | `AnalyticsReportSchema` | YouTube Analytics API data |
+| GrowthAgent | `growth.agent.ts` | `GROWTH_REPORT` | `GrowthReportSchema` | AnalyticsAgent output |
+| QualityControlAgent | `quality-control.agent.ts` | `QC_REVIEW` | `QCResultSchema` | Any failing agent output |
+| EditPlanAgent | `edit-plan.agent.ts` | `EDIT_PLAN` | `EditPlanSchema` | Script + edit commands |
+| ImageAgent | `image.agent.ts` | `IMAGE_GENERATION` | `ImageResultSchema` | Thumbnail/asset brief |
+| VoiceAgent | `voice.agent.ts` | `VOICE_GENERATION` | `VoiceResultSchema` | Script segments |
+| MusicAgent | `music.agent.ts` | `MUSIC_BRIEF` | `MusicBriefSchema` | Scene energy map |
+| VideoAgent | `video.agent.ts` | `VIDEO_PLAN` | `VideoScenePlanSchema` | Script + style guide |
+| SubtitleAgent | `subtitle.agent.ts` | `SUBTITLE_GENERATION` | `SubtitleSchema` | Transcript/audio data |
+| GrowthAgent (alias) | `growth.agent.ts` | `GROWTH_REPORT` | `GrowthReportSchema` | AnalyticsAgent output |
 
-### SupervisorAgent
-- **Input:** creator goal, channel context, selected pipeline (full / script-only / assets-only).
-- **Behavior:** produces an ordered task graph, dispatches tasks (often as queued jobs), enforces the compliance gate, aggregates results, and surfaces required human-approval checkpoints.
-- **Output:** `ExecutionPlan` + assembled `ContentBundle`.
-- **Must:** never advance to asset production or publish if compliance has not passed.
+> Note: A fully autonomous `SupervisorAgent` class is **planned but not yet implemented**. Currently, the `SupervisorWorker` (`apps/api/src/workers/supervisor.worker.ts`) dispatches directly based on `JobType`, acting as the orchestrator. See §8 for planned vs. implemented status.
 
-### TrendAgent
-- **Inputs:** niche, channel history, region, time window, signals (YouTube trends, Google Trends, competitor set).
-- **Outputs:** candidate topics each with `trendScore`, `competitionScore`, `revenueScore`, `viralityScore`, `recommendationScore` (0–100) plus rationale.
-- **Notes:** consumes cached trend/competitor data; does not invent metrics—scores derive from retrieved signals with documented heuristics.
+---
 
-### SEOAgent
-- **Inputs:** chosen topic, target audience, language/region.
-- **Outputs:** ranked keywords with search-intent labels, title options, description draft, tags, hashtags, chapter suggestions, `seoScore`, ranking-difficulty estimate, CTR prediction.
+## 5. AI Client (shared)
 
-### AudienceAgent
-- **Inputs:** topic, audience profile, format (long/Shorts).
-- **Outputs:** hook variants, emotional angle, retention strategy (pacing, pattern interrupts, open loops), engagement prediction, refined audience profile.
-- **Guardrail:** retention tactics must be honest (no clickbait that misrepresents content; see `compliance.md`).
+**File:** `packages/shared/src/ai/index.ts`
 
-### ScriptAgent
-- **Inputs:** topic, hooks, audience strategy, research pack, format, desired length, creator voice profile.
-- **Structure (enforced):** Hook → Problem → Story → Evidence → Solution → CTA.
-- **Outputs:** sectioned script with timestamps, B-roll/visual cues, citations linked to research, and a "human-add-value" checklist (where the creator should inject original commentary/experience).
-- **Guardrail:** must mark any factual statement with a source reference for FactCheckAgent.
+The shared `aiClient` is the single call site for all provider interactions. Agents must never import a provider SDK directly.
 
-### ResearchAgent
-- **Inputs:** topic, claims to support.
-- **Outputs:** research pack of sources (title, URL, publisher, date, relevant excerpt summary in own words), grouped by claim. Prefers primary/authoritative sources.
-- **Guardrail:** no copyrighted text reproduction; summaries paraphrased; store source provenance.
+**Providers (implemented):**
 
-### FactCheckAgent
-- **Inputs:** script claims + research pack.
-- **Outputs:** per-claim `{verdict: supported|unsupported|needs-source, confidence, evidenceRef}`. Blocks pipeline if unsupported claims remain above threshold.
+| Enum value | Provider |
+|---|---|
+| `anthropic` | Anthropic (Claude) |
+| `openai` | OpenAI |
+| `gemini` | Google Gemini |
 
-### ComplianceAgent
-- **Inputs:** full content bundle (script, metadata, asset briefs).
-- **Outputs:** `complianceScore`, `monetizationRisk`, `copyrightRisk`, advertiser-friendliness assessment, policy flags, and a `recommendation` (pass / revise / block) with specific reasons.
-- **Hard gate:** see `compliance.md`. Nothing proceeds to assets/publish on a block.
+Model selection is passed via call options or falls back to per-provider defaults defined in config.
 
-### MusicAgent
-- **Inputs:** mood, genre target, video length, scene energy map.
-- **Outputs:** music brief — prompt, genre, BPM, mood, instrument suggestions, structure — formatted for Suno / Udio / Stable Audio. Records that output must be the creator's licensed generation, with provenance.
+**AICacheAdapter interface:**
 
-### VideoAgent
-- **Inputs:** script + scene cues, style guide, target provider.
-- **Outputs:** scene plan, shot list, per-shot video prompts and parameters for Veo / Kling / Runway / Pika / Luma, and a production workflow checklist. Records provenance and provider ToS notes.
+```ts
+interface AICacheAdapter {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string, ttlSeconds: number): Promise<void>;
+}
+```
 
-### ThumbnailAgent
-- **Inputs:** title options, emotional angle, brand style.
-- **Outputs:** 2–4 thumbnail concepts with generation prompts, composition/text recommendations, and CTR predictions for A/B testing.
-- **Guardrail:** no misleading imagery; no third-party IP/faces without rights.
+Redis-backed in the API. Pass `bypassCache: true` for non-deterministic calls (e.g., creative script generation). Set `ttlSeconds` on cache writes; compliance and fact-check results are cached by SHA-256 content hash.
 
-### MetadataAgent
-- **Inputs:** SEO output + final approved title direction.
-- **Outputs:** publish-ready title, description (with chapters and disclosures where required), tags, hashtags, category, language, and AI-disclosure flags per current YouTube policy.
+**onUsage callback:**
 
-### PublishingAgent
-- **Inputs:** approved bundle + schedule.
-- **Behavior:** calls YouTube Data API to upload/schedule, sets metadata and thumbnail, applies disclosures. Idempotent; records receipt.
-- **Hard gate:** verifies compliance-pass + human approval flag before acting.
+Fires after every provider call with an `AIUsageEvent`:
 
-### AnalyticsAgent
-- **Inputs:** YouTube Analytics metrics (CTR, retention, watch time, revenue, subscribers).
-- **Outputs:** growth report with diagnosis (what worked / what didn't) tied to specific metrics.
+```ts
+interface AIUsageEvent {
+  provider: string;
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+  costUsd: number;
+  fromCache: boolean;
+  cacheKind?: string;
+}
+```
 
-### GrowthAgent
-- **Inputs:** analytics report + channel goals.
-- **Outputs:** prioritized optimization actions and next-video topic recommendations, feeding back into TrendAgent.
+The API layer uses this hook for credit accounting (`WalletService`) and Prometheus metrics.
 
-### QualityControlAgent
-- **Inputs:** any agent output that failed validation or quality heuristics.
-- **Behavior:** diagnose, attempt repair (re-prompt with constraints), or reject with actionable reason. Last line before human escalation.
+**aiClient responsibilities:** retries with backoff, fallback to secondary provider on outage/rate-limit, token accounting, and trace emission. Agents do not implement retry logic themselves.
 
-## 4. Orchestration Patterns
+---
 
-- **Full pipeline:** Supervisor → Trend → SEO → Audience → (Research ∥ —) → Script → FactCheck → **Compliance gate** → (Music ∥ Video ∥ Thumbnail) → Metadata → **Human review** → Publishing → Analytics → Growth.
-- **Parallelism:** Music, Video, and Thumbnail agents run concurrently after compliance passes.
-- **Checkpoints:** human-approval pauses are first-class; Supervisor persists state so a workflow can resume after approval.
-- **Failure handling:** retries with backoff → QualityControlAgent → human escalation. All failures are traced.
+## 6. Validation Contract
 
-## 5. Provider Strategy
+Every `callStructured()` call passes a Zod schema. The flow is:
 
-Default model assignment lives in config, not code. Reasoning-heavy agents (Supervisor, Script, Compliance, FactCheck) default to a strong reasoning model; high-volume/cheap tasks may default to a lighter model. The AI Client handles fallback to a secondary provider on outage/rate-limit. See `techstack.md` and `prompts.md`.
+1. Provider returns a response.
+2. `callAIStructured` parses against the Zod schema.
+3. **On parse success:** return typed output to agent.
+4. **On parse failure:** retry the call, appending the validation error to the prompt, up to `MAX_AGENT_RETRIES` (env var).
+5. **After exhausting retries:** route the job to `QualityControlAgent` with the last error attached.
+6. Raw, unvalidated output is never surfaced to callers or stored as a result.
+
+---
+
+## 7. Long-Form Content Pipeline
+
+Orchestrated by `SupervisorWorker`. Compliance and human-approval are hard gates; neither can be bypassed in code.
+
+```
+ResearchAgent
+  → ScriptAgent
+  → FactCheckAgent
+  → ComplianceAgent       [HARD GATE: score < 70 or BLOCK severity = job fails]
+  → MetadataAgent
+  → SEOAgent
+  → Approval (human gate) [PublishingService throws ForbiddenException if not APPROVED]
+  → PublishingService     → YouTube Data API
+```
+
+See [workflows.md](workflows.md) for the full job-status transition model and the Shorts Studio pipeline.
+
+---
+
+## 8. ComplianceAgent Specifics
+
+**File:** `packages/agents/src/compliance.agent.ts`
+
+Output is Zod-validated against `ComplianceResultSchema` before any downstream action.
+
+**Categories:**
+
+`COPYRIGHT` | `MISINFORMATION` | `HATE_SPEECH` | `VIOLENCE` | `ADULT_CONTENT` | `SPAM` | `IMPERSONATION` | `PRIVACY` | `ADVERTISER_FRIENDLY`
+
+**Severity levels:**
+
+`INFO` | `WARNING` | `CRITICAL` | `BLOCK`
+
+**Gate rules:**
+
+- `score < 70` = not passed; content is blocked.
+- Any flag with severity `BLOCK` = absolute block, regardless of score. There is no override path.
+
+**Invocation:** `ComplianceService.enforce()` wraps `callAIStructured` and caches results by SHA-256 hash of the content bundle. Any edit to the bundle invalidates the cache and requires a fresh compliance run.
+
+---
+
+## 9. Tracing
+
+Each agent call emits a structured trace event persisted to the `AgentLog` DB model and to Prometheus metrics:
+
+| Field | Source |
+|---|---|
+| `agentName` | `BaseAgent.name` |
+| `model` | Resolved model string from aiClient |
+| `tokensIn` | From `AIUsageEvent` |
+| `tokensOut` | From `AIUsageEvent` |
+| `latencyMs` | Wall-clock time of the provider call |
+
+Cost (`costUsd`) is recorded via the `onUsage` hook and posted to the credit ledger separately.
+
+---
+
+## 10. Adding a New Agent — Checklist
+
+1. Define input and output Zod schemas in `packages/shared`.
+2. Pull the prompt from `packages/prompts` using the `agentname.tasktype@version` key format. Never inline a large prompt in the agent class.
+3. Extend `BaseAgent<TInput, TOutput>`. Implement `name`, `systemPrompt`, and `run()`.
+4. Use `callStructured()` (not `callAI()`) for any response that will be stored or passed downstream.
+5. Emit a trace event (handled automatically by `BaseAgent` if using the shared call methods; verify the `AgentLog` write).
+6. Register the new `JobType` in the shared `JobType` enum (`packages/shared`).
+7. Add a handler in `SupervisorWorker` (`apps/api/src/workers/supervisor.worker.ts`).
+8. Write co-located unit tests (`*.spec.ts`) with a fixture for schema validation failure → retry → QC routing.
+
+---
+
+## 11. Planned / Not Yet Implemented
+
+| Item | Status |
+|---|---|
+| `SupervisorAgent` as an independent agent class | Planned. Currently `SupervisorWorker` dispatches directly by `JobType`. |
+| DeepSeek, Grok, Mistral, Ollama, OpenRouter providers | Referenced in design docs. Only `anthropic`, `openai`, and `gemini` are implemented in `packages/shared/src/ai/index.ts`. |
+| Full versioned prompt library for all 18 agents | In progress. Some agents still have system prompts inline; see [prompts.md](prompts.md). |

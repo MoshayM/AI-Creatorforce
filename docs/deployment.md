@@ -1,124 +1,181 @@
 # deployment.md — AI CreatorForce
 
+This document covers CI pipeline structure, build commands, runtime startup, required environment variables, observability setup, and the bundle budget gate. Test authoring conventions are in `testing.md`; secrets handling and environment variable security are in `security.md`.
+
+---
+
 ## 1. Environments
 
 | Env | Purpose | Notes |
 |-----|---------|-------|
-| local | Development | docker-compose: Postgres, Redis, n8n, api, web, worker |
-| staging | Pre-prod testing | Full infra; sandbox/test provider keys; seeded data |
-| production | Live | Cloudflare + AWS; real keys via secret manager |
+| local | Developer workstation | `pnpm dev` — web: 3007, api: 4007 |
+| CI | GitHub Actions | Postgres 16 + Redis 7 as services, full test suite |
+| staging | Pre-production verification | Planned — not yet deployed |
+| production | Live platform | Planned — target: Cloudflare/Vercel + managed Postgres + managed Redis |
 
-Promotion path: `local → staging → production`, gated by CI and manual approval to prod.
+---
 
-## 2. Topology (production)
+## 2. CI Pipeline (.github/workflows/ci.yml)
 
+Triggered on: push to `master`, `main`, `develop`; pull requests targeting `master` or `main`. Concurrency group cancels in-progress runs for the same ref on new push.
+
+Runtime: Node 24, pnpm 11.x.
+
+Jobs run in dependency order:
+
+### 2.1 lint
+ESLint across all packages and apps.
+
+### 2.2 typecheck
+`tsc --noEmit` on all packages. Requires `prisma generate` to run first (NestJS module types depend on the generated Prisma client).
+
+### 2.3 unit-tests
+Jest with coverage collection. Coverage artifact retained for 7 days.
+
+### 2.4 build
+Runs after lint + typecheck + unit-tests all pass.
+
+- `pnpm build` via Turborepo builds all packages and apps in dependency order.
+- Environment: `SKIP_ENV_VALIDATION=true`, `NEXT_TELEMETRY_DISABLED=1`.
+- `SENTRY_AUTH_TOKEN` used for source map upload (if set).
+- Bundle budget gate runs immediately after build (see Section 5). Hard failure on violation blocks the pipeline.
+
+### 2.5 security
+`pnpm audit --audit-level=high` on all packages. `dependency-review-action` runs on pull requests to surface new vulnerable dependencies before merge.
+
+### 2.6 semgrep
+Semgrep SAST in two modes:
+- Custom rules at `.semgrep/creatorforce.yml` — ERROR severity, blocking.
+- `p/typescript` registry rules — informational only.
+
+### 2.7 zap-baseline
+OWASP ZAP passive scan against the production web build. High-risk findings fail the job. ZAP report artifact retained for 30 days.
+
+### 2.8 e2e
+Playwright cross-browser matrix: chromium, firefox, webkit run in parallel. Full stack required: Postgres + Redis services, API started (`node apps/api/dist/main.js`), web started (`next start -p 3007`). Playwright report artifact retained for 7 days on failure. Job timeout: 25 minutes.
+
+A separate workflow `.github/workflows/nextjs.yml` handles Next.js-specific deployment steps.
+
+---
+
+## 3. Build Commands
+
+```bash
+# Install (locked)
+pnpm install --frozen-lockfile
+
+# Generate Prisma client (required before typecheck, test, or build)
+pnpm --filter @cf/api exec prisma generate
+
+# Build shared packages first (Turborepo handles order, but explicit if needed)
+pnpm --filter @cf/tsconfig --filter @cf/eslint-config --filter @cf/shared build
+
+# Build everything
+pnpm build
+
+# Run API unit tests
+pnpm --filter @cf/api run test
+
+# Run Playwright e2e (per browser)
+pnpm --filter @cf/e2e exec playwright test --project=chromium
+pnpm --filter @cf/e2e exec playwright test --project=firefox
+pnpm --filter @cf/e2e exec playwright test --project=webkit
 ```
-                 Cloudflare (DNS · CDN · WAF · R2)
-                          │
-                   ┌──────▼───────┐
-                   │  Web (Next)  │  containers, autoscaled
-                   └──────┬───────┘
-                          │
-                   ┌──────▼───────┐
-                   │  API (Nest)  │  containers, autoscaled
-                   └──┬────────┬──┘
-                      │        │
-        ┌─────────────▼┐   ┌───▼───────────┐
-        │ Workers      │   │ n8n           │  long workflows
-        │ (BullMQ)     │   │ (container)   │
-        └──┬────────┬──┘   └───────────────┘
-           │        │
-   ┌───────▼┐  ┌────▼────────┐
-   │Postgres│  │   Redis     │  managed (AWS)
-   └────────┘  └─────────────┘
-        R2 (objects) · Sentry · Prometheus/Grafana
+
+---
+
+## 4. Runtime Startup
+
+### API
+```bash
+# Production
+node apps/api/dist/main.js
+
+# Database migration (run before API start in production)
+prisma migrate deploy
+
+# Health check
+GET /health
+GET /api/docs
 ```
 
-- **Compute:** AWS ECS (Fargate) or EKS for web/api/worker/n8n containers.
-- **Data:** managed PostgreSQL (RDS/Aurora) + managed Redis (ElastiCache).
-- **Objects:** Cloudflare R2.
-- **Edge:** Cloudflare in front of web/api.
+### Web
+```bash
+# Production
+next start -p 3007
 
-## 3. Containerization
-
-- Each app (`web`, `api`, `worker`, `n8n`) has its own Dockerfile (multi-stage, pinned base images, non-root user).
-- Images built in CI, scanned for vulnerabilities, pushed to a registry (ECR), tagged by commit SHA.
-- `docker-compose.yml` for local parity.
-
-## 4. CI/CD (GitHub Actions)
-
-### Pipeline stages
-```
-on PR:
-  1. install (pnpm, cached)
-  2. lint (eslint) + format check (prettier)
-  3. typecheck (tsc --noEmit)
-  4. unit tests (vitest/jest)
-  5. build (turbo build)
-  6. integration tests (api + queue, against ephemeral Postgres/Redis)
-  7. SAST + dependency scan + secret scan
-on merge to main:
-  8. build & scan Docker images → push (SHA tag)
-  9. run DB migrations against staging
- 10. deploy to staging
- 11. smoke/E2E (Playwright) on staging
-on tagged release (manual approval):
- 12. run migrations against production
- 13. blue/green or rolling deploy to production
- 14. post-deploy smoke checks + alert on failure
+# Local development
+next dev -p 3007
 ```
 
-- **Migrations:** Prisma migrations run as a gated CI step; never manual. Backwards-compatible migrations preferred (expand/contract pattern) to allow zero-downtime deploys.
-- **Secrets:** injected from secret manager at deploy; never in workflow files. CI uses OIDC to assume AWS roles (no long-lived cloud keys).
-- **Rollback:** keep previous image; rollback = redeploy prior SHA. Migrations designed to be backward-compatible to allow app rollback without DB rollback.
+Default ports: web = 3007, api = 4007 (overridden by `API_PORT`).
 
-## 5. Configuration & Secrets
+---
 
-- All config via environment variables; documented in `.env.example`.
-- Secrets from AWS Secrets Manager/SSM (see `security.md`).
-- Feature flags via config for gradual rollout of new agents/providers.
+## 5. Bundle Budget Gate
 
-## 6. Scaling Strategy
+Script: `apps/web/scripts/check-bundle-budget.mjs`
 
-- **Stateless web/api:** horizontal autoscale on CPU/RPS.
-- **Workers:** scale per queue depth (separate worker pools for heavy queues: video/music render vs light queues: research/seo).
-- **Database:** read replicas for analytics-heavy reads; connection pooling (PgBouncer).
-- **Redis:** sized for queue throughput + cache; cluster mode if needed.
-- **Providers:** AI Client load-balances/falls back across providers; generation jobs batched and rate-limited to respect provider + YouTube quotas.
-- **Cost-aware autoscale:** scale down idle worker pools; budget alerts prevent runaway spend.
+Thresholds:
 
-## 7. Observability in Prod
+| Metric | Limit |
+|--------|-------|
+| Per-route first-load JS | 800 KB |
+| Total unique JS | 1500 KB |
 
-- **Sentry:** errors across web/api/workers.
-- **Prometheus:** scrape app/worker metrics; **Grafana** dashboards + alerts (queue backlog, error rate, p95 latency, budget burn, provider failures).
-- **Tracing:** OpenTelemetry; correlation IDs across HTTP → job → provider.
-- **Health checks:** `/healthz` (liveness), `/readyz` (readiness incl. DB/Redis).
-- **Alerting:** pager on prod outages, queue stalls, payment webhook failures, compliance-gate errors.
+Baseline (2026-07): 571 KB per-route / 1001 KB total. Diffs against `apps/web/scripts/bundle-budget-baseline.json` to detect creep between PRs.
 
-## 8. Backups & DR
+On violation: hard failure, CI blocks merge. Artifact `bundle-budget-report.json` retained for 90 days.
 
-- Automated daily Postgres backups + point-in-time recovery; periodic restore drills.
-- R2 versioning/lifecycle for assets.
-- Documented disaster-recovery runbook with RTO/RPO targets.
+---
 
-## 9. Cost Estimation (planning, order-of-magnitude)
+## 6. Required Environment Variables
 
-> Indicative only; validate with real provider pricing at build time.
+| Variable | Notes |
+|----------|-------|
+| `DATABASE_URL` | PostgreSQL 16 connection string |
+| `REDIS_URL` | Redis 7 connection string |
+| `JWT_SECRET` | Token signing secret |
+| `TOKEN_ENCRYPTION_KEY` | Min 32 characters — used for OAuth token encryption |
+| `API_PORT` | Defaults to 4007 |
+| `NODE_ENV` | `development` / `production` |
+| `ANTHROPIC_API_KEY` | Primary LLM provider |
+| `OPENAI_API_KEY` | Fallback LLM provider |
+| `GEMINI_API_KEY` | Fallback LLM provider |
+| `STRIPE_SECRET_KEY` | Billing |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signature verification |
+| `SUPER_ADMIN_EMAILS` | RBAC: comma-separated super-admin email list |
+| `OWNER_EMAILS` | RBAC: comma-separated owner email list |
+| `SENTRY_DSN` | Optional — enables Sentry error tracking |
+| `SENTRY_AUTH_TOKEN` | Optional — CI build for source map upload |
+| `COMPLIANCE_CACHE_TTL_MS` | Optional — defaults to 86400000 (24 hours) |
 
-| Cost area | Driver | Lever |
-|-----------|--------|-------|
-| LLM tokens | per script/agent run | model tiering, caching |
-| Video gen | per clip | plan credits, creator-initiated |
-| Music gen | per track | plan credits |
-| Compute | container hours | autoscale, batch workers |
-| DB/Redis | instance size | right-size, replicas only as needed |
-| Storage/egress | R2 GB + ops | lifecycle, dedupe |
-| Edge | Cloudflare plan | fixed/usage |
+CI pipelines accept placeholder values for provider keys (ANTHROPIC_API_KEY, etc.) in non-e2e jobs. E2e jobs require real or sandbox credentials.
 
-Track **cost per published video** as the headline unit metric (see `monetization-framework.md`).
+---
 
-## 10. Release Hygiene
+## 7. Observability
 
-- Conventional commits → automated changelog.
-- Database and provider changes flagged in PRs.
-- No deploy on red CI; no manual hotfix bypassing migration gate.
+### Error tracking
+- `@sentry/nestjs` on the API, `@sentry/nextjs` on the web app.
+- Both are conditional on `SENTRY_DSN` being set — no Sentry calls if unset.
+
+### Metrics
+- `prom-client` on the API exposes `GET /metrics` in Prometheus text format.
+- `MetricsInterceptor` records `http_request_duration_ms` histogram on every request.
+- Prometheus config: `infra/monitoring/prometheus.yml`.
+- Grafana dashboards: `infra/monitoring/grafana/provisioning/dashboards/`.
+- Alert rules: `infra/monitoring/alerts.yml`.
+- Full monitoring stack (Prometheus + Grafana): `infra/monitoring/docker-compose.monitoring.yml`.
+
+---
+
+## 8. Planned / Not Yet Implemented
+
+- Production deployment infrastructure (Docker/Kubernetes/Vercel configs beyond CI not yet written; `infra/` folder contains monitoring only)
+- Staging environment
+- Database backup automation
+- CDN configuration
+- n8n workflow runtime deployment
+- Blue/green or rolling deploy strategy
+- Infrastructure-as-code (IaC) for cloud resources

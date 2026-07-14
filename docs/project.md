@@ -1,99 +1,93 @@
 # project.md — AI CreatorForce
 
-## Overview
+AI CreatorForce is a production-grade SaaS platform: an AI-powered YouTube Content Operating System that gives creators a complete AI workforce for the full content lifecycle — opportunity discovery, scripting, compliance, media production, SEO, publishing, and post-publish growth — while keeping a human creator in control of quality and final approval at every critical gate. It is not a spam content generator; every feature is designed around original, monetizable content that passes YouTube's policies and the platform's own compliance engine before any output reaches the public.
 
-AI CreatorForce is an AI-powered **YouTube Content Operating System**. It acts as a complete AI workforce for YouTube creators, automating the full lifecycle from opportunity discovery to post-publish growth optimization while keeping a human creator in control of quality and final approval.
+---
 
-The platform is built around a principle of **augmentation, not replacement**: AI does the heavy, repetitive, research-intensive work; the creator supplies judgment, voice, and originality. Output is designed to be monetization-safe and policy-compliant under YouTube's rules as of June 2026.
+## Related docs
 
-## Mission
+- [architecture.md](architecture.md) — stack, module layout, job pipeline, observability
+- [features.md](features.md) — per-feature breakdown (agents, outputs, compliance notes)
+- [agents.md](agents.md) — individual agent contracts
+- [workflows.md](workflows.md) — multi-step pipeline definitions
+- [database.md](database.md) — Prisma schema reference
+- [api.md](api.md) — REST + WebSocket surface
+- [compliance.md](compliance.md) — compliance engine detail
+- [youtube-publishing.md](youtube-publishing.md) — publishing gate and YouTube API integration
+- [monetization-framework.md](monetization-framework.md) — billing, credits, subscriptions
+- [build.md](build.md) — phased build plan and scope
+- [roadmap.md](roadmap.md) — upcoming milestones
 
-Help serious creators ship more original, higher-performing videos in less time, without sacrificing quality, originality, or monetization eligibility.
+---
 
-## Non-Goals (explicit)
+## Core mission
 
-- Mass-producing low-effort or reused content ("content farms").
-- Auto-generating videos with zero human review.
-- Scraping or republishing third-party content.
-- Gaming engagement metrics or manufacturing fake interactions.
-- Anything that risks demonetization, strikes, or channel termination.
+Help YouTube creators produce original, high-quality, monetization-safe content faster — without removing human judgment from the decisions that matter. The platform automates research, scripting, fact-checking, media production, and distribution while requiring human approval before anything publishes to YouTube.
 
-## Target Users
+---
 
-| Segment | Need |
-|---------|------|
-| Solo creators | Do the work of a 5-person team |
-| Faceless/automation channels (legitimate) | Original, value-added content at scale, compliant with reuse policy |
-| Small media teams | Coordinated pipeline, role-based workflows |
-| Agencies | Manage many channels with governance and reporting |
+## 7 Golden Rules (non-negotiable)
 
-## Value Proposition
+1. **Compliance is a hard gate, not a suggestion.** No content reaches the Publishing Engine without passing `ComplianceAgent`. `ComplianceService.enforce()` throws `BadRequestException` on failure; there is no bypass path.
 
-1. **Find the right topic** — data-backed opportunity scoring instead of guesswork.
-2. **Write strong scripts** — structured, retention-optimized, fact-checked.
-3. **Stay monetizable** — compliance gating before anything ships.
-4. **Produce assets** — guided workflows for AI music, video, and thumbnails.
-5. **Publish & schedule** — direct YouTube integration.
-6. **Grow** — analytics that translate into the next video's plan.
+2. **Human-in-the-loop on publish.** The platform drafts and recommends; a human approves before anything is uploaded to YouTube, unless the user has explicitly enabled scheduled auto-publish *and* the item has already passed compliance. The `PublishingService` checks for an `Approval` row with `status = 'APPROVED'` and throws `ForbiddenException` if absent.
 
-## Core Modules (summary)
+3. **No fabricated facts.** Any factual claim in a generated script must be traceable to a source captured by `ResearchAgent` and verified by `FactCheckAgent`. Agents that generate prose must not hallucinate citations.
 
-1. Trend Intelligence Engine
-2. SEO Intelligence Engine
-3. Audience Intelligence Engine
-4. Content Intelligence Engine
-5. Compliance Intelligence Engine
-6. Music Intelligence Engine
-7. Video Intelligence Engine
-8. Thumbnail Intelligence Engine
-9. Publishing Engine
-10. Analytics Intelligence Engine
+4. **Respect third-party ToS.** YouTube Data API, AI providers (Anthropic/OpenAI/Gemini), video providers (Veo/Kling/Runway/Pika/Luma), and music providers (Suno/Udio/Stable Audio) each have terms. Integrations use official APIs and store provenance metadata on every `AssetVersion`.
 
-Each engine maps to a NestJS backend module and one or more AI agents. See `architecture.md` and `agents.md`.
+5. **Secrets never in code.** All keys via environment variables or secret manager. `.env` is never committed. See [security.md](security.md).
 
-## End-to-End Flow (happy path)
+6. **TypeScript strict mode on.** `any` is allowed only with a `// @reason:` comment explaining why it cannot be avoided.
 
-```
-Discover → Plan → Research → Script → Fact-check → Compliance gate
-   → Assets (music / video / thumbnail) → Metadata/SEO → Human review
-   → Publish/Schedule → Analytics → Growth recommendation → (loop)
-```
+7. **Every agent output is validated.** Agent responses are parsed against a Zod schema before use. On schema failure the agent retries up to `MAX_AGENT_RETRIES`, then routes to `QualityControlAgent`.
 
-Compliance is a **mandatory gate** between content creation and asset production/publishing. Human review is a **mandatory gate** before publish (unless trusted auto-schedule is explicitly enabled for an already-approved item).
+---
 
-## Success Metrics (platform)
+## High-level platform overview
 
-- Time from idea → published video reduced by ≥ 60%.
-- ≥ 95% of generated drafts pass compliance on first or second pass.
-- Measurable improvement in creator CTR and average view duration after 30 days of use.
-- Zero platform-caused monetization strikes attributable to generated content.
+**Channel workspace** — Users connect YouTube channels via Google OAuth. Each channel stores a niche profile, voice profile, and brand kit. Multiple channels are supported per account.
 
-## Key Constraints
+**AI agent pipeline (long-form content)** — A sequential pipeline of stateless, idempotent agents: `ResearchAgent` → `ScriptAgent` → `FactCheckAgent` → `ComplianceAgent` → `MetadataAgent` → `SEOAgent` → human approval → `PublishingService`. Every step runs as a BullMQ job on the `AGENT_QUEUE`.
 
-- Must comply with YouTube Terms, Community Guidelines, and the Inauthentic/Reused Content and AI-disclosure expectations current as of June 2026. Verify current policy at build time; see `compliance.md`.
-- All external AI/video/music providers used only via official APIs or sanctioned export workflows, with provenance stored.
-- Costs must be metered and capped per user/plan (see `monetization-framework.md`).
+**Shorts Studio** — Channel-first workflow. Users pick a channel, explicitly select library videos via a picker, and get transcript analysis, scene detection, topic segmentation, and AI-generated clip recommendations. A timeline editor and AI editing assistant let creators build Shorts sequences; the export/publish path goes through the same compliance gate.
 
-## Document Index
+**Media pipeline** — Voice generation (`VoiceAgent`), b-roll image generation (`ImageAgent`), background music generation (`MusicAgent`), video scene planning and generation (`VideoAgent`), subtitle generation (`SubtitleAgent`), edit planning (`EditPlanAgent`), and a render pipeline (Timeline → RenderPreset → ffmpeg → `Render` model → R2 storage).
 
-| Doc | Purpose |
-|-----|---------|
-| `claude.md` | AI coding agent operating contract |
-| `architecture.md` | System architecture |
-| `agents.md` | AI agent roster & contracts |
-| `workflows.md` | Orchestrated pipelines |
-| `features.md` | Feature specification |
-| `api.md` | REST/WS API design |
-| `techstack.md` | Technology choices |
-| `database.md` | Data model & schema |
-| `security.md` | Security architecture |
-| `compliance.md` | Policy & content compliance |
-| `monetization-framework.md` | Revenue, billing, cost control |
-| `youtube-publishing.md` | YouTube integration |
-| `analytics.md` | Analytics & growth |
-| `deployment.md` | Infra & CI/CD |
-| `build.md` | Phased build plan |
-| `roadmap.md` | Product roadmap |
-| `testing.md` | Test strategy |
-| `uiux.md` | UI/UX spec |
-| `prompts.md` | Prompt library |
+**Billing and credits** — Polymorphic `Wallet` (user or org), append-only `CreditLedger`, bucketed `CreditLot` (promotional/bonus/referral/purchased/trial with expiry), hold-and-settle `CreditReservation`, Stripe `Subscription` (FREE/STARTER/PRO/AGENCY), and `BudgetPeriod` per org/team.
+
+**Organizations and teams** — `Organization` with `OrgMembership` roles (ORG_ADMIN/TEAM_MANAGER/BILLING_ADMIN/MEMBER), `Team`/`TeamMembership` (OWNER/ADMIN/EDITOR/REVIEWER/VIEWER), and a shared org wallet.
+
+**Trial and growth engine** — `TrialGrant` model, trial credit buckets, `ReferralCode` model with referral credit awards, upgrade engine, marketplace service, and offers service.
+
+**Developer portal** — `DeveloperKey` model, `DeveloperWebhook` model with delivery jobs, external API access via `dev-api` controller, `developer-key` guard.
+
+**Observability and admin** — Sentry error tracking (API + web), Prometheus metrics via `prom-client` on every route, `AuditLog` model for compliance trails, `SystemConfig` for runtime flags, feature-flag module, AI-ops module for prompt version management.
+
+---
+
+## Current build state
+
+| Area | Status |
+|---|---|
+| Full content pipeline (long-form) | Built |
+| Shorts Studio (channel-first flow, timeline editor, clip recs, social factory) | Built |
+| Billing / wallet / credits / Stripe integration | Built |
+| Organizations, teams, multi-channel | Built |
+| Trial grants / referral / growth engine | Built |
+| Developer portal (keys, webhooks, external API) | Built |
+| Auth (email+password, Google/Apple/Facebook OAuth, JWT + refresh rotation) | Built |
+| Compliance engine (SHA-256 cache, scoring, BLOCK severity) | Built |
+| Analytics (snapshots, BI module, YouTube Analytics polling) | Built |
+| Render pipeline (ffmpeg-static, RenderPreset, R2 storage keys) | Built |
+
+---
+
+## Planned / not yet implemented
+
+- **n8n workflow automation** — The `n8n/` folder exists for exported workflow definitions, but the n8n runtime is not deployed. Workflows need to be imported into a running n8n instance and connected to the API webhook endpoints.
+- **Video file generation via external providers** — `VideoAgent` and `MusicAgent` have provider interfaces (Veo/Kling/Runway/Pika/Luma; Suno/Udio/Stable Audio), but actual generation calls are placeholders in the current `publishing.service.ts`. Integration is blocked on provider API access.
+- **Stripe production keys** — Billing module is wired; Stripe keys need to be swapped from test to live for production.
+- **Multi-region deployment** — Infrastructure is defined for single-region. Horizontal worker scaling (BullMQ) and multi-region Postgres read replicas are not yet provisioned.
+- **i18n beyond English** — `targetLang` field exists on the `Project` model; multi-language script generation is not wired through the agent pipeline.
+- **Accessibility audit tooling** — `a11y.spec.ts` exists in `apps/e2e` but is not yet integrated into CI.

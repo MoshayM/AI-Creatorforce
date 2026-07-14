@@ -1,142 +1,154 @@
 # workflows.md — AI CreatorForce
 
-This document defines the orchestrated, multi-step pipelines. Workflows are implemented in two places: short, in-process orchestration in the Agent Runtime (via `SupervisorAgent` + BullMQ jobs), and long, human-paused automations in **n8n** that call the API and enqueue jobs. Compliance and human-review gates are mandatory where marked.
+This document defines every orchestrated pipeline in the platform: the long-form content pipeline, the Shorts Studio pipeline, the analytics refresh loop, billing flows, the approval workflow, and supporting conventions. Compliance and human-review gates are mandatory where marked and cannot be bypassed in code. Read alongside [agents.md](agents.md), [architecture.md](architecture.md), and [youtube-publishing.md](youtube-publishing.md).
 
-## Conventions
+---
 
-- `[GATE]` = a step that can block progression.
+## 1. Conventions
+
+- Every step longer than 2 seconds, or that calls an external AI/video/music provider, runs as a **BullMQ job** — never inline in a request handler.
+- `[GATE]` = a step that blocks progression on failure. No override path exists.
 - `[HUMAN]` = a human-approval checkpoint that pauses the workflow.
-- `[∥]` = steps that run in parallel.
-- Every step writes results + a trace event keyed by the workflow's correlation ID.
-- Workflows are resumable: state persists in Postgres; n8n/Supervisor can re-enter at the last completed step.
+- `[PARALLEL]` = steps that run concurrently.
+- Compliance and approval are enforced in code, not only by convention. `PublishingService` throws `ForbiddenException` if `Approval.status !== 'APPROVED'`.
+
+**Job status transitions:**
+
+```
+PENDING → QUEUED → RUNNING → WAITING_APPROVAL → APPROVED / REJECTED → COMPLETED / FAILED / CANCELLED
+```
+
+Each step writes its result and a trace event keyed by the workflow's correlation ID (`jobId`).
 
 ---
 
-## WF-1: Full Content Pipeline (Idea → Published → Growth)
+## 2. BullMQ + SupervisorWorker
+
+**File:** `apps/api/src/workers/supervisor.worker.ts`
+
+All jobs are enqueued on `AGENT_QUEUE`. The `SupervisorWorker` consumes jobs, dispatches to the appropriate per-module service (e.g., `ResearchService`, `ScriptService`, `ComplianceService`), and posts results back via BullMQ. A Socket.io gateway notifies the frontend when a job completes or requires human input.
 
 ```
-START
- ├─ 1. Discover           TrendAgent        → scored topic candidates
- ├─ 2. Select topic       [HUMAN]           → creator picks / confirms topic
- ├─ 3. SEO research       SEOAgent          → keywords, metadata draft, SEO score
- ├─ 4. Audience strategy  AudienceAgent     → hooks, emotional angle, retention plan
- ├─ 5. Research           ResearchAgent     → sourced research pack
- ├─ 6. Script             ScriptAgent       → structured script (Hook→…→CTA)
- ├─ 7. Fact check         FactCheckAgent    [GATE] → claims verified or returned
- ├─ 8. Compliance         ComplianceAgent   [GATE] → pass / revise / block
- ├─ 9. Asset production   [∥]
- │     ├─ MusicAgent      → music brief/prompt
- │     ├─ VideoAgent      → scene plan, shot list, video prompts
- │     └─ ThumbnailAgent  → thumbnail concepts + CTR prediction
- ├─10. Asset generation   [∥] (external providers, queued; creator-driven)
- │     ├─ Music (Suno/Udio/Stable Audio)
- │     ├─ Video (Veo/Kling/Runway/Pika/Luma)
- │     └─ Thumbnail (image provider)
- ├─11. Metadata finalize  MetadataAgent     → publish-ready metadata + disclosures
- ├─12. Review & approve   [HUMAN][GATE]     → creator approves full bundle
- ├─13. Publish/schedule   PublishingAgent   → YouTube upload + receipt
- ├─14. Analytics          AnalyticsAgent    → growth report (after data accrues)
- └─15. Growth             GrowthAgent       → next-video recommendations → feeds WF-1 step 1
-END (loops)
-```
-
-**Failure routing:** any agent failure → retry (backoff) → `QualityControlAgent` → `[HUMAN]` escalation. A `[GATE]` block returns the bundle to the creator with specific, actionable reasons.
-
----
-
-## WF-2: Trend Discovery (standalone)
-
-```
-1. Inputs: niche, region, window, competitor set
-2. Pull signals (cached): YouTube trends, Google Trends, competitor monitor
-3. TrendAgent scores candidates (trend/competition/revenue/virality/recommendation)
-4. Return ranked board; creator can promote a candidate into WF-1
+Client → POST /jobs → AGENT_QUEUE (BullMQ)
+                         ↓
+                   SupervisorWorker
+                         ↓
+              per-module service → Agent
+                         ↓
+                   Result → BullMQ
+                         ↓
+               Socket.io gateway → Client
 ```
 
 ---
 
-## WF-3: Script Studio (script-only)
+## 3. Long-Form Content Pipeline
+
+Triggered by a user creating a Project and requesting content generation.
+
+| Step | Job type | Handler | Gate |
+|---|---|---|---|
+| 1 | — | User creates Project via `POST /projects`, selects Channel | — |
+| 2 | `RESEARCH` | `ResearchAgent` gathers sources, returns structured sources JSON | — |
+| 3 | `SCRIPT` | `ScriptAgent` generates script with inline source citations | — |
+| 4 | `FACT_CHECK` | `FactCheckAgent` validates claims against research pack | [GATE] unsupported claims block |
+| 5 | `COMPLIANCE` | `ComplianceAgent` scores content | [GATE] score < 70 or BLOCK severity = job fails, content blocked |
+| 6 | `METADATA` | `MetadataAgent` generates title/description/tags | — |
+| 7 | `SEO_OPTIMIZATION` | `SEOAgent` optimizes metadata for discoverability | — |
+| 8 | — | System creates `Approval` record (`status=PENDING`, `expiresAt` set per config) | [HUMAN] |
+| 9 | — | Human reviews and approves/rejects via `POST /approvals/:id/approve` or `/reject` | [GATE] |
+| 10 | `PUBLISH` | `PublishingService` checks `Approval.status === 'APPROVED'`; throws `ForbiddenException` if not | [GATE] |
+| 10 (cont.) | `PUBLISH` | YouTube Data API upload | — |
+
+Any agent failure triggers retry with backoff. After `MAX_AGENT_RETRIES`, the job routes to `QualityControlAgent`. A `[GATE]` failure returns the bundle to the creator with specific, actionable reasons and halts the pipeline.
+
+---
+
+## 4. Shorts Studio Pipeline
+
+Channel-first flow. Users select a channel, then explicitly pick videos to import via the library picker modal. Nothing is imported or listed automatically.
+
+| Step | Job type / action | Handler |
+|---|---|---|
+| 1 | UI | User selects Channel (channel-first entry point) |
+| 2 | UI | User opens library picker, selects videos to import |
+| 3 | `POST /shorts-studio/import` | `VideoImportService` creates `ImportedVideo` record, enqueues `TRANSCRIPT_ANALYSIS` |
+| 4 | `TRANSCRIPT_ANALYSIS` | Transcript processing; creates `TranscriptSegment` rows |
+| 5 | `SCENE_DETECTION` | Creates `VideoScene` rows |
+| 6 | `TOPIC_SEGMENTATION` | Creates `TopicSegment` rows |
+| 7 | `CHAPTER_DETECTION` | Creates `Chapter` rows (`ChapterSource.DETECTED`) |
+| 8 | `HIGHLIGHT_DETECTION` | Scores segments for short-form potential |
+| 9 | — | `ClipRecommendationService` returns ranked clip recommendations |
+| 10 | `SHORTS_GENERATION` | `ShortsGenerationService` creates `ShortClip` rows |
+| 11 | UI | User edits `ShortsTimeline` (drag-drop, trim, reorder) via `TimelineService` |
+| 12 | `APPLY_COMMANDS` / `ASSIST_CAPABILITY` | AI editing assistant (`AiEditingAssistantService`) |
+| 13 | `SHORTS_RENDER` | `ShortsExportService` creates export |
+| 14 | Optional | `ChapterSyncService` syncs detected chapters to YouTube description |
+| 15 | Optional | `SocialContentService` generates `QUOTE_CARD` / `CAROUSEL` / `BLOG_POST` / `NEWSLETTER` |
+| 16 | Optional | `SHORTS_PUBLISH` → YouTube Shorts upload |
+| 17 | Optional | `ThumbnailGenerationService` generates Short thumbnail |
+
+---
+
+## 5. Analytics Refresh Workflow
+
+Runs on a scheduled poll after videos are published.
 
 ```
-1. Inputs: confirmed topic + format + length + creator voice profile
-2. AudienceAgent → hooks + retention plan
-3. ResearchAgent → sourced facts
-4. ScriptAgent → structured script
-5. FactCheckAgent [GATE]
-6. ComplianceAgent [GATE]
-7. [HUMAN] edit/approve → save as draft asset
+ANALYTICS job
+  → AnalyticsAgent pulls data from YouTube Analytics API
+  → Stores AnalyticsSnapshot in Postgres (CTR, retention, watch time, revenue, subscribers)
+  → GROWTH_REPORT job
+  → GrowthAgent produces channel performance insights and next-topic recommendations
+  → Recommendations surface in dashboard; top topics seed the long-form pipeline
 ```
 
 ---
 
-## WF-4: Asset Production (post-script)
+## 6. Billing Workflows
 
-Runs only on a compliance-passed script.
+### Credit reserve-settle
 
-```
-1. Inputs: approved script + style guide + provider preferences
-2. [∥] MusicAgent · VideoAgent · ThumbnailAgent produce briefs/prompts
-3. Creator triggers generation jobs per asset (metered against plan budget)
-4. Generated assets stored in R2 with provenance
-5. [HUMAN] review assets → accept / regenerate
-```
+1. Before a metered job starts: `WalletService.reserve()` creates a `CreditReservation` with status `HELD` and deducts the estimated amount from the user's spendable balance.
+2. After the job completes: `WalletService.settle()` posts a `USAGE_DEBIT` entry to `CreditLedger` and closes the reservation.
+3. If the job fails before settling, the reservation is released.
 
----
+### Stripe recharge
 
-## WF-5: Publish & Schedule
+1. User triggers `POST /wallet/recharge`.
+2. `BillingService` creates a Stripe Checkout session; returns session URL.
+3. Stripe webhook fires on payment completion.
+4. Credit grant is posted to `CreditLedger` as a `PURCHASE` lot.
 
-```
-1. Precondition check [GATE]: compliancePassed == true AND humanApproved == true
-2. MetadataAgent finalizes metadata + AI/disclosure flags
-3. PublishingAgent uploads or schedules via YouTube Data API (idempotent)
-4. Store publish receipt (videoId, status, scheduledTime)
-5. Register analytics polling job
-```
+### Referral credits
 
-If preconditions fail, the workflow refuses and explains which gate is unmet. There is no override path that skips the compliance gate.
+`ReferralService` posts a `REFERRAL` credit lot to both the referrer's and the new user's wallets on successful signup.
 
 ---
 
-## WF-6: Analytics → Growth Loop
+## 7. Approval Workflow
 
-```
-1. Scheduled poll of YouTube Analytics for published videos
-2. Snapshot metrics to Postgres (CTR, retention curve, watch time, revenue, subs)
-3. AnalyticsAgent diagnoses performance
-4. GrowthAgent produces prioritized actions + next topics
-5. Next topics seed WF-2/WF-1; recommendations surface in dashboard
-```
+| Endpoint | Effect |
+|---|---|
+| `POST /approvals/:id/approve` | Sets `Approval.status = 'APPROVED'` |
+| `POST /approvals/:id/reject` | Sets `Approval.status = 'REJECTED'` |
 
----
-
-## WF-7: Compliance Re-review (on edit)
-
-Any edit to an approved bundle invalidates prior approval.
-
-```
-1. Detect change to script/metadata/assets after a prior pass
-2. Reset compliancePassed = false, humanApproved = false
-3. Re-run ComplianceAgent [GATE]
-4. Require fresh [HUMAN] approval before WF-5
-```
+Rules:
+- Every `Approval` record has an `expiresAt`. Expired approvals block publish even if status was previously `APPROVED`.
+- Any edit to an approved bundle resets `compliancePassed = false` and `humanApproved = false`, requiring a fresh compliance run and a new approval.
+- `PublishingService` re-validates both flags at publish time; it does not rely solely on the prior gate having run.
 
 ---
 
-## Human-in-the-Loop Checkpoints (summary)
+## 8. n8n
 
-| Checkpoint | Why it exists |
-|------------|---------------|
-| Topic selection | Creator owns editorial direction |
-| Script approval | Originality + voice + accuracy |
-| Asset review | Quality + brand fit + rights |
-| Final approval before publish | Last safety/quality gate |
-
-Auto-publish is only permitted for an item that has already passed compliance **and** received explicit prior human approval, scheduled by the creator. Even then, WF-7 forces re-approval if anything changed.
+The `n8n/` folder in the repository contains exported workflow JSON definitions intended for long, human-paused automations that call the API and enqueue jobs. The n8n runtime is **not yet deployed**. No production workflows depend on it.
 
 ---
 
-## Idempotency & State
+## 9. Planned / Not Yet Implemented
 
-- Each step is keyed `(projectId, step)`. Re-running a completed step is a no-op unless inputs changed (content hash differs).
-- n8n workflows persist `executionId`; the API maps it to the `ContentProject` so progress survives restarts.
-- All external-provider calls (AI, video, music, YouTube) run as queued jobs with retry + dedupe keys.
+| Item | Status |
+|---|---|
+| n8n runtime deployment | Not yet deployed. Workflow definitions exist in `n8n/`. |
+| Auto-publish scheduling | Schema has `scheduledAt` on `Video`. Requires explicit auto-publish opt-in by user and a compliance pass. Not yet exposed in the UI per CLAUDE.md rule 2. |

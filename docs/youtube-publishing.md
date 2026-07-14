@@ -1,93 +1,110 @@
 # youtube-publishing.md — AI CreatorForce
 
+This document describes how AI CreatorForce connects to YouTube, validates content before upload, and manages video publishing and post-publish analytics via the YouTube Data API. Related reading: [compliance.md](compliance.md), [security.md](security.md), [database.md](database.md).
+
 > How AI CreatorForce connects to YouTube and publishes content via the **YouTube Data API**, with hard gates ensuring nothing ships without compliance pass + human approval.
 
-> **Policy/quota note:** YouTube Data API quotas, scopes, upload limits, and disclosure requirements change. Verify current YouTube Data API documentation and YouTube policies (as of build time) before implementing. The values and behaviors below reflect best practices as of June 2026.
+> **Policy/quota note:** YouTube Data API quotas, scopes, upload limits, and disclosure requirements change. Verify current YouTube Data API documentation and YouTube policies (as of build time) before implementing. The values and behaviors below reflect current best practices as of June 2026.
 
-## 1. Connection (OAuth)
+---
 
-1. Creator clicks "Connect YouTube" → Google OAuth consent.
-2. Request **minimum scopes**: upload/manage own videos and read analytics for the connected channel. No broader access.
-3. Store access + refresh tokens **encrypted** (see `security.md` §5); DB holds only `oauthTokenRef`.
-4. On revoke/disconnect: call Google's revoke endpoint and delete/rotate stored tokens.
+## OAuth Connection
 
-## 2. Publish Preconditions (hard gate)
+A creator connects a YouTube channel via Google OAuth (the Google adapter in `ProviderRegistry`). During the OAuth flow:
 
-A publish job **must verify** before any API call:
+- Granted scopes are stored in `Channel.scopes[]` for audit.
+- OAuth tokens (access + refresh) are encrypted at rest using **jose** (JWE, AES-256-GCM) with `TOKEN_ENCRYPTION_KEY`. The encrypted blob is stored in `Channel.encryptedTokens`; expiry is stored in `Channel.tokenExpiresAt`.
+- **`Channel.readOnly`** flag marks connections that were granted analytics-only scopes — no upload capability. The publish flow rejects read-only channels.
+- **`Channel.active`** flag allows soft-disabling a channel without removing OAuth credentials.
 
-```
-compliancePassed == true        // latest compliance report = pass
-AND humanApproved == true        // explicit creator approval
-AND bundleHash matches reviewed  // no post-approval edits (else WF-7)
-```
+---
 
-If any fails → refuse with `409 COMPLIANCE_BLOCKED` / `409 APPROVAL_REQUIRED`. **No override path exists.** (`PublishingAgent` re-checks even if the API layer already did.)
+## Token Management
 
-## 3. Publish Flow
+`ChannelsService.buildAuthedYouTube(channelId)` is the single point of access for an authenticated YouTube API client:
 
-```
-1. MetadataAgent finalizes: title, description (+chapters), tags, hashtags,
-   category, language, AI/synthetic-media disclosure flags.
-2. PublishingAgent (queued job, idempotent via Idempotency-Key):
-   a. Refresh OAuth token if needed (in-memory only).
-   b. Insert video (resumable upload of the rendered video asset from R2).
-   c. Set snippet (title/desc/tags/category/language).
-   d. Set status (privacy: public/unlisted/private or scheduled publishAt).
-   e. Apply self-certification / disclosure settings per current API support.
-   f. Upload + set custom thumbnail.
-3. Record PublishRecord (ytVideoId, status, receipt).
-4. Register analytics polling job.
-```
+1. Fetches the `Channel` record and decrypts `encryptedTokens` using `TOKEN_ENCRYPTION_KEY`.
+2. Constructs a `google-auth-library` OAuth2 client with the decrypted credentials.
+3. Returns a `youtube` googleapis client bound to that credential.
 
-### Idempotency & retries
-- Jobs carry a dedupe key `(projectId, "publish")`. Re-running a succeeded publish is a no-op.
-- Resumable uploads handle interruptions; partial uploads resume rather than duplicate.
-- Transient API errors → exponential backoff retry; permanent errors → mark `failed`, surface reason, do not silently retry forever.
+Token refresh on expiry is handled by the googleapis library's built-in refresh logic. Explicit proactive refresh on token expiry is not yet implemented (see Planned section).
 
-## 4. Scheduling
+---
 
-- Creator may schedule via `publishAt` (future). The video is uploaded as `private` with a scheduled publish time, per Data API behavior.
-- Scheduled items still required to have passed compliance + human approval **before** scheduling.
-- WF-7: editing a scheduled item resets gates and pauses the schedule until re-approved.
+## Publish Preconditions
 
-## 5. Disclosures
+All five conditions must be satisfied before `youtube.videos.insert` is called. Failure at any step throws and aborts the publish.
 
-- AI-generated / significantly altered / synthetic media disclosures applied based on the `ComplianceAgent` assessment and stored `disclosures` flags.
-- The platform never publishes synthetic-as-authentic content where disclosure is required. See `compliance.md` §3.4.
+| # | Condition | Error on failure |
+|---|-----------|-----------------|
+| 1 | `ComplianceResult.passed = true` for the associated job | `BadRequestException` (via `ComplianceService.enforce()`) |
+| 2 | `Approval.status = 'APPROVED'` for the job | `ForbiddenException` |
+| 3 | `Approval.expiresAt` not yet reached | `ForbiddenException` |
+| 4 | `videoFilePath` provided and non-empty | `BadRequestException` |
+| 5 | `Channel.active = true` and `Channel.readOnly = false` | `ForbiddenException` |
 
-## 6. Quota & Rate Management
+---
 
-- Upload and write operations are quota-expensive; the platform:
-  - Batches and schedules to respect daily quota.
-  - Caches read operations (channel info, analytics) in Redis.
-  - Surfaces quota-related delays to the creator rather than failing opaquely.
-- Per-channel and per-plan publish rate limits prevent spammy bursts.
+## Publish Flow (PublishingService.publish())
 
-## 7. Thumbnails
+Sequence for an immediate or scheduled publish:
 
-- Custom thumbnail uploaded via the thumbnails endpoint after the video resource exists.
-- Must meet YouTube's size/format requirements (verify current specs).
-- A/B selection: the chosen variant is published; alternates retained in the asset library.
+1. **Approval check** — query `Approval` by job ID. Assert `status = 'APPROVED'` and `expiresAt > now()`. Throw `ForbiddenException` on any failure.
+2. **Video file check** — assert `videoFilePath` is present. Throw `BadRequestException` if missing.
+3. **Build authenticated client** — call `ChannelsService.buildAuthedYouTube(channelId)`.
+4. **Insert video** — call `youtube.videos.insert` with:
+   - `part: ['snippet', 'status']`
+   - `snippet`: `title`, `description`, `tags[]`, `categoryId` (default `'22'` — People & Blogs)
+   - `status`:
+     - Immediate publish: `privacyStatus: 'public'`
+     - Scheduled publish: `privacyStatus: 'private'`, `publishAt: <ISO 8601 timestamp>`
+   - `media.body`: readable stream from `createReadStream(videoFilePath)`
+5. **Update `Video` model** — write back `youtubeVideoId` (from API response), and set:
+   - Immediate: `status = PUBLISHED`, `publishedAt = now()`
+   - Scheduled: `status = SCHEDULED`, `scheduledAt = <publishAt>`
 
-## 8. Error Handling & Receipts
+---
 
-| Situation | Behavior |
-|-----------|----------|
-| Token expired | Refresh in-memory; if refresh fails → mark channel `error`, notify creator to reconnect |
-| Quota exceeded | Defer + reschedule job; notify creator |
-| Upload interrupted | Resume via resumable upload |
-| Policy rejection from YouTube | Record reason, surface to creator, do not retry blindly |
-| Success | Store `ytVideoId`, status, publishedAt, receipt summary |
+## Scheduled Publish
 
-## 9. Analytics Hook
+When `scheduledAt` is set on the publish request, the video is uploaded to YouTube immediately as `privacyStatus: 'private'` with `publishAt` set to the target timestamp. YouTube's infrastructure handles the timed public release — the platform does not need to trigger a second API call at publish time.
 
-After publish, register a polling job (WF-6) to pull YouTube Analytics (CTR, retention, watch time, revenue, subscribers) into `analytics_snapshots`, feeding the AnalyticsAgent/GrowthAgent loop.
+`Video.status` is set to `SCHEDULED` in the database until YouTube makes the video public.
 
-## 10. Invariants for Code Agents
+---
 
-1. Never call the YouTube write API without passing the precondition gate.
-2. Never store YouTube OAuth tokens in plaintext or primary DB.
-3. Always make publish jobs idempotent.
-4. Always apply required disclosures.
-5. Always record a PublishRecord (success or failure) for auditability.
-6. Re-verify gates inside `PublishingAgent`, not just at the API layer.
+## Post-Publish Statistics
+
+`getVideoStats(channelId, youtubeVideoId)` calls `youtube.videos.list` with the `statistics` part to retrieve `viewCount`, `likeCount`, `commentCount`, and related fields. This is consumed by `AnalyticsService` for the channel analytics dashboard.
+
+---
+
+## Channel Library Sync
+
+Library sync reads the connected channel's uploaded videos and playlists via the YouTube Data API and populates `LibraryVideo` and `LibraryPlaylist` models in the local database. These models back:
+
+- The **Shorts Studio import picker** — users select from their existing library videos to use as references or source material.
+- **Analytics dashboards** — historical performance data for the creator's existing content.
+
+---
+
+## Shorts Publishing
+
+Shorts go through the same compliance and human approval gates as long-form videos. No separate gate or bypass exists. The render preset `RenderPreset.SHORTS_1080X1920` produces the correct 9:16 aspect ratio. The video is published as a standard YouTube video; YouTube automatically categorizes it as a Short based on duration (<=60 s) and aspect ratio.
+
+Shorts-specific metadata fields (audience designation, Shorts-specific category) are not yet implemented (see Planned section).
+
+---
+
+## API Quota
+
+YouTube Data API has a daily upload quota per project. The platform must handle quota exhaustion (`quotaExceeded` error from the API) gracefully. Quota management, automatic retry with exponential backoff, and quota monitoring are not yet implemented — planned as a follow-on.
+
+---
+
+## Planned / Not Yet Implemented
+
+- **In-app video generation pipeline** — currently `videoFilePath` must be supplied externally by the user. Connecting the in-app render pipeline output directly to `PublishingService` is Phase 2.
+- **YouTube API quota management** — quota tracking, graceful exhaustion handling, and retry backoff.
+- **Automatic proactive token refresh** — currently relies on googleapis library's on-demand refresh. Explicit pre-expiry refresh to avoid mid-upload failures is not implemented.
+- **Shorts-specific metadata fields** — audience designation, Shorts category, and other Shorts-specific API parameters.

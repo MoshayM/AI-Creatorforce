@@ -1,75 +1,150 @@
 # testing.md — AI CreatorForce
 
-## 1. Philosophy
+This file describes the test strategy, tooling, and non-negotiable coverage requirements for the AI CreatorForce platform. Tests are organized in three layers: unit (Jest, co-located in `apps/api`), E2E (Playwright, in `apps/e2e`), and automated security (Semgrep SAST + ZAP DAST). See [deployment.md](deployment.md) for how these layers are wired into CI.
 
-Test the things that hurt if they break: the **compliance gate**, the **publish preconditions**, **agent output validation**, **budget enforcement**, and **auth/tenant scoping**. AI output is non-deterministic, so we test the *contracts and gates around* agents, not exact model text.
+---
 
-## 2. Test Pyramid
+## Philosophy
 
-| Level | Tooling | Scope |
-|-------|---------|-------|
-| Unit | Vitest/Jest | Agents (with mocked AI Client), services, schema validation, utils |
-| Integration | Jest + Supertest + ephemeral Postgres/Redis | Module + queue + DB interactions, pipelines |
-| Contract | Zod schema tests | Agent input/output schemas, API request/response shapes |
-| E2E | Playwright | Critical user journeys against staging |
-| Load/perf | k6 (selective) | Queue throughput, API under load |
-| Security | SAST, dependency & secret scanning, pen test (pre-launch) | Whole system |
+> Test the things that hurt if they break: the **compliance gate**, the **publish preconditions**, **agent output validation**, **budget enforcement**, and **auth/tenant scoping**. AI output is non-deterministic, so we test the *contracts and gates around* agents, not exact model text.
 
-## 3. Mandatory Tests (must exist & pass)
+Tests validate contracts, schemas, and gates — not AI text output. External providers (Anthropic/OpenAI/Gemini, Stripe, YouTube APIs) are mocked in unit and integration tests. E2E tests run against a real database and API with full live services.
 
-1. **Compliance gate cannot be bypassed:** integration test attempts to advance a `block`/unreviewed bundle to asset generation and to publish; both must be refused. No code path exists that succeeds.
-2. **Publish precondition gate:** publishing without `compliancePassed && humanApproved && matching bundleHash` is rejected; `PublishingAgent` re-checks independently.
-3. **WF-7 re-review:** editing an approved script/metadata resets gates; publish then blocked until re-approved.
-4. **Budget enforcement:** generation dispatch is refused when plan budget is exhausted; no provider call/spend occurs.
-5. **Tenant scoping:** a user cannot read/write another tenant's projects/channels/assets.
-6. **Token security:** OAuth tokens never persisted in plaintext/primary DB; not present in logs.
-7. **Webhook signature verification:** Stripe/outbound webhooks reject invalid signatures.
-8. **Agent output validation:** malformed agent output triggers retry → QualityControl → no invalid data persisted.
-9. **Fact-check gate:** unsupported claims above threshold block the pipeline.
-10. **Idempotent publish:** re-running a succeeded publish job does not create a duplicate.
+---
 
-## 4. Agent Testing Approach
+## Test Layers
 
-- **Mock the AI Client** to return fixtures (valid, invalid, malformed) and assert: schema validation, retry behavior, fallback provider use, escalation to QualityControl, trace/cost emission.
-- **Golden contract tests:** every agent's input/output Zod schemas have positive and negative cases.
-- **Quality heuristics:** where defined (e.g., script must contain all required sections), assert structurally, not by exact wording.
-- **Determinism boundary:** for live-provider tests (few, in staging), assert *shape and constraints*, not text; keep flaky live tests out of the required PR gate.
+### Unit Tests (Jest)
 
-## 5. Integration Testing
+**Location:** Co-located `*.spec.ts` files in `apps/api/src`.
 
-- Spin up ephemeral Postgres + Redis (testcontainers or CI services).
-- Run a queue worker in-process; enqueue a job; assert state transitions and DB writes.
-- Pipeline tests cover WF-3, WF-5, WF-7 fully (MVP); WF-1, WF-4, WF-6 (Beta).
-- Mock external providers (YouTube, video, music, LLM) at the AI Client/HTTP boundary.
+**Scope:** Services, guards, utilities. `PrismaService` is mocked. `ioredis-mock` is available for Redis-dependent code.
 
-## 6. E2E (Playwright, staging)
+**Run command:**
+```
+pnpm --filter @cf/api run test --coverage --ci
+```
 
-Critical journeys:
-- Connect channel → create project → generate script → fact-check → compliance pass → approve → publish (to a sandbox/test channel) → see receipt.
-- Compliance block path → see reasons → revise → re-pass.
-- Budget exhaustion → upgrade prompt.
+Coverage report is uploaded as a CI artifact (7-day retention).
 
-## 7. Test Data & Fixtures
+**Critical spec files (must always pass):**
 
-- Seeded users/channels/projects in `infra/db/seed.ts`.
-- Fixture library of agent inputs/outputs (valid + adversarial, incl. prompt-injection attempts in "research source" content).
-- Adversarial fixtures specifically attempt: disclosure evasion, infringing content, deceptive metadata — all must be caught by compliance.
+| File | What it covers |
+|---|---|
+| `compliance.service.spec.ts` | `check`, `enforce`, `cache`, `invalidate` — the hard gate |
+| `sessions.service.spec.ts` | Issue, refresh, revoke of `AuthSession` |
+| `oauth.service.spec.ts` | Token encryption/decryption, token storage |
+| `rbac.spec.ts` | `roleHasPermission`, `resolveElevatedRole` |
+| `cursor.spec.ts` | Cursor pagination correctness |
+| `structured-logger.spec.ts` | Log shape contract |
+| `pipeline-plan.spec.ts` | Agent pipeline planning contracts |
+| `trial.service.spec.ts` | Trial credit bucket, limit enforcement |
+| `referral.service.spec.ts` | Referral code grant, de-dup |
+| `growth-engine.spec.ts` | Growth engine logic |
+| `dev-portal.utils.spec.ts` | Developer portal utilities |
+| `developer-key.guard.spec.ts` | API key auth guard |
 
-## 8. CI Gating
+---
 
-PR cannot merge unless: lint, typecheck, unit, build, and integration tests pass; security scans clean of high-severity issues. The mandatory tests in §3 are part of the required suite. See `deployment.md` §4.
+### E2E Tests (Playwright)
 
-## 9. Coverage & Quality
+**Location:** `apps/e2e/src`.
 
-- Coverage targets meaningful paths (gates, services, agents) rather than a blunt %; gate/critical-path code aims for high coverage.
-- Mutation testing (selective) on compliance/publish logic to ensure tests actually catch regressions.
+**Stack:** Full Postgres 16 + Redis 7 run as CI services. The API is started and health-checked before tests begin. The Next.js web server is auto-started via the `playwright.config.ts` `webServer` block.
 
-## 10. Non-Functional Testing
+**Cross-browser matrix:** chromium / firefox / webkit — run as parallel CI jobs.
 
-- **Load:** queue throughput and API p95 under expected peak (k6) before launch.
-- **Resilience:** provider outage simulation → fallback works; queue retry/backoff verified.
-- **Backup/restore drills:** periodic restore test in staging (see `deployment.md` §8).
+**Artifacts on failure:** Playwright report (7-day retention).
 
-## 11. Invariants Tests Protect (for code agents)
+**Spec files:**
 
-If a change makes any §3 test fail, the change is wrong, not the test—unless the test itself is being corrected with explicit review noted in the PR. Never weaken a compliance/security test to make a feature pass.
+| File | Coverage area |
+|---|---|
+| `auth.spec.ts` | Login, logout, OAuth flows |
+| `sessions.spec.ts` | Session lifecycle, refresh, revoke |
+| `projects.spec.ts` | Project CRUD, pipeline state |
+| `jobs.spec.ts` | Job queue, status polling, completion |
+| `approvals.spec.ts` | Approval gate, publish precondition |
+| `library.spec.ts` | Library picker, video import, notes |
+| `wallet.spec.ts` | Credit balance, hard cap enforcement |
+| `orgs.spec.ts` | Org and team management, membership |
+| `growth.spec.ts` | Referral codes, trial grants, upgrade |
+| `settings.spec.ts` | Settings page, channel access, Library sub-links |
+| `notifications.spec.ts` | Notification delivery and read state |
+| `navigation.spec.ts` | Sidebar links, channel selector, routing |
+| `discover.spec.ts` | Opportunity discovery flows |
+| `admin.spec.ts` | Admin panel, super-admin guard |
+| `a11y.spec.ts` | Automated accessibility checks |
+| `visual.spec.ts` | Visual regression snapshots |
+
+**Fixtures:**
+
+- `auth.ts` — shared login/session setup for authenticated test contexts.
+- `api-mock.ts` — MSW v2 handlers for frontend-only tests that do not need the real API.
+
+---
+
+### Security Tests (CI Automated)
+
+**SAST — Semgrep:**
+- Config: `.semgrep/creatorforce.yml`
+- Custom architecture rules at `ERROR` severity block CI (e.g., bypassing `ComplianceAgent`, hardcoded secrets).
+- Informational: `p/typescript` registry ruleset.
+
+**DAST — OWASP ZAP:**
+- Config: `.zap/plan.yaml`
+- Passive scan of the production web build.
+- `check-zap-summary.mjs` gates the CI job on HIGH-risk findings.
+- ZAP report artifact retained for 30 days.
+
+**Dependency audit:**
+- `pnpm audit --audit-level=high` runs on every push.
+- `dependency-review-action` runs on PRs to flag newly introduced vulnerable packages.
+
+---
+
+## Frontend Mocking (MSW v2)
+
+`public/mockServiceWorker.js` is registered in development mode.
+
+`api-mock.ts` provides MSW request handlers for E2E tests that exercise only the frontend without a running API.
+
+When `NEXT_PUBLIC_USE_MOCK=true`, the web app routes all API calls through MSW — useful for frontend-only development without a local API instance.
+
+---
+
+## Test Data and Isolation
+
+E2E tests run `prisma migrate deploy` against a fresh Postgres instance provisioned in CI. Tests that create users, channels, or projects must clean up after themselves or use unique seeds per run. The `auth.ts` fixture provides stable test credentials.
+
+---
+
+## Non-Negotiable Coverage (per CLAUDE.md §8)
+
+These paths must have tests. A PR that removes or weakens them will not be merged.
+
+| Path | Requirement |
+|---|---|
+| `ComplianceService.enforce()` | Must never silently pass a failing check |
+| `PublishingService.publish()` | Must verify `Approval.status === 'APPROVED'` before proceeding |
+| `WalletService` budget enforcement | `hardCap` must actually block — not warn |
+| Auth tenant scoping | User A cannot read or mutate User B's resources |
+| Agent output Zod schema validation | Invalid agent responses must be rejected and retried |
+
+If a change makes any of the above tests fail, the change is wrong — not the test. Never weaken a compliance or security test to make a feature pass.
+
+---
+
+## Bundle Budget
+
+CI enforces a bundle size budget via `scripts/check-bundle-budget.mjs`:
+- Per-route first-load JS: 800 KB maximum.
+- Total bundle: 1500 KB maximum.
+
+---
+
+## Planned / Not Yet Implemented
+
+- Integration tests for the full agent pipeline end-to-end (currently only unit-tested in isolation).
+- Visual regression baseline management workflow (baselines must be regenerated intentionally, not on every run).
+- Load/performance testing suite.
