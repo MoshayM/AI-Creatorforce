@@ -356,9 +356,11 @@ jobs:
         run: |
           node apps/api/dist/main.js &
           up=0
+          # /health is the VERSION_NEUTRAL liveness probe (docs4/39) — /api/docs
+          # is dev-only and 404s under NODE_ENV=production, which made this
+          # loop report a healthy API as dead.
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:4007/api/v1 > /dev/null 2>&1 || \
-               curl -sf http://localhost:4007/api/docs > /dev/null 2>&1; then
+            if curl -sf http://localhost:4007/health > /dev/null 2>&1; then
               echo "API is up"; up=1; break
             fi
             echo "Waiting for API... ($i/30)"
