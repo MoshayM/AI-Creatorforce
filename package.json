@@ -19,17 +19,8 @@
     "prettier": "^3.4.2"
   },
   "engines": {
-    "node": ">=20.0.0",
-    "pnpm": ">=9.0.0"
+    "node": ">=22.13.0",
+    "pnpm": ">=11.0.0"
   },
-  "packageManager": "pnpm@11.9.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@sentry/cli",
-      "@sentry/profiling-node",
-      "bcrypt",
-      "prisma",
-      "@prisma/client"
-    ]
-  }
+  "packageManager": "pnpm@11.9.0"
 }

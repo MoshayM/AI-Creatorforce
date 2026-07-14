@@ -55,6 +55,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # @prisma/client's postinstall only writes a stub — the real client
+      # (UserRole, PricingRule, …) comes from generating against the schema.
+      - name: Generate Prisma client
+        run: pnpm --filter @cf/api exec prisma generate
+
       - name: Build shared packages
         run: pnpm --filter @cf/tsconfig --filter @cf/shared build
 
@@ -78,6 +83,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @cf/api exec prisma generate
 
       - name: Build shared packages
         run: pnpm --filter @cf/tsconfig --filter @cf/shared build
@@ -115,6 +123,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @cf/api exec prisma generate
 
       - name: Build all packages and apps
         run: pnpm build
