@@ -200,6 +200,70 @@ jobs:
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
+  # DAST baseline (docs4/23): spider + passive scan of the production web
+  # build on every PR/push. High-risk findings fail the job (severity gate in
+  # .zap/check-zap-summary.mjs); Medium and below are reported in the artifact.
+  # The web app runs without the API — passive scanning only inspects
+  # responses/headers, so client-side fetch failures don't affect findings.
+  zap-baseline:
+    name: ZAP Baseline (DAST)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SKIP_ENV_VALIDATION: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_API_URL: 'http://localhost:4007/api/v1'
+      NEXT_PUBLIC_USE_MOCK: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web app (with workspace deps)
+        run: pnpm --filter @cf/web... build
+
+      - name: Start web app in background
+        run: |
+          pnpm --filter @cf/web exec next start -p 3007 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3007/login > /dev/null 2>&1; then
+              echo "Web is up"; break
+            fi
+            echo "Waiting for web... ($i/30)"
+            sleep 1
+          done
+
+      - name: Run ZAP baseline scan
+        run: |
+          chmod a+w .zap
+          docker run --network host -v "$PWD/.zap:/zap/wrk" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap.sh -cmd -silent -autorun /zap/wrk/plan.yaml
+
+      - name: Gate on High-risk findings
+        run: node .zap/check-zap-summary.mjs .zap/zap-baseline-web.json
+
+      - name: Upload ZAP report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-baseline-report
+          path: |
+            .zap/zap-baseline-web.md
+            .zap/zap-baseline-web.json
+            .zap/zap-summary.json
+          retention-days: 30
+
   e2e:
     name: E2E Tests (Playwright, ${{ matrix.browser }})
     runs-on: ubuntu-latest

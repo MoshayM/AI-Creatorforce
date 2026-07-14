@@ -1,0 +1,48 @@
+# ZAP Automation Framework plan — baseline passive scan (docs4/23).
+# Spider + passive scan only, no active attacks; mirrors zap-baseline.py.
+# Run in CI via the zaproxy docker image with this directory mounted at /zap/wrk:
+#   docker run --network host -v $PWD/.zap:/zap/wrk ghcr.io/zaproxy/zaproxy:stable \
+#     zap.sh -cmd -autorun /zap/wrk/plan.yaml
+# The High-risk gate lives in .zap/check-zap-summary.mjs (reads zap-summary.json).
+env:
+  contexts:
+    - name: creatorforce-web
+      urls:
+        - http://localhost:3007
+      includePaths:
+        - http://localhost:3007.*
+  parameters:
+    failOnError: false
+    progressToStdout: true
+
+jobs:
+  - type: spider
+    parameters:
+      context: creatorforce-web
+      url: http://localhost:3007
+      maxDuration: 3
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: /zap/wrk
+      reportFile: zap-baseline-web
+      reportTitle: CreatorForce web baseline
+      reportDescription: Passive baseline scan of the web app
+
+  # Machine-readable copy for the severity gate (riskcode 3 = High).
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk
+      reportFile: zap-baseline-web
+      reportTitle: CreatorForce web baseline
+
+  - type: outputSummary
+    parameters:
+      format: Long
+      summaryFile: /zap/wrk/zap-summary.json

@@ -28,3 +28,8 @@ infra/redis/dump.rdb
 
 # yt-dlp source checkout + binary (local tooling, not part of the app)
 yt-dlp/
+
+# Local security tooling (ZAP + JRE) and its scan output
+.tools/
+.zap/zap-baseline-web.*
+.zap/zap-summary.json
