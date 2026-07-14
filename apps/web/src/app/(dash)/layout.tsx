@@ -16,12 +16,8 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
-  { href: '/wallet', icon: Wallet, label: 'Wallet' },
-  { href: '/orgs', icon: Building2, label: 'Organization' },
-  { href: '/growth', icon: Gift, label: 'Growth' },
   { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
   { href: '/approvals', icon: CheckSquare, label: 'Approvals' },
-  { href: '/brand-kit', icon: Palette, label: 'Brand Kit' },
   {
     href: '/settings',
     icon: Settings,
@@ -29,6 +25,10 @@ const NAV: NavItem[] = [
     children: [
       { href: '/library', icon: ListVideo, label: 'Library' },
       { href: '/settings#channels', icon: Youtube, label: 'YouTube channel access' },
+      { href: '/wallet', icon: Wallet, label: 'Wallet' },
+      { href: '/orgs', icon: Building2, label: 'Organization' },
+      { href: '/growth', icon: Gift, label: 'Growth' },
+      { href: '/brand-kit', icon: Palette, label: 'Brand Kit' },
     ],
   },
 ];
