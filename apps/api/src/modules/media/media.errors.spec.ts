@@ -40,6 +40,12 @@ describe('MediaPipelineError subclasses', () => {
     expect(err.code).toBe('SCENE_DETECTION_FAILED');
     expect(err.retryable).toBe(true);
   });
+
+  it('TranscriptionError has retryable=true', () => {
+    const err = new TranscriptionError('audio extraction failed');
+    expect(err.code).toBe('TRANSCRIPTION_FAILED');
+    expect(err.retryable).toBe(true);
+  });
 });
 
 describe('toJobFailure', () => {
