@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, Upload, ShieldCheck, Package, ExternalLink } from 'lucide-react';
-import { api, apiClient } from '@/lib/api';
+import { useQuery, useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
+import { ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, Upload, ShieldCheck, Package, ExternalLink, Lock, Edit2, Send } from 'lucide-react';
+import { api, apiClient, type PublishGrantStatus } from '@/lib/api';
 import { JobErrorCard } from '@/components/job-error-card';
 
 interface RenderStatus {
@@ -21,6 +21,8 @@ interface Thumb {
 
 interface PublishState {
   clipStatus: string;
+  /** Added by the API alongside the existing compliance approval shape. */
+  canPublishDirect?: boolean;
   approval: { id: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED'; expiresAt: string } | null;
   publishJob: { id: string; status: string; error: string | null; errorCode?: string | null; retryable?: boolean; result: { youtubeVideoId?: string; url?: string } | null } | null;
 }
@@ -57,6 +59,119 @@ function ThumbCard({ thumb, onPick }: { thumb: Thumb; onPick: () => void }) {
       {thumb.isPrimary && (
         <span className="absolute top-1.5 right-1.5 bg-brand-600 text-white rounded-full p-1"><Star className="w-3 h-3 fill-current" /></span>
       )}
+    </button>
+  );
+}
+
+// ── No-publish-access panel ───────────────────────────────────────────────────
+
+interface NoPublishAccessPanelProps {
+  shortClipId: string;
+  grantStatus: PublishGrantStatus | null;
+  // @reason: UseMutationResult is the correct type for a mutation result from react-query
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  requestAccess: UseMutationResult<any, unknown, void, unknown>;
+}
+
+function NoPublishAccessPanel({ shortClipId, grantStatus, requestAccess }: NoPublishAccessPanelProps) {
+  const isPending = grantStatus === 'REQUESTED';
+  const isDenied = grantStatus === 'DENIED';
+  // After revocation or without any prior request, user can request again.
+  const canRequest = grantStatus === 'REVOKED' || grantStatus === null;
+
+  return (
+    <div className="space-y-3">
+      {/* Info notice */}
+      <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5">
+        <Lock className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+        <p className="text-sm text-amber-800">
+          Direct publishing to YouTube requires explicit access.
+          Edit or download your clip below, or request access from your admin.
+        </p>
+      </div>
+
+      {/* Alternative actions */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Edit — links back to the clip timeline/editor */}
+        <Link
+          href={`/shorts-studio/clips/${shortClipId}/edit`}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+        >
+          <Edit2 className="w-4 h-4" /> Edit clip
+        </Link>
+
+        {/* Download — triggers the same download() used in the render status card */}
+        <DownloadButton shortClipId={shortClipId} />
+
+        {/* Request-access affordance — three distinct states per spec */}
+        {isPending ? (
+          /* REQUESTED: request in flight, button disabled */
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 text-sm text-gray-500 cursor-default">
+            <Send className="w-4 h-4" /> Request pending
+          </span>
+        ) : isDenied ? (
+          /* DENIED: show message; per spec re-request is not offered here */
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-sm text-red-600 cursor-default">
+            <Lock className="w-4 h-4" /> Request denied — ask your admin
+          </span>
+        ) : canRequest ? (
+          /* null or REVOKED: fresh request allowed */
+          <button
+            onClick={() => requestAccess.mutate()}
+            disabled={requestAccess.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+          >
+            {requestAccess.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Request publish access
+          </button>
+        ) : null}
+      </div>
+
+      {requestAccess.isError && (
+        <p className="text-xs text-red-600">
+          {(requestAccess.error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Request failed — try again.'}
+        </p>
+      )}
+      {requestAccess.isSuccess && (
+        <p className="text-xs text-green-600">Access request sent — your admin will be notified.</p>
+      )}
+    </div>
+  );
+}
+
+// Download button that uses the same blob approach as the render status card
+function DownloadButton({ shortClipId }: { shortClipId: string }) {
+  const { data: status } = useQuery<RenderStatus>({
+    queryKey: ['render-status', shortClipId],
+    queryFn: () => api.shortsStudio.renderStatus(shortClipId).then((r) => r.data as RenderStatus),
+    staleTime: 30_000,
+  });
+  const [downloading, setDownloading] = useState(false);
+
+  const download = async () => {
+    if (!status?.render) return;
+    setDownloading(true);
+    try {
+      const res = await apiClient.get(`/media/versions/${status.render.versionId}/file`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `short-${shortClipId}.mp4`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={() => void download()}
+      disabled={!status?.render || downloading}
+      className="flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 rounded-lg text-sm hover:bg-brand-50 disabled:opacity-50"
+    >
+      {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+      Download MP4
     </button>
   );
 }
@@ -101,10 +216,44 @@ export default function ClipExportPage() {
     },
   });
 
-  const invalidatePub = () => void qc.invalidateQueries({ queryKey: ['publish-state', shortClipId] });
+  // Publish-access gate: prefer the field embedded in publish-status; fall back
+  // to an explicit /publish-access/me call when the field is absent (old API).
+  const pubHasAccessField = pub !== undefined && 'canPublishDirect' in pub;
+  const { data: accessMe } = useQuery({
+    queryKey: ['publish-access-me'],
+    queryFn: () => api.publishAccess.me().then((r) => r.data),
+    // Only hit this endpoint when publish-status does not include the field.
+    enabled: pubHasAccessField ? false : pub !== undefined,
+    staleTime: 30_000,
+  });
+
+  // Resolved: pub.canPublishDirect takes precedence; fallback to /me.
+  const canPublishDirect: boolean = pubHasAccessField
+    ? (pub?.canPublishDirect ?? false)
+    : (accessMe?.canPublishDirect ?? true); // default to true while loading (preserves current UX)
+  const grantStatus: PublishGrantStatus | null = accessMe?.grantStatus ?? null;
+
+  const invalidatePub = () => {
+    void qc.invalidateQueries({ queryKey: ['publish-state', shortClipId] });
+    void qc.invalidateQueries({ queryKey: ['publish-access-me'] });
+  };
   const exportMutation = useMutation({ mutationFn: () => api.shortsStudio.exportClip(shortClipId), onSuccess: invalidatePub });
   const requestPublish = useMutation({ mutationFn: () => api.shortsStudio.requestPublish(shortClipId), onSuccess: invalidatePub });
-  const publishMutation = useMutation({ mutationFn: () => api.shortsStudio.publish(shortClipId), onSuccess: invalidatePub });
+  const publishMutation = useMutation({
+    mutationFn: () => api.shortsStudio.publish(shortClipId),
+    onSuccess: invalidatePub,
+    onError: (err: unknown) => {
+      // 403 mid-session (user lost access) → refresh access state
+      const status403 = (err as { response?: { status?: number } })?.response?.status === 403;
+      if (status403) void qc.invalidateQueries({ queryKey: ['publish-access-me'] });
+    },
+  });
+
+  // "Request access" mutation (POST /publish-access/request)
+  const requestAccess = useMutation({
+    mutationFn: () => api.publishAccess.request(),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['publish-access-me'] }),
+  });
 
   const videoUrl = useBlobUrl(status?.render?.versionId);
   const rendering = status?.clipStatus === 'RENDERING' || status?.renderJob?.status === 'RUNNING' || status?.renderJob?.status === 'CHECKPOINTED';
@@ -184,82 +333,96 @@ export default function ClipExportPage() {
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
             <Upload className="w-4 h-4" /> Publish to YouTube
           </h2>
-          {pub?.publishJob?.result?.youtubeVideoId ? (
-            <div className="flex items-center gap-2 text-sm text-green-700">
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
-              Published!
-              <a
-                href={pub.publishJob.result.url ?? `https://youtube.com/shorts/${pub.publishJob.result.youtubeVideoId}`}
-                target="_blank" rel="noreferrer"
-                className="flex items-center gap-1 text-brand-600 hover:underline"
-              >
-                Watch on YouTube <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          ) : pub?.publishJob && ['PENDING', 'QUEUED', 'RUNNING'].includes(pub.publishJob.status) ? (
-            <p className="flex items-center gap-2 text-sm text-gray-600">
-              <Loader2 className="w-4 h-4 animate-spin text-brand-600" /> Publishing — compliance audit then upload…
-            </p>
-          ) : (
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Step 1: export package */}
-              <button
-                onClick={() => exportMutation.mutate()}
-                disabled={exportMutation.isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                {exportMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
-                {pub?.clipStatus === 'RENDERED' ? '1. Build export package' : 'Re-export package'}
-              </button>
-              {/* Step 2: approval */}
-              {pub?.approval?.status === 'APPROVED' ? (
-                <span className="flex items-center gap-1 text-sm text-green-600"><ShieldCheck className="w-4 h-4" /> Approved</span>
-              ) : pub?.approval?.status === 'PENDING' ? (
-                <Link href="/approvals" className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-sm hover:bg-amber-200">
-                  <ShieldCheck className="w-4 h-4" /> 2. Awaiting review — open Approvals
-                </Link>
+
+          {/* ── User has direct publish access ── */}
+          {canPublishDirect ? (
+            <>
+              {pub?.publishJob?.result?.youtubeVideoId ? (
+                <div className="flex items-center gap-2 text-sm text-green-700">
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  Published!
+                  <a
+                    href={pub.publishJob.result.url ?? `https://youtube.com/shorts/${pub.publishJob.result.youtubeVideoId}`}
+                    target="_blank" rel="noreferrer"
+                    className="flex items-center gap-1 text-brand-600 hover:underline"
+                  >
+                    Watch on YouTube <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              ) : pub?.publishJob && ['PENDING', 'QUEUED', 'RUNNING'].includes(pub.publishJob.status) ? (
+                <p className="flex items-center gap-2 text-sm text-gray-600">
+                  <Loader2 className="w-4 h-4 animate-spin text-brand-600" /> Publishing — compliance audit then upload…
+                </p>
               ) : (
-                <button
-                  onClick={() => requestPublish.mutate()}
-                  disabled={requestPublish.isPending || !['EXPORTED', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED'].includes(pub?.clipStatus ?? '')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {requestPublish.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  2. Request approval
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Step 1: export package */}
+                  <button
+                    onClick={() => exportMutation.mutate()}
+                    disabled={exportMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {exportMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
+                    {pub?.clipStatus === 'RENDERED' ? '1. Build export package' : 'Re-export package'}
+                  </button>
+                  {/* Step 2: approval */}
+                  {pub?.approval?.status === 'APPROVED' ? (
+                    <span className="flex items-center gap-1 text-sm text-green-600"><ShieldCheck className="w-4 h-4" /> Approved</span>
+                  ) : pub?.approval?.status === 'PENDING' ? (
+                    <Link href="/approvals" className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-sm hover:bg-amber-200">
+                      <ShieldCheck className="w-4 h-4" /> 2. Awaiting review — open Approvals
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => requestPublish.mutate()}
+                      disabled={requestPublish.isPending || !['EXPORTED', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED'].includes(pub?.clipStatus ?? '')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {requestPublish.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                      2. Request approval
+                    </button>
+                  )}
+                  {/* Step 3: publish */}
+                  <button
+                    onClick={() => publishMutation.mutate()}
+                    disabled={publishMutation.isPending || pub?.approval?.status !== 'APPROVED'}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+                  >
+                    {publishMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    3. Publish
+                  </button>
+                </div>
               )}
-              {/* Step 3: publish */}
-              <button
-                onClick={() => publishMutation.mutate()}
-                disabled={publishMutation.isPending || pub?.approval?.status !== 'APPROVED'}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
-              >
-                {publishMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                3. Publish
-              </button>
-            </div>
-          )}
-          {pub?.publishJob?.status === 'FAILED' && (
-            <JobErrorCard
-              error={pub.publishJob.error}
-              errorCode={pub.publishJob.errorCode}
-              retryable={pub.publishJob.retryable}
-              onRetry={() => publishMutation.mutate()}
-              className="mt-2"
+              {pub?.publishJob?.status === 'FAILED' && (
+                <JobErrorCard
+                  error={pub.publishJob.error}
+                  errorCode={pub.publishJob.errorCode}
+                  retryable={pub.publishJob.retryable}
+                  onRetry={() => publishMutation.mutate()}
+                  className="mt-2"
+                />
+              )}
+              {(publishMutation.isError || requestPublish.isError || exportMutation.isError) && (
+                <JobErrorCard
+                  error={((publishMutation.error ?? requestPublish.error ?? exportMutation.error) as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Action failed'}
+                  errorCode="JOB_FAILED"
+                  onRetry={
+                    exportMutation.isError ? () => exportMutation.mutate()
+                    : requestPublish.isError ? () => requestPublish.mutate()
+                    : () => publishMutation.mutate()
+                  }
+                  className="mt-2"
+                />
+              )}
+            </>
+          ) : (
+            /* ── User does NOT have direct publish access ── */
+            <NoPublishAccessPanel
+              shortClipId={shortClipId}
+              grantStatus={grantStatus}
+              requestAccess={requestAccess}
             />
           )}
-          {(publishMutation.isError || requestPublish.isError || exportMutation.isError) && (
-            <JobErrorCard
-              error={((publishMutation.error ?? requestPublish.error ?? exportMutation.error) as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Action failed'}
-              errorCode="JOB_FAILED"
-              onRetry={
-                exportMutation.isError ? () => exportMutation.mutate()
-                : requestPublish.isError ? () => requestPublish.mutate()
-                : () => publishMutation.mutate()
-              }
-              className="mt-2"
-            />
-          )}
+
           <p className="text-[11px] text-gray-500 mt-2">
             Publishing runs a compliance audit and requires human approval — no clip is uploaded without both.
           </p>

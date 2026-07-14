@@ -19,6 +19,7 @@ import { ChapterSyncService } from './chapter-sync.service';
 import { SocialContentService } from './social-content.service';
 import { QuoteCardRenderService } from './quote-card-render.service';
 import { JobsService } from '../jobs/jobs.service';
+import { PublishAccessService } from '../publish-access/publish-access.service';
 
 class ImportVideoDto {
   /** Channel-first flow (library import). Exactly one of channelId/projectId is required. */
@@ -64,6 +65,7 @@ export class ShortsStudioController {
     private readonly social: SocialContentService,
     private readonly quoteCards: QuoteCardRenderService,
     private readonly jobs: JobsService,
+    private readonly publishAccess: PublishAccessService,
   ) {}
 
   // ── Import (18.1) ───────────────────────────────────────────────────────────
@@ -374,6 +376,7 @@ export class ShortsStudioController {
 
   @Post('clips/:shortClipId/publish')
   async publish(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+    await this.publishAccess.assertCanPublishDirect(user.sub, user.role);
     const clip = await this.shorts.assertClipOwnership(shortClipId, user.sub);
     // Approval is validated here AND re-validated inside the publish job/connector
     const { approvalId, exportId } = await this.exports.assertPublishable(shortClipId);
@@ -383,6 +386,10 @@ export class ShortsStudioController {
   @Get('clips/:shortClipId/publish-status')
   async publishStatus(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
     await this.shorts.assertClipOwnership(shortClipId, user.sub);
-    return this.exports.publishState(shortClipId);
+    const [publishState, accessStatus] = await Promise.all([
+      this.exports.publishState(shortClipId),
+      this.publishAccess.myStatus(user.sub, user.role),
+    ]);
+    return { ...publishState, canPublishDirect: accessStatus.canPublishDirect };
   }
 }

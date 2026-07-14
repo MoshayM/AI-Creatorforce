@@ -408,6 +408,26 @@ export interface AuthSession {
   current: boolean;
 }
 
+// ── Publish-access types ──────────────────────────────────────────────────────
+
+export type PublishGrantStatus = 'REQUESTED' | 'GRANTED' | 'DENIED' | 'REVOKED';
+
+export interface PublishAccessMe {
+  canPublishDirect: boolean;
+  viaRole: boolean;
+  grantStatus: PublishGrantStatus | null;
+}
+
+export interface PublishAccessRequest {
+  id: string;
+  userId: string;
+  status: PublishGrantStatus;
+  note: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
+  user: { id: string; email: string; name: string | null; role: string };
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -695,6 +715,14 @@ export const api = {
       apiClient.post(`/notifications/${id}/read`),
     markAllRead: () =>
       apiClient.post('/notifications/read-all'),
+  },
+  publishAccess: {
+    me: () => apiClient.get<PublishAccessMe>('/publish-access/me'),
+    request: () => apiClient.post('/publish-access/request'),
+    listRequests: () => apiClient.get<PublishAccessRequest[]>('/publish-access/requests'),
+    approve: (userId: string) => apiClient.post(`/publish-access/requests/${userId}/approve`),
+    deny: (userId: string) => apiClient.post(`/publish-access/requests/${userId}/deny`),
+    revoke: (userId: string) => apiClient.post(`/publish-access/grants/${userId}/revoke`),
   },
   admin: {
     enterpriseMetrics: () => apiClient.get<EnterpriseMetrics>('/admin/analytics/enterprise'),

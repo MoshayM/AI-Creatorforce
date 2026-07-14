@@ -48,6 +48,7 @@ model User {
   notifications    Notification[]
   developerKeys    DeveloperKey[]
   developerWebhooks DeveloperWebhook[]
+  publishAccessGrant PublishAccessGrant?
 
   @@map("users")
 }
@@ -1940,4 +1941,29 @@ model DeveloperWebhookDelivery {
 
   @@index([status, nextAttemptAt])
   @@map("developer_webhook_deliveries")
+}
+
+// ── Publish Access ─────────────────────────────────────────────────────────────
+
+enum PublishAccessStatus {
+  REQUESTED
+  GRANTED
+  DENIED
+  REVOKED
+}
+
+model PublishAccessGrant {
+  id          String              @id @default(cuid())
+  userId      String              @unique
+  status      PublishAccessStatus
+  note        String?
+  requestedAt DateTime            @default(now())
+  decidedAt   DateTime?
+  decidedById String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("publish_access_grants")
 }

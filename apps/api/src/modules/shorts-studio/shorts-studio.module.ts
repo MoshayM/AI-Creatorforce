@@ -6,6 +6,7 @@ import { MediaModule } from '../media/media.module';
 import { ApprovalsModule } from '../approvals/approvals.module';
 import { ComplianceModule } from '../compliance/compliance.module';
 import { PublishingModule } from '../publishing/publishing.module';
+import { PublishAccessModule } from '../publish-access/publish-access.module';
 import { ShortsStudioService } from './shorts-studio.service';
 import { ShortsStudioController } from './shorts-studio.controller';
 import { YouTubeReadService } from './youtube-read.service';
@@ -34,7 +35,7 @@ import { ThumbnailGenerationService } from './thumbnail-generation.service';
 import { ShortsExportService } from './shorts-export.service';
 
 @Module({
-  imports: [ChannelsModule, JobsModule, MediaModule, ApprovalsModule, ComplianceModule, PublishingModule, WalletModule],
+  imports: [ChannelsModule, JobsModule, MediaModule, ApprovalsModule, ComplianceModule, PublishingModule, WalletModule, PublishAccessModule],
   controllers: [ShortsStudioController],
   providers: [
     ShortsStudioService,
