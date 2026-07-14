@@ -50,6 +50,31 @@ export function escapeFilterPath(p: string): string {
 }
 
 /**
+ * Stream/container info for a media file, as ffmpeg's `-i` banner text.
+ * `ffmpeg -i` without an output exits nonzero by design — the exit code is
+ * ignored; the stream description on stderr is the result.
+ */
+export function probeMediaInfo(inputPath: string): Promise<string> {
+  const bin = ffmpegPath();
+  if (!bin) return Promise.resolve('');
+  return new Promise((resolve) => {
+    execFile(bin, ['-hide_banner', '-i', inputPath], { timeout: 30_000, maxBuffer: 1024 * 1024 }, (_err, stdout, stderr) => {
+      resolve(`${stdout ?? ''}\n${stderr ?? ''}`);
+    });
+  });
+}
+
+/**
+ * True when the probe text describes an AV1 video stream. The bundled
+ * ffmpeg-static has no dav1d, so AV1 decodes through libaom at a small
+ * fraction of realtime — long AV1 sources must be re-acquired as H.264
+ * before frame-decoding stages (scene detection, clip rendering).
+ */
+export function isAv1Info(probeText: string): boolean {
+  return /Stream #.*Video:\s*av1\b/i.test(probeText);
+}
+
+/**
  * Run ffmpeg reporting REAL progress (master prompt §3.5): percent is derived
  * from the `time=` marker ffmpeg writes while encoding, against the known
  * output duration — seconds encoded / seconds total, never a timer.

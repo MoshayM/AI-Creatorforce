@@ -6,11 +6,21 @@ import * as os from 'os';
 import { createHash } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../media/storage.service';
-import { ffmpegPath } from '../media/adapters/ffmpeg.util';
+import { ffmpegPath, probeMediaInfo, isAv1Info } from '../media/adapters/ffmpeg.util';
 import { YouTubeReadService, parseSrt, type TranscriptCueDTO } from './youtube-read.service';
 
 /** Title marking the auto-created per-channel container project for channel-first imports. */
 export const SHORTS_CONTAINER_PROJECT_TITLE = 'Shorts Studio';
+
+/**
+ * H.264 (avc1) first: the bundled ffmpeg has no dav1d, so AV1 decodes through
+ * libaom at a fraction of realtime — a 90-minute AV1 source blew the 30-minute
+ * scene-detection timeout. YouTube serves avc1 renditions up to 1080p for
+ * essentially every video, so the first branch nearly always matches.
+ */
+const YTDLP_FORMAT = 'bv*[vcodec^=avc1][height<=1080]+ba[ext=m4a]/bv*[ext=mp4][height<=1080]+ba[ext=m4a]/b[ext=mp4]/b';
+/** Strict variant for re-acquiring an existing AV1 source: H.264 or nothing. */
+const YTDLP_FORMAT_H264_ONLY = 'bv*[vcodec^=avc1][height<=1080]+ba[ext=m4a]/b[vcodec^=avc1]';
 
 /**
  * VIDEO_IMPORT stage (ai.md Section 3): creates/refreshes the ImportedVideo
@@ -157,8 +167,20 @@ export class VideoImportService {
     });
     if (!video) throw new NotFoundException('Imported video not found');
 
-    const existingKey = video.sourceAsset?.versions[0]?.r2Key;
-    if (existingKey && this.storage.exists(existingKey)) {
+    const sourceAsset = video.sourceAsset;
+    const existingKey = sourceAsset?.versions[0]?.r2Key;
+    if (sourceAsset && existingKey && this.storage.exists(existingKey)) {
+      // Pre-fix imports may hold an AV1 source (see YTDLP_FORMAT) — decoding
+      // stages can't finish on those, so re-acquire an H.264 rendition as a
+      // new version of the same asset. Failure keeps the AV1 source usable.
+      if (isAv1Info(await probeMediaInfo(this.storage.resolve(existingKey)))) {
+        onLog?.('Existing source is AV1 (very slow to decode) — re-acquiring H.264 rendition…');
+        try {
+          return await this.reacquireAsH264(sourceAsset.id, video.projectId, video.youtubeVideoId, video.durationMs, onLog);
+        } catch (err) {
+          this.logger.warn(`H.264 re-acquire failed for ${video.youtubeVideoId}, keeping AV1 source: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       onLog?.('Source video already downloaded — reusing existing asset');
       return { skipped: true, assetId: video.sourceAssetId, key: existingKey };
     }
@@ -207,6 +229,62 @@ export class VideoImportService {
       });
       onLog?.(`Source video stored (${Math.round(sizeBytes / 1024 / 1024)} MB)`);
       return { skipped: false, assetId: asset.id, key };
+    } finally {
+      await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Download the H.264 rendition of a video whose stored source is AV1 and
+   * attach it as the next version of the same asset (write-once history:
+   * the AV1 version stays). Downstream stages resolve the latest version.
+   */
+  private async reacquireAsH264(
+    assetId: string,
+    projectId: string,
+    youtubeVideoId: string,
+    durationMs: number,
+    onLog?: (msg: string) => void,
+  ) {
+    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cf-shorts-h264-'));
+    const tmpOut = path.join(tmpDir, 'source.mp4');
+    try {
+      await this.runYtDlp(youtubeVideoId, tmpOut, YTDLP_FORMAT_H264_ONLY);
+      const stat = await fsp.stat(tmpOut);
+      if (stat.size === 0) throw new Error('Downloaded file is empty');
+      if (isAv1Info(await probeMediaInfo(tmpOut))) throw new Error('H.264 rendition unavailable (got AV1 again)');
+
+      const latest = await this.prisma.assetVersion.findFirst({
+        where: { assetId },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+      const nextVersion = (latest?.version ?? 0) + 1;
+      const key = `assets/${projectId}/${assetId}/v${nextVersion}/source.mp4`;
+      const { absPath, sizeBytes } = await this.storage.copyIn(key, tmpOut);
+      const contentHash = createHash('sha256')
+        .update(await fsp.readFile(absPath))
+        .digest('hex');
+      const version = await this.prisma.assetVersion.create({
+        data: {
+          assetId,
+          version: nextVersion,
+          r2Key: key,
+          contentHash,
+          provider: 'yt-dlp',
+          sizeBytes: BigInt(sizeBytes),
+          durationMs,
+          provenance: {
+            source: 'youtube',
+            youtubeVideoId,
+            importedAt: new Date().toISOString(),
+            reacquired: 'h264 (AV1 source too slow to decode)',
+          } as never,
+        },
+      });
+      await this.prisma.asset.update({ where: { id: assetId }, data: { currentVersionId: version.id } });
+      onLog?.(`H.264 source stored (${Math.round(sizeBytes / 1024 / 1024)} MB)`);
+      return { skipped: false, assetId, key };
     } finally {
       await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
     }
@@ -282,14 +360,14 @@ export class VideoImportService {
     }
   }
 
-  private runYtDlp(youtubeVideoId: string, outPath: string): Promise<void> {
+  private runYtDlp(youtubeVideoId: string, outPath: string, format: string = YTDLP_FORMAT): Promise<void> {
     const bin = this.ytDlpBin();
     // yt-dlp needs ffmpeg to merge separate video+audio streams; hand it the
     // bundled ffmpeg-static binary so it doesn't depend on PATH.
     const ffmpeg = ffmpegPath();
     const args = [
       `https://www.youtube.com/watch?v=${youtubeVideoId}`,
-      '-f', 'bv*[ext=mp4][height<=1080]+ba[ext=m4a]/b[ext=mp4]/b',
+      '-f', format,
       '--merge-output-format', 'mp4',
       '--no-playlist',
       ...this.jsRuntimeArgs(),
