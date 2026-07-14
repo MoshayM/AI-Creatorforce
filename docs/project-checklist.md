@@ -4,7 +4,7 @@
 > spec's acceptance criteria with live status and evidence. Companion to
 > [risk-register.md](risk-register.md) — blocked items reference its rows.
 > Update on every wave that closes or regresses a criterion.
-> Last updated: 2026-07-14 (Wave 34).
+> Last updated: 2026-07-14 (Wave 35).
 
 **Legend** — ✅ done · ◐ partial (gap noted) · ⛔ blocked (external/infra; see risk register) · ▫ deferred by design
 
@@ -51,6 +51,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 - ✅ Non-destructive modes, multi-track timeline, versions + comparison + revert, undo/redo
 - ✅ Section-scoped regeneration; ✅ estimates on AI edits
 - ✅ Shorts: from-scratch + from-video, overridable highlights, safe zones/hook/captions, 9:16 + duration enforcement
+- ✅ Channel-first import: Shorts Studio selects a channel (not a project) and imports from the synced library (searchable, cursor-paginated) — metadata reused from `LibraryVideo` with live-YouTube fallback; imports land in an auto-created per-channel container project and dedupe across the channel's projects (`importFromChannel` + 6 unit tests, Wave 35)
 
 ### 09 Asset Management
 - ✅ Channel-scoped, version-traceable assets; ✅ upload validation (validation engine)

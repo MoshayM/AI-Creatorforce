@@ -21,7 +21,10 @@ import { QuoteCardRenderService } from './quote-card-render.service';
 import { JobsService } from '../jobs/jobs.service';
 
 class ImportVideoDto {
-  @IsString() projectId!: string;
+  /** Channel-first flow (library import). Exactly one of channelId/projectId is required. */
+  @IsOptional() @IsString() channelId?: string;
+  /** Legacy project-scoped flow, kept for API compatibility. */
+  @IsOptional() @IsString() projectId?: string;
   @IsString() youtubeVideoId!: string;
 }
 
@@ -83,13 +86,21 @@ export class ShortsStudioController {
 
   @Post('videos/import')
   async importVideo(@Body() dto: ImportVideoDto, @CurrentUser() user: JwtPayload) {
-    return this.videoImport.importVideo(user.sub, dto.projectId, dto.youtubeVideoId);
+    if (dto.channelId) return this.videoImport.importFromChannel(user.sub, dto.channelId, dto.youtubeVideoId);
+    if (dto.projectId) return this.videoImport.importVideo(user.sub, dto.projectId, dto.youtubeVideoId);
+    throw new BadRequestException('Provide channelId or projectId');
   }
 
   @Get('projects/:projectId/videos')
   async listImported(@Param('projectId') projectId: string, @CurrentUser() user: JwtPayload) {
     await this.shorts.assertProjectOwnership(projectId, user.sub);
     return this.shorts.listImportedVideos(projectId);
+  }
+
+  @Get('channels/:channelId/imported')
+  async listImportedByChannel(@Param('channelId') channelId: string, @CurrentUser() user: JwtPayload) {
+    await this.shorts.assertChannelOwnership(channelId, user.sub);
+    return this.shorts.listImportedVideosByChannel(channelId);
   }
 
   // ── Analyze (18.2) ──────────────────────────────────────────────────────────

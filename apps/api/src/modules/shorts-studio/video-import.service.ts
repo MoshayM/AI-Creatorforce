@@ -9,6 +9,9 @@ import { StorageService } from '../media/storage.service';
 import { ffmpegPath } from '../media/adapters/ffmpeg.util';
 import { YouTubeReadService, parseSrt, type TranscriptCueDTO } from './youtube-read.service';
 
+/** Title marking the auto-created per-channel container project for channel-first imports. */
+export const SHORTS_CONTAINER_PROJECT_TITLE = 'Shorts Studio';
+
 /**
  * VIDEO_IMPORT stage (ai.md Section 3): creates/refreshes the ImportedVideo
  * row from YouTube metadata and materialises the source media file as a
@@ -55,6 +58,91 @@ export class VideoImportService {
       where: { projectId_youtubeVideoId: { projectId, youtubeVideoId } },
       create: { projectId, youtubeVideoId, ...data },
       update: data,
+    });
+  }
+
+  /**
+   * Channel-first import (library flow): metadata comes from the synced
+   * LibraryVideo row when available (no YouTube API call), falling back to
+   * live metadata. Rows land in an auto-created per-channel container
+   * project so Shorts Studio needs no project selection.
+   */
+  async importFromChannel(userId: string, channelId: string, youtubeVideoId: string) {
+    const channel = await this.prisma.channel.findFirst({
+      where: { id: channelId, userId },
+      select: { id: true, title: true },
+    });
+    if (!channel) throw new NotFoundException('Channel not found');
+
+    const lib = await this.prisma.libraryVideo.findUnique({
+      where: { channelId_youtubeVideoId: { channelId, youtubeVideoId } },
+    });
+    let data: {
+      title: string;
+      description: string | null;
+      durationMs: number;
+      thumbnailUrl: string | null;
+      viewCount: bigint | null;
+      likeCount: bigint | null;
+      commentCount: bigint | null;
+    };
+    if (lib && lib.durationMs > 0) {
+      data = {
+        title: lib.title,
+        description: lib.description,
+        durationMs: lib.durationMs,
+        thumbnailUrl: lib.thumbnailUrl,
+        viewCount: lib.viewCount != null ? BigInt(lib.viewCount) : null,
+        likeCount: lib.likeCount != null ? BigInt(lib.likeCount) : null,
+        commentCount: lib.commentCount != null ? BigInt(lib.commentCount) : null,
+      };
+    } else {
+      const meta = await this.youtubeRead.getVideoMetadata(channelId, youtubeVideoId);
+      if (meta.durationMs <= 0) {
+        throw new BadRequestException('Could not determine video duration — is this a live stream or premiere?');
+      }
+      data = {
+        title: meta.title,
+        description: meta.description,
+        durationMs: Math.round(meta.durationMs),
+        thumbnailUrl: meta.thumbnailUrl,
+        viewCount: meta.viewCount != null ? BigInt(meta.viewCount) : null,
+        likeCount: meta.likeCount != null ? BigInt(meta.likeCount) : null,
+        commentCount: meta.commentCount != null ? BigInt(meta.commentCount) : null,
+      };
+    }
+
+    // A video already imported into any of the channel's projects is the same
+    // video in the channel-first view — refresh it instead of duplicating.
+    const existing = await this.prisma.importedVideo.findFirst({
+      where: { youtubeVideoId, project: { channelId, userId } },
+      select: { id: true },
+    });
+    if (existing) {
+      return this.prisma.importedVideo.update({ where: { id: existing.id }, data });
+    }
+
+    const project = await this.resolveShortsProject(userId, channelId, channel.title);
+    return this.prisma.importedVideo.create({
+      data: { projectId: project.id, youtubeVideoId, ...data },
+    });
+  }
+
+  /** Find or create the channel's Shorts Studio container project. */
+  private async resolveShortsProject(userId: string, channelId: string, channelTitle: string) {
+    const existing = await this.prisma.project.findFirst({
+      where: { userId, channelId, title: SHORTS_CONTAINER_PROJECT_TITLE },
+      select: { id: true },
+    });
+    if (existing) return existing;
+    return this.prisma.project.create({
+      data: {
+        userId,
+        channelId,
+        title: SHORTS_CONTAINER_PROJECT_TITLE,
+        description: `Auto-created container for Shorts Studio imports on ${channelTitle}`,
+      },
+      select: { id: true },
     });
   }
 

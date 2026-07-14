@@ -52,6 +52,17 @@ export class ShortsStudioService {
     });
   }
 
+  /** Channel-first view: every import across the channel's projects. */
+  async listImportedVideosByChannel(channelId: string) {
+    return this.prisma.importedVideo.findMany({
+      where: { project: { channelId } },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: { select: { transcriptSegments: true, scenes: true, topicSegments: true } },
+      },
+    });
+  }
+
   /** Enqueue the shorts-import pipeline root job (ai.md Section 3.2). */
   async enqueueAnalysis(importedVideoId: string, userId: string) {
     const video = await this.assertVideoOwnership(importedVideoId, userId);

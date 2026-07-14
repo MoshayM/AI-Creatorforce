@@ -1,25 +1,13 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clapperboard, Loader2, Download, Wand2, CheckCircle2, XCircle, Clock, Film, Captions, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
-import { api } from '@/lib/api';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Clapperboard, Loader2, Download, Wand2, CheckCircle2, XCircle, Clock, Film, Captions, Sparkles, ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { api, type LibraryVideosPage } from '@/lib/api';
 
-interface Project {
+interface Channel {
   id: string;
   title: string;
-  channelId: string;
-  channel: { title: string };
-}
-
-interface ChannelVideo {
-  youtubeVideoId: string;
-  title: string;
-  description: string | null;
-  durationMs: number;
-  thumbnailUrl: string | null;
-  viewCount: number | null;
-  publishedAt: string | null;
 }
 
 interface ImportedVideo {
@@ -39,6 +27,8 @@ interface AnalysisStatus {
   pipeline: { status: string; error: string | null } | null;
   stages: Array<{ type: string; satisfied: boolean; job: { status: string; error: string | null } | null }>;
 }
+
+const CHANNEL_LS_KEY = 'cf.shorts.channelId';
 
 function fmtDuration(ms: number): string {
   const s = Math.round(ms / 1000);
@@ -117,44 +107,68 @@ function AnalysisProgress({ importedVideoId }: { importedVideoId: string }) {
 
 export default function ShortsStudioPage() {
   const qc = useQueryClient();
-  const [projectId, setProjectId] = useState('');
+  const [channelId, setChannelId] = useState('');
   // Imported videos accordion: section bar + per-video expansion (matches
   // the Approvals history / Recent Jobs pattern)
   const [importedOpen, setImportedOpen] = useState(true);
   const [openVideoIds, setOpenVideoIds] = useState<Set<string>>(new Set());
-  const [channelOpen, setChannelOpen] = useState(true);
-  const [openChannelIds, setOpenChannelIds] = useState<Set<string>>(new Set());
+  const [libraryOpen, setLibraryOpen] = useState(true);
+  const [libraryQuery, setLibraryQuery] = useState('');
 
-  const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ['projects'],
-    queryFn: () => api.projects.list().then((r) => (r.data as { data: Project[] }).data),
+  const { data: channels = [] } = useQuery<Channel[]>({
+    queryKey: ['channels'],
+    queryFn: () => api.channels.list().then((r) => r.data as Channel[]),
   });
-  const project = projects.find((p) => p.id === projectId) ?? null;
 
-  const { data: channelVideos, isLoading: loadingChannel, error: channelError } = useQuery<{ items: ChannelVideo[] }>({
-    queryKey: ['shorts-channel-videos', project?.channelId],
-    queryFn: () => api.shortsStudio.listChannelVideos(project!.channelId).then((r) => r.data as { items: ChannelVideo[] }),
-    enabled: !!project,
-    retry: false,
-  });
+  // Restore last channel, else auto-select the first one
+  useEffect(() => {
+    if (channelId || channels.length === 0) return;
+    const stored = typeof window !== 'undefined' ? localStorage.getItem(CHANNEL_LS_KEY) : null;
+    const restored = stored && channels.some((c) => c.id === stored) ? stored : channels[0]!.id;
+    setChannelId(restored);
+  }, [channelId, channels]);
+
+  const selectChannel = (id: string) => {
+    setChannelId(id);
+    if (id) localStorage.setItem(CHANNEL_LS_KEY, id);
+  };
 
   const { data: imported = [] } = useQuery<ImportedVideo[]>({
-    queryKey: ['shorts-imported', projectId],
-    queryFn: () => api.shortsStudio.listImported(projectId).then((r) => r.data as ImportedVideo[]),
-    enabled: !!projectId,
+    queryKey: ['shorts-imported', channelId],
+    queryFn: () => api.shortsStudio.listImported(channelId).then((r) => r.data as ImportedVideo[]),
+    enabled: !!channelId,
   });
   const importedIds = new Set(imported.map((v) => v.youtubeVideoId));
 
+  const {
+    data: libraryData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: loadingLibrary,
+    error: libraryError,
+  } = useInfiniteQuery({
+    queryKey: ['shorts-library-videos', channelId, libraryQuery],
+    queryFn: ({ pageParam }) =>
+      api.library
+        .listVideos(channelId, { cursor: pageParam as string | undefined, q: libraryQuery || undefined })
+        .then((r) => r.data as LibraryVideosPage),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: !!channelId,
+  });
+  const libraryVideos = libraryData?.pages.flatMap((p) => p.data) ?? [];
+
   const importMutation = useMutation({
-    mutationFn: (youtubeVideoId: string) => api.shortsStudio.importVideo(projectId, youtubeVideoId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['shorts-imported', projectId] }),
+    mutationFn: (youtubeVideoId: string) => api.shortsStudio.importVideo(channelId, youtubeVideoId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['shorts-imported', channelId] }),
   });
 
   const analyzeMutation = useMutation({
     mutationFn: (importedVideoId: string) => api.shortsStudio.analyze(importedVideoId),
     onSuccess: (_res, importedVideoId) => {
       void qc.invalidateQueries({ queryKey: ['shorts-analysis', importedVideoId] });
-      void qc.invalidateQueries({ queryKey: ['shorts-imported', projectId] });
+      void qc.invalidateQueries({ queryKey: ['shorts-imported', channelId] });
     },
   });
 
@@ -168,25 +182,26 @@ export default function ShortsStudioPage() {
           <p className="text-gray-500 mt-1">Turn a long-form video into publish-ready vertical Shorts</p>
         </div>
         <select
-          value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
+          value={channelId}
+          onChange={(e) => selectChannel(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+          aria-label="Channel"
         >
-          <option value="">Select a project…</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.title} — {p.channel?.title}</option>
+          <option value="">Select a channel…</option>
+          {channels.map((c) => (
+            <option key={c.id} value={c.id}>{c.title}</option>
           ))}
         </select>
       </div>
 
-      {!projectId && (
+      {!channelId && (
         <div className="text-center py-20 text-gray-500">
           <Clapperboard className="w-10 h-10 mx-auto mb-3 opacity-40" />
-          Pick a project above to browse its channel&apos;s videos.
+          Pick a channel above to import videos from its library.
         </div>
       )}
 
-      {projectId && (
+      {channelId && (
         <>
           {/* Imported videos: section bar + per-video click-to-expand rows */}
           {imported.length > 0 && (
@@ -279,98 +294,87 @@ export default function ShortsStudioPage() {
             </section>
           )}
 
-          {/* Channel library: section bar + per-video click-to-expand rows */}
+          {/* Import from library: searchable list of the channel's synced videos */}
           <section>
             <div
-              onClick={() => setChannelOpen((o) => !o)}
+              onClick={() => setLibraryOpen((o) => !o)}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setChannelOpen((o) => !o); } }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLibraryOpen((o) => !o); } }}
               className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors shadow-sm"
             >
-              {channelOpen ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
-              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Channel videos</h2>
-              {(channelVideos?.items?.length ?? 0) > 0 && (
-                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium">{channelVideos!.items.length}</span>
-              )}
-              {channelOpen && (channelVideos?.items?.length ?? 0) > 0 && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const all = channelVideos!.items.map((v) => v.youtubeVideoId);
-                    setOpenChannelIds((prev) => prev.size === all.length ? new Set() : new Set(all));
-                  }}
-                  className="ml-auto text-xs text-brand-600 hover:underline"
-                >
-                  {openChannelIds.size === (channelVideos?.items?.length ?? 0) ? 'Collapse all' : 'Expand all'}
-                </button>
+              {libraryOpen ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
+              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Import from library</h2>
+              {libraryVideos.length > 0 && (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium">
+                  {libraryVideos.length}{hasNextPage ? '+' : ''}
+                </span>
               )}
             </div>
-            {channelOpen && (
+            {libraryOpen && (
               <div className="mt-2 space-y-2">
-                {loadingChannel && (
+                <div className="relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="search"
+                    value={libraryQuery}
+                    onChange={(e) => setLibraryQuery(e.target.value)}
+                    placeholder="Search library videos…"
+                    aria-label="Search library videos"
+                    className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm bg-white"
+                  />
+                </div>
+                {loadingLibrary && (
                   <div className="flex items-center gap-2 text-gray-500 py-10 justify-center">
-                    <Loader2 className="w-5 h-5 animate-spin" /> Loading channel videos…
+                    <Loader2 className="w-5 h-5 animate-spin" /> Loading library…
                   </div>
                 )}
-                {!!channelError && (
+                {!!libraryError && (
                   <div className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-xl p-4">
-                    Could not load channel videos — {(channelError as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'check that the channel is connected with YouTube access.'}
+                    Could not load the library — {(libraryError as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'run a channel sync from the Library page first.'}
                   </div>
                 )}
-                {(channelVideos?.items ?? []).map((v) => {
-                  const open = openChannelIds.has(v.youtubeVideoId);
+                {!loadingLibrary && !libraryError && libraryVideos.length === 0 && (
+                  <div className="text-center py-10 text-gray-500 text-sm">
+                    {libraryQuery ? 'No library videos match your search.' : 'No videos in the library yet — sync this channel from the Library page.'}
+                  </div>
+                )}
+                {libraryVideos.map((v) => {
                   const alreadyImported = importedIds.has(v.youtubeVideoId);
-                  const toggle = () => setOpenChannelIds((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(v.youtubeVideoId)) next.delete(v.youtubeVideoId); else next.add(v.youtubeVideoId);
-                    return next;
-                  });
                   return (
-                    <div key={v.youtubeVideoId} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
-                      <div
-                        onClick={toggle}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
-                        className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors"
-                      >
-                        {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
+                    <div key={v.id} className="bg-white border border-gray-100 rounded-xl shadow-sm">
+                      <div className="flex items-center gap-3 px-4 py-2.5">
                         {v.thumbnailUrl && (
                           <img src={v.thumbnailUrl} alt="" className="w-16 h-9 object-cover rounded-md shrink-0" />
                         )}
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-900 truncate">{v.title}</p>
-                          <p className="text-[11px] text-gray-500">{fmtDuration(v.durationMs)} · {fmtViews(v.viewCount)}</p>
+                          <p className="text-[11px] text-gray-500">
+                            {fmtDuration(v.durationMs)} · {fmtViews(v.viewCount)}
+                            {v.kind === 'short' && <span className="ml-2 px-1.5 py-0.5 bg-brand-50 text-brand-700 rounded-full font-medium">Short</span>}
+                          </p>
                         </div>
-                        {alreadyImported && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
+                        <button
+                          onClick={() => importMutation.mutate(v.youtubeVideoId)}
+                          disabled={alreadyImported || importMutation.isPending}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40 shrink-0"
+                        >
+                          {alreadyImported ? <CheckCircle2 className="w-4 h-4" /> : importMutation.isPending && importMutation.variables === v.youtubeVideoId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                          {alreadyImported ? 'Imported' : 'Import for Shorts'}
+                        </button>
                       </div>
-                      {open && (
-                        <div className="px-4 pb-4 pt-2 border-t border-gray-50 flex items-start gap-4 flex-wrap">
-                          {v.thumbnailUrl && (
-                            <img src={v.thumbnailUrl} alt="" className="w-48 rounded-lg shrink-0" />
-                          )}
-                          <div className="flex-1 min-w-[220px]">
-                            {v.publishedAt && (
-                              <p className="text-[11px] text-gray-500">Published {new Date(v.publishedAt).toLocaleDateString()}</p>
-                            )}
-                            {v.description && (
-                              <p className="text-xs text-gray-600 mt-1 whitespace-pre-line line-clamp-5">{v.description}</p>
-                            )}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); importMutation.mutate(v.youtubeVideoId); }}
-                              disabled={alreadyImported || importMutation.isPending}
-                              className="mt-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40"
-                            >
-                              {alreadyImported ? <CheckCircle2 className="w-4 h-4" /> : importMutation.isPending && importMutation.variables === v.youtubeVideoId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                              {alreadyImported ? 'Imported' : 'Import for Shorts'}
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
+                {hasNextPage && (
+                  <button
+                    onClick={() => void fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    className="w-full py-2.5 text-sm text-brand-600 bg-white border border-gray-100 rounded-xl shadow-sm hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isFetchingNextPage && <Loader2 className="w-4 h-4 animate-spin" />} Load more
+                  </button>
+                )}
               </div>
             )}
           </section>
