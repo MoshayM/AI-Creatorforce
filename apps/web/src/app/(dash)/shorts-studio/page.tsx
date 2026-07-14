@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clapperboard, Loader2, Download, Wand2, CheckCircle2, XCircle, Clock, Film, Captions, Sparkles, ChevronDown, ChevronRight, Search, X, FolderDown } from 'lucide-react';
-import { api, type LibraryVideosPage } from '@/lib/api';
+import { Clapperboard, Loader2, Download, Wand2, CheckCircle2, XCircle, Clock, Film, Captions, Sparkles, ChevronDown, ChevronRight, Search, X, FolderDown, ListVideo } from 'lucide-react';
+import { api, type LibraryVideo, type LibraryPlaylist, type LibraryVideosPage, type LibraryPlaylistsPage, type LibraryPlaylistItemsPage } from '@/lib/api';
 
 interface Channel {
   id: string;
@@ -105,9 +105,195 @@ function AnalysisProgress({ importedVideoId }: { importedVideoId: string }) {
   );
 }
 
+// ── Library import picker ─────────────────────────────────────────────────────
+
+interface VideoRowProps {
+  video: LibraryVideo;
+  imported: boolean;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: (youtubeVideoId: string) => void;
+}
+
+function VideoRow({ video: v, imported, checked, disabled, onToggle }: VideoRowProps) {
+  return (
+    <label
+      className={`flex items-center gap-3 px-3 py-2.5 border rounded-xl transition-colors ${
+        imported ? 'border-gray-100 bg-gray-50 opacity-70'
+        : checked ? 'border-brand-300 bg-brand-50/50 cursor-pointer'
+        : 'border-gray-100 hover:bg-gray-50 cursor-pointer'
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={imported || disabled}
+        onChange={() => onToggle(v.youtubeVideoId)}
+        className="w-4 h-4 accent-brand-600 shrink-0"
+        aria-label={`Select ${v.title}`}
+      />
+      {v.thumbnailUrl && (
+        <img src={v.thumbnailUrl} alt="" className="w-16 h-9 object-cover rounded-md shrink-0" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-gray-900 truncate">{v.title}</p>
+        <p className="text-[11px] text-gray-500">
+          {fmtDuration(v.durationMs)} · {fmtViews(v.viewCount)}
+          {v.kind === 'short' && <span className="ml-2 px-1.5 py-0.5 bg-brand-50 text-brand-700 rounded-full font-medium">Short</span>}
+        </p>
+      </div>
+      {imported && (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-700 shrink-0">
+          <CheckCircle2 className="w-3.5 h-3.5" /> Imported
+        </span>
+      )}
+    </label>
+  );
+}
+
+function GroupBar({ open, onToggle, icon, title, count }: {
+  open: boolean;
+  onToggle: () => void;
+  icon: React.ReactNode;
+  title: string;
+  count?: number;
+}) {
+  return (
+    <div
+      onClick={onToggle}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+      className="flex items-center gap-2 border border-gray-100 rounded-xl px-3 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors"
+    >
+      {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
+      {icon}
+      <p className="text-sm font-medium text-gray-900 truncate flex-1">{title}</p>
+      {count != null && (
+        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium shrink-0">{count}</span>
+      )}
+    </div>
+  );
+}
+
+function LoadMoreButton({ onClick, loading }: { onClick: () => void; loading: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      className="w-full py-2 text-sm text-brand-600 border border-gray-100 rounded-xl hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2"
+    >
+      {loading && <Loader2 className="w-4 h-4 animate-spin" />} Load more
+    </button>
+  );
+}
+
+/** One playlist accordion group; items load only when the group is opened. */
+function PlaylistGroup({ channelId, playlist, renderVideo }: {
+  channelId: string;
+  playlist: LibraryPlaylist;
+  renderVideo: (v: LibraryVideo) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
+    queryKey: ['shorts-playlist-items', channelId, playlist.id],
+    queryFn: ({ pageParam }) =>
+      api.library
+        .listPlaylistItems(channelId, playlist.id, pageParam as string | undefined)
+        .then((r) => r.data as LibraryPlaylistItemsPage),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: open,
+  });
+  const items = data?.pages.flatMap((p) => p.data) ?? [];
+
+  return (
+    <div>
+      <GroupBar
+        open={open}
+        onToggle={() => setOpen((o) => !o)}
+        icon={<ListVideo className="w-4 h-4 text-brand-600 shrink-0" />}
+        title={playlist.title}
+        count={playlist.itemCount}
+      />
+      {open && (
+        <div className="mt-1.5 ml-4 space-y-1.5">
+          {isLoading && (
+            <div className="flex items-center gap-2 text-gray-500 py-4 justify-center text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading playlist…
+            </div>
+          )}
+          {!isLoading && items.length === 0 && (
+            <p className="text-center py-4 text-gray-500 text-sm">This playlist has no videos.</p>
+          )}
+          {items.map((item) => renderVideo(item.video))}
+          {hasNextPage && <LoadMoreButton onClick={() => void fetchNextPage()} loading={isFetchingNextPage} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "All videos" accordion group for videos outside any playlist view. */
+function AllVideosGroup({ channelId, q, renderVideo }: {
+  channelId: string;
+  q: string;
+  renderVideo: (v: LibraryVideo) => React.ReactNode;
+}) {
+  // Searching flattens the picker to matching videos, so the group opens itself
+  const [openedByUser, setOpenedByUser] = useState(false);
+  const open = openedByUser || !!q;
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, error } = useInfiniteQuery({
+    queryKey: ['shorts-library-videos', channelId, q],
+    queryFn: ({ pageParam }) =>
+      api.library
+        .listVideos(channelId, { cursor: pageParam as string | undefined, q: q || undefined })
+        .then((r) => r.data as LibraryVideosPage),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: open,
+  });
+  const videos = data?.pages.flatMap((p) => p.data) ?? [];
+
+  return (
+    <div>
+      {!q && (
+        <GroupBar
+          open={open}
+          onToggle={() => setOpenedByUser((o) => !o)}
+          icon={<Film className="w-4 h-4 text-brand-600 shrink-0" />}
+          title="All videos"
+        />
+      )}
+      {open && (
+        <div className={`mt-1.5 space-y-1.5 ${q ? '' : 'ml-4'}`}>
+          {isLoading && (
+            <div className="flex items-center gap-2 text-gray-500 py-4 justify-center text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading videos…
+            </div>
+          )}
+          {!!error && (
+            <div className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-xl p-4">
+              Could not load the library — {(error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'run a channel sync from the Library page first.'}
+            </div>
+          )}
+          {!isLoading && !error && videos.length === 0 && (
+            <p className="text-center py-4 text-gray-500 text-sm">
+              {q ? 'No library videos match your search.' : 'No videos in the library yet — sync this channel from the Library page.'}
+            </p>
+          )}
+          {videos.map(renderVideo)}
+          {hasNextPage && <LoadMoreButton onClick={() => void fetchNextPage()} loading={isFetchingNextPage} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
- * Manual import picker: the user searches the channel's synced library and
- * imports only the videos they tick — nothing is imported automatically.
+ * Manual import picker: the user browses the channel's synced library
+ * playlist-wise (or searches across all videos) and imports only the videos
+ * they tick — nothing is imported automatically.
  */
 function LibraryImportModal({
   channelId,
@@ -120,11 +306,10 @@ function LibraryImportModal({
 }) {
   const qc = useQueryClient();
   const [q, setQ] = useState('');
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Map<string, string>>(new Map()); // youtubeVideoId -> title
   const [importing, setImporting] = useState(false);
   const [importedNow, setImportedNow] = useState<Set<string>>(new Set());
   const [importError, setImportError] = useState<string | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -133,34 +318,43 @@ function LibraryImportModal({
   }, [onClose]);
 
   const {
-    data: libraryData,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    error,
+    data: playlistsData,
+    fetchNextPage: fetchMorePlaylists,
+    hasNextPage: hasMorePlaylists,
+    isFetchingNextPage: fetchingPlaylists,
+    isLoading: loadingPlaylists,
   } = useInfiniteQuery({
-    queryKey: ['shorts-library-videos', channelId, q],
+    queryKey: ['shorts-library-playlists', channelId],
     queryFn: ({ pageParam }) =>
       api.library
-        .listVideos(channelId, { cursor: pageParam as string | undefined, q: q || undefined })
-        .then((r) => r.data as LibraryVideosPage),
+        .listPlaylists(channelId, pageParam as string | undefined)
+        .then((r) => r.data as LibraryPlaylistsPage),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: !q,
   });
-  const videos = libraryData?.pages.flatMap((p) => p.data) ?? [];
+  const playlists = playlistsData?.pages.flatMap((p) => p.data) ?? [];
 
   const isImported = (youtubeVideoId: string) =>
     importedYoutubeIds.has(youtubeVideoId) || importedNow.has(youtubeVideoId);
 
-  const toggle = (youtubeVideoId: string) => {
-    if (isImported(youtubeVideoId)) return;
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(youtubeVideoId)) next.delete(youtubeVideoId); else next.add(youtubeVideoId);
-      return next;
-    });
-  };
+  const renderVideo = (v: LibraryVideo) => (
+    <VideoRow
+      key={v.id}
+      video={v}
+      imported={isImported(v.youtubeVideoId)}
+      checked={selected.has(v.youtubeVideoId)}
+      disabled={importing}
+      onToggle={(youtubeVideoId) => {
+        if (isImported(youtubeVideoId)) return;
+        setSelected((prev) => {
+          const next = new Map(prev);
+          if (next.has(youtubeVideoId)) next.delete(youtubeVideoId); else next.set(youtubeVideoId, v.title);
+          return next;
+        });
+      }}
+    />
+  );
 
   const importSelected = async () => {
     if (selected.size === 0 || importing) return;
@@ -169,13 +363,12 @@ function LibraryImportModal({
     const failed: string[] = [];
     // One at a time on purpose: each import is a user-visible row landing in
     // the studio, and sequential requests keep partial failures attributable.
-    for (const youtubeVideoId of selected) {
+    for (const [youtubeVideoId, title] of selected) {
       try {
         await api.shortsStudio.importVideo(channelId, youtubeVideoId);
         setImportedNow((prev) => new Set(prev).add(youtubeVideoId));
-        setSelected((prev) => { const next = new Set(prev); next.delete(youtubeVideoId); return next; });
+        setSelected((prev) => { const next = new Map(prev); next.delete(youtubeVideoId); return next; });
       } catch (err) {
-        const title = videos.find((v) => v.youtubeVideoId === youtubeVideoId)?.title ?? youtubeVideoId;
         const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message;
         failed.push(msg ? `${title}: ${msg}` : title);
       }
@@ -196,7 +389,6 @@ function LibraryImportModal({
       role="presentation"
     >
       <div
-        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="Import videos from library"
@@ -217,7 +409,7 @@ function LibraryImportModal({
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search library videos…"
+              placeholder="Search across all library videos…"
               aria-label="Search library videos"
               className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm bg-white"
             />
@@ -225,68 +417,19 @@ function LibraryImportModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-          {isLoading && (
-            <div className="flex items-center gap-2 text-gray-500 py-10 justify-center">
-              <Loader2 className="w-5 h-5 animate-spin" /> Loading library…
+          {/* Playlist-wise browsing; a search query flattens to matching videos */}
+          {!q && loadingPlaylists && (
+            <div className="flex items-center gap-2 text-gray-500 py-4 justify-center text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading playlists…
             </div>
           )}
-          {!!error && (
-            <div className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-xl p-4">
-              Could not load the library — {(error as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'run a channel sync from the Library page first.'}
-            </div>
+          {!q && playlists.map((p) => (
+            <PlaylistGroup key={p.id} channelId={channelId} playlist={p} renderVideo={renderVideo} />
+          ))}
+          {!q && hasMorePlaylists && (
+            <LoadMoreButton onClick={() => void fetchMorePlaylists()} loading={fetchingPlaylists} />
           )}
-          {!isLoading && !error && videos.length === 0 && (
-            <div className="text-center py-10 text-gray-500 text-sm">
-              {q ? 'No library videos match your search.' : 'No videos in the library yet — sync this channel from the Library page.'}
-            </div>
-          )}
-          {videos.map((v) => {
-            const imported = isImported(v.youtubeVideoId);
-            const checked = selected.has(v.youtubeVideoId);
-            return (
-              <label
-                key={v.id}
-                className={`flex items-center gap-3 px-3 py-2.5 border rounded-xl transition-colors ${
-                  imported ? 'border-gray-100 bg-gray-50 opacity-70'
-                  : checked ? 'border-brand-300 bg-brand-50/50 cursor-pointer'
-                  : 'border-gray-100 hover:bg-gray-50 cursor-pointer'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={imported || importing}
-                  onChange={() => toggle(v.youtubeVideoId)}
-                  className="w-4 h-4 accent-brand-600 shrink-0"
-                  aria-label={`Select ${v.title}`}
-                />
-                {v.thumbnailUrl && (
-                  <img src={v.thumbnailUrl} alt="" className="w-16 h-9 object-cover rounded-md shrink-0" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">{v.title}</p>
-                  <p className="text-[11px] text-gray-500">
-                    {fmtDuration(v.durationMs)} · {fmtViews(v.viewCount)}
-                    {v.kind === 'short' && <span className="ml-2 px-1.5 py-0.5 bg-brand-50 text-brand-700 rounded-full font-medium">Short</span>}
-                  </p>
-                </div>
-                {imported && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-700 shrink-0">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Imported
-                  </span>
-                )}
-              </label>
-            );
-          })}
-          {hasNextPage && (
-            <button
-              onClick={() => void fetchNextPage()}
-              disabled={isFetchingNextPage}
-              className="w-full py-2.5 text-sm text-brand-600 border border-gray-100 rounded-xl hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isFetchingNextPage && <Loader2 className="w-4 h-4 animate-spin" />} Load more
-            </button>
-          )}
+          <AllVideosGroup channelId={channelId} q={q} renderVideo={renderVideo} />
         </div>
 
         <div className="px-5 py-4 border-t border-gray-100">
@@ -366,26 +509,17 @@ export default function ShortsStudioPage() {
           </h1>
           <p className="text-gray-500 mt-1">Turn a long-form video into publish-ready vertical Shorts</p>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={channelId}
-            onChange={(e) => selectChannel(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
-            aria-label="Channel"
-          >
-            <option value="">Select a channel…</option>
-            {channels.map((c) => (
-              <option key={c.id} value={c.id}>{c.title}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => setPickerOpen(true)}
-            disabled={!channelId}
-            className="flex items-center gap-1.5 px-3 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-40"
-          >
-            <FolderDown className="w-4 h-4" /> Import from library
-          </button>
-        </div>
+        <select
+          value={channelId}
+          onChange={(e) => selectChannel(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+          aria-label="Channel"
+        >
+          <option value="">Select a channel…</option>
+          {channels.map((c) => (
+            <option key={c.id} value={c.id}>{c.title}</option>
+          ))}
+        </select>
       </div>
 
       {!channelId && (
@@ -494,6 +628,12 @@ export default function ShortsStudioPage() {
                   </div>
                 );
               })}
+              <button
+                onClick={() => setPickerOpen(true)}
+                className="w-full py-2.5 text-sm text-brand-600 border border-dashed border-brand-300 rounded-xl hover:bg-brand-50 flex items-center justify-center gap-2"
+              >
+                <FolderDown className="w-4 h-4" /> Import more from library
+              </button>
             </div>
           )}
         </section>
