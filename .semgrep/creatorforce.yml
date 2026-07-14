@@ -9,7 +9,9 @@ rules:
     message: >
       OFFSET pagination (skip:) detected in a Prisma findMany() call.
       Use keyset/cursor pagination instead — see docs4/08_Playlists_and_Library.md.
-    pattern: $DB.findMany({ ..., skip: $SKIP, ... })
+    # Block scalar: the inline form's "skip:" is invalid YAML inside a plain scalar.
+    pattern: |
+      $DB.findMany({ ..., skip: $SKIP, ... })
     paths:
       include:
         - apps/api/src/**/*.ts

@@ -12,8 +12,9 @@ concurrency:
 
 # pnpm version comes from package.json's packageManager field (pnpm@11.x) —
 # pnpm/action-setup reads it; pinning it here too made the action error out.
+# Node 24 to match local dev; pnpm 11.x requires Node >= 22.13.
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
 
 jobs:
   lint:
