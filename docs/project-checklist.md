@@ -51,7 +51,7 @@ items under specs 13/42. Phase 3 (teams-at-scale, multi-platform) is ▫ future.
 - ✅ Non-destructive modes, multi-track timeline, versions + comparison + revert, undo/redo
 - ✅ Section-scoped regeneration; ✅ estimates on AI edits
 - ✅ Shorts: from-scratch + from-video, overridable highlights, safe zones/hook/captions, 9:16 + duration enforcement
-- ✅ Channel-first import: Shorts Studio selects a channel (not a project); a manual "Import from library" modal (playlist-wise accordion + All videos group, search flattens to matching videos, cursor-paginated, checkbox multi-select) imports only user-picked videos — metadata reused from `LibraryVideo` with live-YouTube fallback; imports land in an auto-created per-channel container project and dedupe across the channel's projects (`importFromChannel` + 6 unit tests, Wave 35)
+- ✅ Channel-first import: Shorts Studio selects a channel (not a project); a manual "Import from library" modal (Shorts section + Videos section with playlist accordions and All-videos group, search flattens to matching videos, cursor-paginated, checkbox multi-select) imports only user-picked videos; per-video owner reference notes (`ImportedVideo.notes` + `PATCH .../notes`, 3 unit tests) — metadata reused from `LibraryVideo` with live-YouTube fallback; imports land in an auto-created per-channel container project and dedupe across the channel's projects (`importFromChannel` + 6 unit tests, Wave 35)
 
 ### 09 Asset Management
 - ✅ Channel-scoped, version-traceable assets; ✅ upload validation (validation engine)

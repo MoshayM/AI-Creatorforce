@@ -52,6 +52,15 @@ export class ShortsStudioService {
     });
   }
 
+  /** Owner-only free-form reference notes on an imported video. */
+  async updateNotes(importedVideoId: string, userId: string, notes: string | null) {
+    await this.assertVideoOwnership(importedVideoId, userId);
+    return this.prisma.importedVideo.update({
+      where: { id: importedVideoId },
+      data: { notes: notes && notes.trim().length > 0 ? notes : null },
+    });
+  }
+
   /** Channel-first view: every import across the channel's projects. */
   async listImportedVideosByChannel(channelId: string) {
     return this.prisma.importedVideo.findMany({

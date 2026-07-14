@@ -725,6 +725,8 @@ model ImportedVideo {
   transcriptStatus TranscriptStatus @default(PENDING)
   /** Last time the chapter block was published into the YouTube description (§11). */
   chaptersSyncedAt DateTime?
+  /** Free-form user reference notes, shown only in Shorts Studio. */
+  notes            String?          @db.Text
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 

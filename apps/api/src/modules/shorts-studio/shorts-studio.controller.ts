@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
-import { IsString, IsArray, IsIn, IsOptional } from 'class-validator';
+import { IsString, IsArray, IsIn, IsOptional, MaxLength } from 'class-validator';
 import type { ClipType } from '@prisma/client';
 import { ApplyCommandsSchema, AssistCapabilitySchema } from '@cf/shared';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -37,6 +37,10 @@ class GenerateClipsDto {
 class UpdateChapterDto {
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() summary?: string;
+}
+
+class UpdateNotesDto {
+  @IsOptional() @IsString() @MaxLength(5000) notes?: string;
 }
 
 // ai.md Section 18 — routes live under /api/v1/shorts-studio (existing global
@@ -101,6 +105,15 @@ export class ShortsStudioController {
   async listImportedByChannel(@Param('channelId') channelId: string, @CurrentUser() user: JwtPayload) {
     await this.shorts.assertChannelOwnership(channelId, user.sub);
     return this.shorts.listImportedVideosByChannel(channelId);
+  }
+
+  @Patch('videos/:importedVideoId/notes')
+  async updateNotes(
+    @Param('importedVideoId') importedVideoId: string,
+    @Body() dto: UpdateNotesDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.shorts.updateNotes(importedVideoId, user.sub, dto.notes ?? null);
   }
 
   // ── Analyze (18.2) ──────────────────────────────────────────────────────────
