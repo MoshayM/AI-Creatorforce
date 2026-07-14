@@ -272,7 +272,9 @@ jobs:
   e2e:
     name: E2E Tests (Playwright, ${{ matrix.browser }})
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 25 wasn't enough once the suite actually ran (jobs were cancelled at the
+    # cap on the first real run) — give headroom while the suite stabilizes.
+    timeout-minutes: 40
     needs: [lint, typecheck, unit-tests]
     # Cross-browser sharding (docs4/22): one job per browser keeps each run
     # inside the timeout instead of tripling a single job.

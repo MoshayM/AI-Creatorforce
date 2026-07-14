@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, Youtube } from 'lucide-react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, Youtube, ShieldCheck, ChevronDown } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -78,6 +78,8 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
   const router = useRouter();
   const [userName, setUserName] = useState('Creator');
   const [isAdmin, setIsAdmin] = useState(false);
+  /** Explicit expand/collapse choices per nav group; unset falls back to route-based auto-open. */
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   // ── Notifications bell state ───────────────────────────────────────────────
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -172,20 +174,47 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
             <p className="text-xs text-white/70">AI Content Platform</p>
           </div>
           <nav className="flex-1 py-2 space-y-1 px-3 overflow-y-auto">
-            {[...NAV, ...(isAdmin ? [{ href: '/admin', icon: Gauge, label: 'Admin' } as NavItem] : [])].map(({ href, icon: Icon, label, children }) => (
+            {[...NAV, ...(isAdmin ? [{
+            href: '/admin',
+            icon: Gauge,
+            label: 'Admin',
+            children: [
+              { href: '/admin/publish-access', icon: ShieldCheck, label: 'Publish access' },
+            ],
+          } as NavItem] : [])].map(({ href, icon: Icon, label, children }) => {
+              // Groups open on click (chevron or navigating into the section)
+              // and auto-open while the current page lives inside them.
+              const groupActive =
+                pathname.startsWith(href) ||
+                (children?.some((c) => !c.href.includes('#') && pathname.startsWith(c.href)) ?? false);
+              const open = openGroups[href] ?? groupActive;
+              return (
               <div key={href}>
-                <Link
-                  href={href}
-                  className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors ${
-                    pathname.startsWith(href)
-                      ? 'bg-white/20 text-white font-semibold shadow-sm'
-                      : 'text-white/75 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {label}
-                </Link>
-                {children?.map(({ href: subHref, icon: SubIcon, label: subLabel }) => (
+                <div className="relative">
+                  <Link
+                    href={href}
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors ${
+                      pathname.startsWith(href)
+                        ? 'bg-white/20 text-white font-semibold shadow-sm'
+                        : 'text-white/75 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </Link>
+                  {children && children.length > 0 && (
+                    <button
+                      type="button"
+                      aria-label={`${open ? 'Collapse' : 'Expand'} ${label} menu`}
+                      aria-expanded={open}
+                      onClick={() => setOpenGroups((g) => ({ ...g, [href]: !open }))}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
+                    >
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? '' : '-rotate-90'}`} />
+                    </button>
+                  )}
+                </div>
+                {open && children?.map(({ href: subHref, icon: SubIcon, label: subLabel }) => (
                   <Link
                     key={subHref}
                     href={subHref}
@@ -200,7 +229,8 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
                   </Link>
                 ))}
               </div>
-            ))}
+              );
+            })}
           </nav>
           <div className="p-3">
             <button
