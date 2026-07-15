@@ -62,6 +62,7 @@ export class VideoImportService {
       description: meta.description,
       durationMs: Math.round(meta.durationMs),
       thumbnailUrl: meta.thumbnailUrl,
+      originalAudioLanguage: meta.defaultAudioLanguage,
       viewCount: meta.viewCount != null ? BigInt(meta.viewCount) : null,
       likeCount: meta.likeCount != null ? BigInt(meta.likeCount) : null,
       commentCount: meta.commentCount != null ? BigInt(meta.commentCount) : null,
@@ -94,6 +95,8 @@ export class VideoImportService {
       description: string | null;
       durationMs: number;
       thumbnailUrl: string | null;
+      /** Only known on the live-metadata path — omitted (not nulled) otherwise. */
+      originalAudioLanguage?: string | null;
       viewCount: bigint | null;
       likeCount: bigint | null;
       commentCount: bigint | null;
@@ -118,6 +121,7 @@ export class VideoImportService {
         description: meta.description,
         durationMs: Math.round(meta.durationMs),
         thumbnailUrl: meta.thumbnailUrl,
+        originalAudioLanguage: meta.defaultAudioLanguage,
         viewCount: meta.viewCount != null ? BigInt(meta.viewCount) : null,
         likeCount: meta.likeCount != null ? BigInt(meta.likeCount) : null,
         commentCount: meta.commentCount != null ? BigInt(meta.commentCount) : null,

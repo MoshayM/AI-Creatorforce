@@ -1,4 +1,5 @@
-import { parseIsoDurationMs, parseSrt } from './youtube-read.service';
+import { parseIsoDurationMs, parseSrt, toMetadata } from './youtube-read.service';
+import type { youtube_v3 } from 'googleapis';
 
 describe('parseIsoDurationMs', () => {
   it('parses hours/minutes/seconds', () => {
@@ -66,5 +67,35 @@ describe('parseSrt', () => {
   it('parses hour-long timestamps', () => {
     const late = '1\n01:02:03,004 --> 01:02:04,000\nLate cue\n';
     expect(parseSrt(late)[0]!.startMs).toBe(3_723_004);
+  });
+});
+
+describe('toMetadata — original audio language', () => {
+  const base: youtube_v3.Schema$Video = {
+    id: 'vid1',
+    snippet: { title: 'A video', channelId: 'UC123' },
+    contentDetails: { duration: 'PT1M30S' },
+  };
+
+  it('prefers snippet.defaultAudioLanguage', () => {
+    const meta = toMetadata({
+      ...base,
+      snippet: { ...base.snippet, defaultAudioLanguage: 'ta', defaultLanguage: 'en' },
+    });
+    expect(meta.defaultAudioLanguage).toBe('ta');
+  });
+
+  it('falls back to snippet.defaultLanguage when audio language is absent', () => {
+    const meta = toMetadata({
+      ...base,
+      snippet: { ...base.snippet, defaultLanguage: 'hi' },
+    });
+    expect(meta.defaultAudioLanguage).toBe('hi');
+  });
+
+  it('is null when YouTube reports neither — the upload must omit the field, not guess', () => {
+    const meta = toMetadata(base);
+    expect(meta.defaultAudioLanguage).toBeNull();
+    expect(meta.durationMs).toBe(90_000);
   });
 });

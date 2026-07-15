@@ -722,6 +722,10 @@ model ImportedVideo {
   description      String?          @db.Text
   durationMs       Int
   thumbnailUrl     String?
+  /// BCP-47 audio language of the SOURCE video (snippet.defaultAudioLanguage).
+  /// Publishing copies this onto uploaded Shorts so viewers hear the original
+  /// language unless they manually switch audio tracks on YouTube.
+  originalAudioLanguage String?
   viewCount        BigInt?
   likeCount        BigInt?
   commentCount     BigInt?

@@ -14,6 +14,8 @@ export interface YouTubeVideoMetadata {
   commentCount: number | null;
   channelId: string; // YouTube channel id (UC…)
   publishedAt: string | null;
+  /** BCP-47 audio language (defaultAudioLanguage, falling back to defaultLanguage). */
+  defaultAudioLanguage: string | null;
 }
 
 export interface YouTubeVideoListPage {
@@ -63,7 +65,8 @@ export function parseSrt(srt: string): TranscriptCueDTO[] {
   return cues;
 }
 
-function toMetadata(v: youtube_v3.Schema$Video): YouTubeVideoMetadata {
+/** Exported for unit tests. */
+export function toMetadata(v: youtube_v3.Schema$Video): YouTubeVideoMetadata {
   const thumb = v.snippet?.thumbnails;
   return {
     youtubeVideoId: v.id ?? '',
@@ -76,6 +79,7 @@ function toMetadata(v: youtube_v3.Schema$Video): YouTubeVideoMetadata {
     commentCount: v.statistics?.commentCount != null ? Number(v.statistics.commentCount) : null,
     channelId: v.snippet?.channelId ?? '',
     publishedAt: v.snippet?.publishedAt ?? null,
+    defaultAudioLanguage: v.snippet?.defaultAudioLanguage ?? v.snippet?.defaultLanguage ?? null,
   };
 }
 

@@ -12,6 +12,13 @@ export interface PublishOptions {
   categoryId?: string;
   scheduledAt?: Date;
   videoFilePath?: string;
+  /**
+   * BCP-47 audio language of the uploaded media — always the SOURCE video's
+   * original language, never a translation. Left unset when unknown so
+   * YouTube doesn't get told a wrong language; viewers only hear another
+   * language if they switch audio tracks themselves.
+   */
+  defaultAudioLanguage?: string;
 }
 
 @Injectable()
@@ -52,6 +59,7 @@ export class PublishingService {
           description: opts.description,
           tags: opts.tags,
           categoryId: opts.categoryId ?? '22',
+          ...(opts.defaultAudioLanguage ? { defaultAudioLanguage: opts.defaultAudioLanguage } : {}),
         },
         status,
       },

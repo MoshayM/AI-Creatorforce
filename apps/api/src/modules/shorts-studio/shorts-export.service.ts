@@ -4,6 +4,7 @@ import { StorageService } from '../media/storage.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { ComplianceService } from '../compliance/compliance.service';
 import { PublishingService } from '../publishing/publishing.service';
+import { YouTubeReadService } from './youtube-read.service';
 import { CLIP_TYPE_PRESETS } from './clip-type-presets';
 
 interface ClipMetadata {
@@ -31,6 +32,7 @@ export class ShortsExportService {
     private readonly approvals: ApprovalsService,
     private readonly compliance: ComplianceService,
     private readonly publishing: PublishingService,
+    private readonly youtubeRead: YouTubeReadService,
   ) {}
 
   private async buildMetadata(shortClipId: string): Promise<ClipMetadata> {
@@ -223,6 +225,8 @@ export class ShortsExportService {
       include: {
         project: { select: { id: true, channelId: true } },
         timeline: { include: { captions: { orderBy: { startMs: 'asc' } } } },
+        topicSegment: { select: { importedVideoId: true } },
+        chapter: { select: { importedVideoId: true } },
       },
     });
     const history = await this.prisma.shortsExportHistory.findUniqueOrThrow({
@@ -259,6 +263,14 @@ export class ShortsExportService {
       },
     });
 
+    // The Short keeps the SOURCE video's original audio language — YouTube
+    // must not present a different audio language to viewers unless they
+    // switch tracks manually. Unknown stays unset (no wrong guesses).
+    const importedVideoId = clip.topicSegment?.importedVideoId ?? clip.chapter?.importedVideoId ?? null;
+    const originalAudioLanguage = importedVideoId
+      ? await this.resolveOriginalAudioLanguage(importedVideoId, clip.project.channelId, onLog)
+      : null;
+
     onLog?.('Uploading to YouTube…');
     const youtubeVideoId = await this.publishing.publish({
       videoId: video.id,
@@ -267,6 +279,7 @@ export class ShortsExportService {
       description: metadata.description,
       tags: metadata.tags,
       videoFilePath: this.storage.resolve(exportKey),
+      ...(originalAudioLanguage ? { defaultAudioLanguage: originalAudioLanguage } : {}),
     }, approvalId);
 
     await this.prisma.shortsExportHistory.update({
@@ -276,5 +289,37 @@ export class ShortsExportService {
     await this.prisma.shortClip.update({ where: { id: shortClipId }, data: { status: 'PUBLISHED' } });
     onLog?.(`Published ✓ — https://youtube.com/shorts/${youtubeVideoId}`);
     return { youtubeVideoId, url: `https://youtube.com/shorts/${youtubeVideoId}` };
+  }
+
+  /**
+   * Source video's original audio language: stored value first (captured at
+   * import), then a live metadata read persisted for next time. Null when
+   * YouTube doesn't report one — the upload then simply omits the field.
+   */
+  private async resolveOriginalAudioLanguage(
+    importedVideoId: string,
+    channelId: string,
+    onLog?: (msg: string) => void,
+  ): Promise<string | null> {
+    const video = await this.prisma.importedVideo.findUnique({
+      where: { id: importedVideoId },
+      select: { originalAudioLanguage: true, youtubeVideoId: true },
+    });
+    if (!video) return null;
+    if (video.originalAudioLanguage) return video.originalAudioLanguage;
+    try {
+      const meta = await this.youtubeRead.getVideoMetadata(channelId, video.youtubeVideoId);
+      if (meta.defaultAudioLanguage) {
+        await this.prisma.importedVideo.update({
+          where: { id: importedVideoId },
+          data: { originalAudioLanguage: meta.defaultAudioLanguage },
+        });
+        onLog?.(`Original audio language: ${meta.defaultAudioLanguage}`);
+        return meta.defaultAudioLanguage;
+      }
+    } catch {
+      // Metadata read is best-effort — publishing proceeds without the field.
+    }
+    return null;
   }
 }
