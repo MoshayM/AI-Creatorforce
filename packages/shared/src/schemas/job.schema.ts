@@ -45,6 +45,8 @@ export const JobTypeSchema = z.enum([
   'SOCIAL_CONTENT_GENERATION',
   // Channel library (docs4/08) — channel-scoped, no project
   'CHANNEL_SYNC',
+  // Per-channel automation heartbeat (runs every 15 min via repeatable job)
+  'AUTOMATION_TICK',
 ]);
 export type JobType = z.infer<typeof JobTypeSchema>;
 
@@ -75,3 +77,15 @@ export const JobResultSchema = z.object({
   error: z.string().optional(),
 });
 export type JobResult = z.infer<typeof JobResultSchema>;
+
+export const AutomationSettingsSchema = z.object({
+  enabled: z.boolean(),
+  autoImport: z.boolean(),
+  autoAnalyze: z.boolean(),
+  autoPublish: z.boolean(),
+  chapterSyncEnabled: z.boolean(),
+  publishIntervalMinutes: z.number().int().min(15).max(1440),
+  maxPublishesPerDay: z.number().int().min(1).max(10),
+  maxImportsPerDay: z.number().int().min(1).max(10),
+});
+export type AutomationSettings = z.infer<typeof AutomationSettingsSchema>;

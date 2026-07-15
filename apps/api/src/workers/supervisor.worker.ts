@@ -59,6 +59,7 @@ import * as os from 'os';
 import { createHash, randomUUID } from 'crypto';
 import { ChannelSyncService } from '../modules/channels/channel-sync.service';
 import { MetricsService } from '../modules/metrics/metrics.service';
+import { AutomationService } from '../modules/automation/automation.service';
 import { toJobFailure } from '../modules/media/media.errors';
 import { appendVideoImportLog } from '../modules/media/video-import-log.util';
 
@@ -117,6 +118,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly events: EventsGateway,
     private readonly channelSync: ChannelSyncService,
     private readonly metrics: MetricsService,
+    private readonly automation: AutomationService,
   ) {
     super();
   }
@@ -130,6 +132,15 @@ export class SupervisorWorker extends WorkerHost {
   private async processJob(job: Job<JobPayload>): Promise<unknown> {
     const { jobId, projectId, type, payload } = job.data;
     const t0 = Date.now();
+
+    // AUTOMATION_TICK is a repeatable heartbeat — it has no AgentJob row in the DB.
+    // Handle it before any AgentJob lookup to avoid NotFoundException.
+    if (job.name === 'AUTOMATION_TICK') {
+      console.log('[AutomationTick] Heartbeat triggered');
+      await this.automation.runTick((msg) => console.log(msg));
+      console.log('[AutomationTick] Heartbeat complete');
+      return { ticked: true };
+    }
 
     await this.prisma.agentJob.update({ where: { id: jobId }, data: { status: 'RUNNING', startedAt: new Date() } });
     this.events.emitJobUpdate(jobId, { status: 'RUNNING', type }, projectId);

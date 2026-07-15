@@ -38,6 +38,7 @@ import { OrgsModule } from './modules/orgs/orgs.module';
 import { BiModule } from './modules/bi/bi.module';
 import { DevPortalModule } from './modules/dev-portal/dev-portal.module';
 import { FlagsModule } from './modules/flags/flags.module';
+import { AutomationModule } from './modules/automation/automation.module';
 
 @Module({
   imports: [
@@ -93,6 +94,7 @@ import { FlagsModule } from './modules/flags/flags.module';
     BiModule,
     DevPortalModule,
     FlagsModule,
+    AutomationModule,
     MetricsModule,
     HealthModule,
   ],

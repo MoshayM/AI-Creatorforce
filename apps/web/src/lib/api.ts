@@ -408,6 +408,26 @@ export interface AuthSession {
   current: boolean;
 }
 
+// ── Automation types ──────────────────────────────────────────────────────────
+
+export interface ChannelAutomation {
+  enabled: boolean;
+  autoImport: boolean;
+  autoAnalyze: boolean;
+  autoPublish: boolean;
+  chapterSyncEnabled: boolean;
+  publishIntervalMinutes: number;
+  maxPublishesPerDay: number;
+  maxImportsPerDay: number;
+  aiSuggestion?: object | null;
+  lastTickAt?: string | null;
+}
+
+export interface AutomationSuggestion {
+  suggestion: Omit<ChannelAutomation, 'aiSuggestion' | 'lastTickAt'>;
+  source: 'ai' | 'heuristic';
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -702,6 +722,14 @@ export const api = {
       apiClient.get<ForecastRow[]>(`/admin/forecasts${metric ? `?metric=${encodeURIComponent(metric)}` : ''}`),
     generateForecasts: () => apiClient.post<{ ok: boolean; message: string }>('/admin/forecasts/generate'),
     providers: () => apiClient.get<AdminProvider[]>('/admin/providers'),
+  },
+  automation: {
+    get: (channelId: string) =>
+      apiClient.get<ChannelAutomation>(`/channels/${channelId}/automation`),
+    update: (channelId: string, data: Partial<Omit<ChannelAutomation, 'aiSuggestion' | 'lastTickAt'>>) =>
+      apiClient.put<ChannelAutomation>(`/channels/${channelId}/automation`, data),
+    suggest: (channelId: string) =>
+      apiClient.post<AutomationSuggestion>(`/channels/${channelId}/automation/suggest`),
   },
 };
 

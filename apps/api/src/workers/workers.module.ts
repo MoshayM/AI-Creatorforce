@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
+import { Module, OnModuleInit } from '@nestjs/common';
+import { BullModule, InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { SupervisorWorker } from './supervisor.worker';
 import { MetricsModule } from '../modules/metrics/metrics.module';
 import { ContentModule } from '../modules/content/content.module';
@@ -25,6 +26,7 @@ import { OrgsModule } from '../modules/orgs/orgs.module';
 import { TrialModule } from '../modules/trial/trial.module';
 import { GatewayModule } from '../gateway/gateway.module';
 import { ChannelsModule } from '../modules/channels/channels.module';
+import { AutomationModule } from '../modules/automation/automation.module';
 
 @Module({
   imports: [
@@ -53,7 +55,30 @@ import { ChannelsModule } from '../modules/channels/channels.module';
     GatewayModule,
     ChannelsModule,
     MetricsModule,
+    AutomationModule,
   ],
   providers: [SupervisorWorker],
 })
-export class WorkersModule {}
+export class WorkersModule implements OnModuleInit {
+  constructor(
+    @InjectQueue(AGENT_QUEUE) private readonly agentQueue: Queue,
+  ) {}
+
+  async onModuleInit() {
+    try {
+      // Schedule the automation heartbeat — runs every 15 minutes
+      await this.agentQueue.add(
+        'AUTOMATION_TICK',
+        {},
+        {
+          repeat: { every: 15 * 60 * 1000 },
+          jobId: 'automation-tick-repeatable',
+        },
+      );
+      console.log('[WorkersModule] Automation heartbeat scheduled (every 15 min)');
+    } catch (err) {
+      // Non-fatal: Redis may be down at startup; the heartbeat will register when Redis recovers
+      console.warn('[WorkersModule] Could not schedule automation heartbeat:', err instanceof Error ? err.message : String(err));
+    }
+  }
+}

@@ -105,6 +105,7 @@ model Channel {
   analyticsSnapshots AnalyticsSnapshot[]
   libraryVideos      LibraryVideo[]
   libraryPlaylists   LibraryPlaylist[]
+  automation         ChannelAutomation?
 
   @@map("channels")
 }
@@ -222,6 +223,7 @@ enum JobType {
   CHURCH_PACK_GENERATION
   SOCIAL_CONTENT_GENERATION
   CHANNEL_SYNC
+  AUTOMATION_TICK
 }
 
 enum JobStatus {
@@ -1944,4 +1946,26 @@ model DeveloperWebhookDelivery {
 
   @@index([status, nextAttemptAt])
   @@map("developer_webhook_deliveries")
+}
+
+/// Automation NEVER bypasses compliance/approval — autoPublish only paces
+/// clips a human (or auto-approval flow) has already APPROVED.
+model ChannelAutomation {
+  id                     String    @id @default(cuid())
+  channelId              String    @unique
+  channel                Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  enabled                Boolean   @default(false)
+  autoImport             Boolean   @default(false)
+  autoAnalyze            Boolean   @default(false)
+  autoPublish            Boolean   @default(false)
+  chapterSyncEnabled     Boolean   @default(false)
+  publishIntervalMinutes Int       @default(240)
+  maxPublishesPerDay     Int       @default(2)
+  maxImportsPerDay       Int       @default(3)
+  lastTickAt             DateTime?
+  aiSuggestion           Json?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@map("channel_automations")
 }
