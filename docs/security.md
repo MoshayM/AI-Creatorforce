@@ -90,9 +90,33 @@ Custom headers applied to all routes in `apps/web/next.config.ts`:
 
 ---
 
+## Production Startup Guard
+
+`main.ts` calls `assertProductionSecrets()` before bootstrapping the NestJS application in production. The guard throws and aborts startup if:
+
+- `JWT_SECRET` is absent, shorter than 32 characters, or equal to the development placeholder `dev-secret`.
+- `TOKEN_ENCRYPTION_KEY` is absent or shorter than 32 characters.
+
+This ensures the API never starts in production with weak or missing signing/encryption credentials.
+
+---
+
+## Auth Rate Limiting
+
+Login, registration, and token-refresh endpoints are protected by a Redis-backed fixed-window rate limiter.
+
+**Implementation:** `apps/api/src/common/guards/rate-limit.guard.ts` — registered as a global `APP_GUARD`. Endpoints opt-in via the `@RateLimit({ bucket, limit, windowSecs })` decorator.
+
+**Behavior:**
+- Applied to: `POST /auth/login`, `POST /auth/register`, `POST /auth/refresh`.
+- Keyed by IP address + bucket name.
+- Fails **open** when Redis is unreachable (allows the request through rather than blocking all auth during a Redis outage). This is an explicit availability-over-strict-rate-limiting trade-off.
+
+---
+
 ## Secrets Management
 
-All sensitive values are injected via environment variables. The application refuses to boot if required secrets are absent. Required environment variables:
+All sensitive values are injected via environment variables. The application refuses to boot if required secrets are absent (see Production Startup Guard above). Required environment variables:
 
 | Variable | Purpose |
 |----------|---------|
@@ -151,5 +175,5 @@ OWASP ZAP baseline scan is defined in `.zap/plan.yaml` and runs in CI on every p
 
 - BurpSuite active scan (referenced in docs4, not yet wired into CI).
 - Snyk dependency monitoring (docs4 references it; CI currently uses `pnpm audit` instead).
-- Per-route rate limiting (Helmet is present but no NestJS Throttler module is configured).
+- Per-route rate limiting beyond auth endpoints — auth login/register/refresh now have Redis-backed rate limiting; other routes do not yet.
 - Per-tenant database row-level security (RLS).

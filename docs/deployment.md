@@ -19,7 +19,7 @@ This document covers CI pipeline structure, build commands, runtime startup, req
 
 Triggered on: push to `master`, `main`, `develop`; pull requests targeting `master` or `main`. Concurrency group cancels in-progress runs for the same ref on new push.
 
-Runtime: Node 24, pnpm 11.x.
+Runtime: Node 24. pnpm version resolved from the repo's `packageManager` field (not a pinned CI version).
 
 Jobs run in dependency order:
 
@@ -27,13 +27,13 @@ Jobs run in dependency order:
 ESLint across all packages and apps.
 
 ### 2.2 typecheck
-`tsc --noEmit` on all packages. Requires `prisma generate` to run first (NestJS module types depend on the generated Prisma client).
+`tsc --noEmit` on all packages. `prisma generate` runs first — NestJS module types depend on the generated Prisma client.
 
 ### 2.3 unit-tests
-Jest with coverage collection. Coverage artifact retained for 7 days.
+Jest with coverage collection. `prisma generate` runs first (same reason as typecheck). Coverage artifact retained for 7 days.
 
 ### 2.4 build
-Runs after lint + typecheck + unit-tests all pass.
+Runs after lint + typecheck + unit-tests all pass. `prisma generate` runs first here too.
 
 - `pnpm build` via Turborepo builds all packages and apps in dependency order.
 - Environment: `SKIP_ENV_VALIDATION=true`, `NEXT_TELEMETRY_DISABLED=1`.
@@ -52,7 +52,7 @@ Semgrep SAST in two modes:
 OWASP ZAP passive scan against the production web build. High-risk findings fail the job. ZAP report artifact retained for 30 days.
 
 ### 2.8 e2e
-Playwright cross-browser matrix: chromium, firefox, webkit run in parallel. Full stack required: Postgres + Redis services, API started (`node apps/api/dist/main.js`), web started (`next start -p 3007`). Playwright report artifact retained for 7 days on failure. Job timeout: 25 minutes.
+Playwright cross-browser matrix: chromium, firefox, webkit run in parallel. Full stack required: Postgres + Redis services, API started (`node apps/api/dist/main.js`), web built with `next build` then started with `next start -p 3007` (production build — not dev mode). `TOKEN_ENCRYPTION_KEY` is set in the E2E CI environment. Playwright report artifact retained for 7 days on failure. Job timeout: 40 minutes.
 
 A separate workflow `.github/workflows/nextjs.yml` handles Next.js-specific deployment steps.
 
@@ -170,12 +170,17 @@ CI pipelines accept placeholder values for provider keys (ANTHROPIC_API_KEY, etc
 
 ---
 
-## 8. Planned / Not Yet Implemented
+## 8. Vercel Split-Deploy
 
-- Production deployment infrastructure (Docker/Kubernetes/Vercel configs beyond CI not yet written; `infra/` folder contains monitoring only)
+The frontend (`apps/web`) can be deployed to Vercel while the backend (API, workers, Postgres, Redis, FFmpeg) must run on a persistent host (Railway, Render, Fly.io, or a VPS). Vercel's serverless model is incompatible with the long-running NestJS process and multi-minute FFmpeg renders. See [deployment-vercel.md](deployment-vercel.md) for step-by-step instructions.
+
+---
+
+## 9. Planned / Not Yet Implemented
+
 - Staging environment
 - Database backup automation
 - CDN configuration
 - n8n workflow runtime deployment
 - Blue/green or rolling deploy strategy
-- Infrastructure-as-code (IaC) for cloud resources
+- Infrastructure-as-code (IaC) for cloud resources beyond monitoring stack

@@ -75,7 +75,7 @@ Channel-first workflow for generating YouTube Shorts from existing long-form lib
 - Scene detection produces `VideoScene[]`
 - Topic segmentation produces `TopicSegment[]`
 - Chapter detection/import produces `Chapter[]` (`ChapterSource`: `DETECTED` | `IMPORTED`)
-- Semantic search index built via `SemanticSearchService`
+- Semantic search index built via `SemanticSearchService` (embedding generation is the final, optional stage — quota exhaustion or failure does not fail the overall analysis job)
 
 **Clip recommendations:** `ClipRecommendationService` scores segments by virality potential, topic coherence, and audience retention signals. Recommendations are ranked and displayed for user selection.
 
@@ -92,6 +92,62 @@ Channel-first workflow for generating YouTube Shorts from existing long-form lib
 **Export and publish:** Export path goes through the same `ComplianceAgent` gate and `Approvals` flow as long-form content. `PublishingService` requires `Approval.status = 'APPROVED'` before upload.
 
 **Job types (Shorts-specific):** `SHORTS_ANALYZE` plus dedicated Shorts Studio job types enumerated in the `JobType` Prisma enum.
+
+---
+
+## Standalone Video Editor
+
+A multi-track video editor distinct from the Shorts clip editor. Users can open any project video, imported video, or render asset in an `EditProject` and arrange media on a multi-track timeline.
+
+**Module:** `editor` (`apps/api/src/modules/editor/`). **Model:** `EditProject` (`edit_projects`). **Job type:** `EDIT_RENDER`. **Asset kind:** `EDIT_RENDER`. **Web:** `apps/web/src/app/(dash)/editor/**` — "Video Editor" is a top-level sidebar link.
+
+**Timeline schema** (`packages/shared/src/schemas/edit-project.schema.ts`):
+
+- **Track kinds:** `VIDEO` / `AUDIO` / `TEXT`
+- **Item kinds:** `VIDEO` / `IMAGE` / `AUDIO` / `TEXT`
+- **Phase 1 item properties:** `volume`, `speed`, `opacity`, `x`, `y`, `scale`, `text`, `fontSize`, `color`
+- **Phase 2 additions:** `filters` (`brightness`/`contrast`/`saturation`/`grayscale`/`blur`), `transitionIn` (`fade`/`dissolve`/`slide`), `textAnim` (`none`/`fade-in`/`slide-up`), `keyframes`
+- **Phase 3 additions:** `fadeInMs`, `fadeOutMs`, `gainDb` (per-item audio gain, −60 to +12 dB), `duckUnderVoice` (constant −9 dB / ×0.354 linear reduction; no sidechain compress)
+
+**Render implementation limits (as built):**
+- Keyframe animation: first and last keyframe only (linear ramp); intermediate keyframes are ignored.
+- `duckUnderVoice`: constant −9 dB reduction, not dynamic sidechain compression.
+
+**Export presets:** `1080P_16_9`, `1080P_9_16`, `720P_16_9`, `1080P_1_1`, `SOURCE` (keeps project dimensions).
+**Formats:** `mp4` (libx264+aac, default) or `webm` (libvpx-vp9+libopus).
+**Quality:** `draft` (fast/high-CRF), `standard` (balanced, default), `high` (slow/low-CRF).
+
+**Entry points:**
+- `POST /editor/projects/:projectId` — from a source video / imported video / asset, or blank.
+- `POST /editor/blank` — blank edit (project resolved from user context).
+- `POST /editor/from-imported/:importedVideoId` — open imported video directly.
+
+All phase properties are optional and backward-compatible: a Phase-1 timeline validates against the current schema without changes.
+
+---
+
+## Per-channel Automation
+
+Per-channel background automation managed by a 15-minute BullMQ repeatable heartbeat (`JobType.AUTOMATION_TICK`).
+
+**Module:** `automation` (`apps/api/src/modules/automation/`). **Model:** `ChannelAutomation` (`channel_automations`). **Web:** `(dash)/automation/page.tsx` — nested under the Settings sidebar group.
+
+**Settings (all per-channel):**
+
+| Field | Default | Behavior |
+|---|---|---|
+| `enabled` | `false` | Master switch — heartbeat skips disabled channels |
+| `autoImport` | `false` | Auto-import new library videos (respects `maxImportsPerDay`; skips Shorts <62 s) |
+| `autoAnalyze` | `false` | Enqueues `SHORTS_ANALYZE` for PENDING imported videos |
+| `autoPublish` | `false` | Paces APPROVED clips at `publishIntervalMinutes` intervals; respects `maxPublishesPerDay` |
+| `chapterSyncEnabled` | `false` | Enqueues `CHAPTER_DETECTION` on imported videos without chapters |
+| `publishIntervalMinutes` | 240 | Minimum gap between auto-publishes |
+| `maxPublishesPerDay` | 2 | Daily publish ceiling |
+| `maxImportsPerDay` | 3 | Daily import ceiling |
+
+**Compliance / approval unchanged:** `autoPublish` only paces clips that have already passed compliance and received human approval (`Approval.status = 'APPROVED'`). Nothing is published without prior human approval.
+
+**AI suggestion:** `POST /channels/:channelId/automation/suggest` calls `callAIStructured` to propose settings based on channel analytics; falls back to a cadence heuristic if the AI call fails.
 
 ---
 
@@ -278,8 +334,8 @@ Cache keying means identical content is never re-evaluated within 24 hours. `byp
 | n8n workflow automations | n8n/ folder exists; runtime not deployed |
 | Video file generation via Veo/Kling/Runway/Pika/Luma | Placeholder in VideoAgent and PublishingService; provider APIs not integrated |
 | Music file generation via Suno/Udio/Stable Audio | Placeholder in MusicAgent; provider APIs not integrated |
-| Full media render pipeline end-to-end | ffmpeg-static present, RenderPreset defined; render worker not fully wired to video providers |
+| Full media render pipeline end-to-end | ffmpeg-static present, RenderPreset defined; standalone editor renders but the long-form pipeline render-to-publish path requires a user-supplied file |
+| Cloudflare R2 storage wiring | `r2Key` fields present on AssetVersion and Render; R2 client not integrated |
 | i18n beyond English | `targetLang` on `Project` model exists; multi-language agent pipeline not wired |
-| Accessibility audit tooling | `apps/e2e/a11y.spec.ts` exists; not integrated into CI |
 | Stripe production keys | Billing module wired to Stripe; test keys only |
 | Multi-region deployment | Single-region only; horizontal BullMQ worker scaling not provisioned |

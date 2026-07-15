@@ -50,9 +50,9 @@ Coverage report is uploaded as a CI artifact (7-day retention).
 
 **Location:** `apps/e2e/src`.
 
-**Stack:** Full Postgres 16 + Redis 7 run as CI services. The API is started and health-checked before tests begin. The Next.js web server is auto-started via the `playwright.config.ts` `webServer` block.
+**Stack:** Full Postgres 16 + Redis 7 run as CI services. The API is started (`node apps/api/dist/main.js`) and health-checked before tests begin. The Next.js web server runs a **production build** (`next build` then `next start -p 3007`) — not dev mode — to catch build-time and SSR issues. `TOKEN_ENCRYPTION_KEY` is set in the E2E CI environment.
 
-**Cross-browser matrix:** chromium / firefox / webkit — run as parallel CI jobs.
+**Cross-browser matrix:** chromium / firefox / webkit — run as parallel CI jobs. E2E job timeout: 40 minutes.
 
 **Artifacts on failure:** Playwright report (7-day retention).
 

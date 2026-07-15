@@ -47,6 +47,9 @@ See [security.md](security.md) for OAuth linking rules and session semantics.
 | DELETE | `/channels/:id` | Disconnect + revoke tokens |
 | GET | `/channels/:id/library-videos` | Paginated library videos (cursor-based, supports `?q=&type=&sort=`) |
 | GET | `/channels/:id/library-playlists` | Synced playlists |
+| GET | `/channels/:channelId/automation` | Get automation settings for a channel |
+| PUT | `/channels/:channelId/automation` | Update automation settings |
+| POST | `/channels/:channelId/automation/suggest` | AI-generated settings suggestion (with heuristic fallback) |
 
 Channel sync is enqueued on channel creation / OAuth link. Tokens are encrypted at rest; see [security.md](security.md).
 
@@ -106,7 +109,7 @@ Expired approvals block publish; a new approval must be created. `POST /publishi
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/publishing/publish` | `{ videoId, channelId, title, description, tags[], categoryId?, scheduledAt?, videoFilePath, approvalId }` — requires a valid `APPROVED` Approval. Throws `403` if unmet. |
+| POST | `/publishing/publish` | `{ videoId, channelId, title, description, tags[], categoryId?, scheduledAt?, videoFilePath, approvalId }` — requires a valid `APPROVED` Approval. Throws `403` if unmet. Available to all authenticated users — no per-user grant required. |
 | GET | `/publishing/stats/:channelId/:youtubeVideoId` | Post-publish analytics snapshot |
 
 See [youtube-publishing.md](youtube-publishing.md) for the full publish gate sequence.
@@ -204,6 +207,29 @@ See [monetization-framework.md](monetization-framework.md) for credit economics,
 
 ---
 
+## Video Editor
+
+Standalone multi-track video editor. All routes are JWT-guarded with ownership checks. The `editor` module is separate from the Shorts clip editor.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/editor/projects/:projectId` | Create an `EditProject` within a project. Body: `{ blank?, title?, width?, height?, fps?, sourceKind?: 'VIDEO'\|'IMPORTED_VIDEO'\|'ASSET', sourceId? }` |
+| GET | `/editor/projects/:projectId` | List `EditProject` records for a project |
+| GET | `/editor/mine` | All edit projects owned by the current user |
+| POST | `/editor/blank` | Create a blank `EditProject`; container project resolved server-side |
+| POST | `/editor/from-imported/:importedVideoId` | Open an `ImportedVideo` in the editor; project resolved from the video |
+| GET | `/editor/:id` | Get a single `EditProject` |
+| PUT | `/editor/:id/timeline` | Save and validate the timeline JSON against `EditTimelineSchema` (Zod) |
+| GET | `/editor/:id/media-bin` | List assets droppable onto the timeline |
+| POST | `/editor/:id/render` | Enqueue an `EDIT_RENDER` job. Body: `{ preset?: EditRenderPreset, format?: 'mp4'\|'webm', quality?: 'draft'\|'standard'\|'high' }` |
+| GET | `/editor/:id/render-status` | Poll render status and download path |
+
+**Export presets:** `1080P_16_9` (1920×1080) / `1080P_9_16` (1080×1920) / `720P_16_9` (1280×720) / `1080P_1_1` (1080×1080) / `SOURCE` (project dims). **Format:** `mp4` (libx264+aac, default) or `webm` (libvpx-vp9+libopus). **Quality:** `draft` / `standard` (default) / `high`.
+
+See [features.md](features.md) for timeline schema detail and render implementation limits.
+
+---
+
 ## Copilot
 
 | Method | Path | Notes |
@@ -270,5 +296,4 @@ The WebSocket gateway is not documented in the OpenAPI/Swagger spec.
 ## Planned / Not Yet Implemented
 
 - **Full Swagger decorator coverage** — partial; not all controllers are fully decorated.
-- **Per-route rate limiting** — Helmet is present; per-route rate limiter is not yet configured.
 - **WebSocket API documentation** — the Socket.io gateway handles real-time job progress but is not reflected in the OpenAPI spec.

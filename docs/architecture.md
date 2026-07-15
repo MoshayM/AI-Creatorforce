@@ -39,6 +39,8 @@ AI CreatorForce is a **modular monolith with an async job backbone**: a NestJS A
 | `approvals` | Human-in-the-loop approval records, `Approval` model |
 | `publishing` | YouTube upload gate (checks `Approval.status = 'APPROVED'`), PublishingService |
 | `shorts-studio` | Channel-first Shorts flow (import picker, transcript, scenes, clips, timeline, social factory) |
+| `editor` | Standalone multi-track video editor — `EditProject` model, `EDIT_RENDER` job type, timeline Zod validation, ffmpeg render (mp4/webm, draft/standard/high quality) |
+| `automation` | Per-channel automation settings (`ChannelAutomation`), 15-min `AUTOMATION_TICK` repeatable heartbeat, auto-import/analyze/publish (paced, APPROVED-only)/chapter-sync |
 | `media` | Asset/AssetVersion storage, R2 keys |
 | `render` | Timeline → RenderPreset → ffmpeg-static → `Render` model |
 | `voice` | VoiceAgent job orchestration |
@@ -77,6 +79,8 @@ AI CreatorForce is a **modular monolith with an async job backbone**: a NestJS A
 **Forms:** React Hook Form + Zod resolvers. Validation schemas are imported from `packages/shared` to keep frontend and backend validation in sync.
 
 **UI primitives:** Radix UI (accessible, unstyled headless components). Styled with Tailwind CSS.
+
+**Public landing page:** `apps/web/src/app/page.tsx` — the root route renders a marketing page (feature grid, Windows/Android download CTAs marked "coming soon", Use-in-browser CTA) for unauthenticated visitors. It does not redirect to `/projects`.
 
 **Auth session:** next-auth v4 with a custom credentials provider (email+password) and OAuth providers. The JWT session contains `accessToken` and `refreshToken`; the web layer handles silent token refresh.
 
@@ -159,3 +163,5 @@ OAuth tokens stored in `AuthSession` are encrypted at rest using `TOKEN_ENCRYPTI
 **n8n workflow runtime** — The `n8n/` directory holds exported workflow JSON definitions. A running n8n instance with access to the API's webhook endpoints has not yet been provisioned. When deployed, n8n workflows will orchestrate multi-step automations that currently require manual job chaining.
 
 **Horizontal worker scaling** — All BullMQ workers run in a single Node.js process alongside the API. The queue is designed for horizontal scaling (multiple worker replicas), but the deployment currently runs single-process. Worker extraction is a deployment-time change requiring no code changes.
+
+**AUTOMATION_TICK heartbeat** — A 15-minute BullMQ repeatable job (`JobType.AUTOMATION_TICK`) runs `AutomationService.runTick()` which iterates all enabled `ChannelAutomation` rows. Each action (import / analyze / publish / chapter-sync) checks per-channel daily quotas and interval constraints before enqueueing sub-jobs. Auto-publish only processes clips that already have `Approval.status = 'APPROVED'`.

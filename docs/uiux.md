@@ -4,6 +4,12 @@ This file documents the frontend tech stack, design principles, navigation struc
 
 ---
 
+## Public Landing Page
+
+The root route (`/`) renders a marketing page (`apps/web/src/app/page.tsx`) for unauthenticated visitors. It includes a feature grid, a how-it-works section, download buttons for Windows and Android native apps (labeled "coming soon"), and a Use-in-browser CTA. The root no longer redirects authenticated users straight to `/projects` on first load.
+
+---
+
 ## Design Principles
 
 - **Pipeline made visible.** The product is a pipeline; the UI always shows where a project is and what's next.
@@ -40,17 +46,24 @@ This file documents the frontend tech stack, design principles, navigation struc
 Dashboard / Overview
 Channels (channel selector)
 Shorts Studio (channel-first)
+Video Editor             ← top-level link → /editor
 Projects / Content pipeline
+Approvals
 Analytics
-Growth / Referrals
 Developer Portal
-Settings
+Settings (collapsible group)
   - Library
-  - YouTube Channel access
+  - YouTube Channel access (#channels anchor)
+  - Wallet
+  - Organization
+  - Growth
+  - Brand Kit
+  - Automation
+Admin (shown only for OWNER / SUPER_ADMIN roles)
 Notifications
 ```
 
-Settings contains Library and YouTube Channel access as nested sub-links (not top-level items).
+**Mobile:** An off-canvas drawer slides in when the hamburger (`<Menu>`) button in the top bar is tapped; an `<X>` button closes it. State is managed in `(dash)/layout.tsx` via `sidebarOpen`.
 
 ---
 
@@ -103,5 +116,5 @@ All forms use react-hook-form with Zod schema validation (schemas sourced from `
 - Design token system and component library documentation.
 - Dark mode.
 - i18n / localization (the `targetLang` field exists on the Project model; UI layer not yet wired).
-- Mobile-responsive audit (currently desktop-first; tablet support is partial).
+- Mobile: off-canvas drawer is implemented; full responsive audit and tablet layout polish are outstanding.
 - Storybook for component development and visual documentation.

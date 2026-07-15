@@ -79,15 +79,24 @@ Still needed to complete Phase 4:
 
 ---
 
-## Phase 5 — Automation and Scale (PLANNED)
+## Phase 5 — Automation and Scale (IN PROGRESS)
 
-- n8n workflow runtime deployment: long human-paused automations (full WF-1 with human checkpoints). The `n8n/` folder has exported workflow definitions; no deployed instance yet.
-- Auto-publish scheduling: opt-in, post-compliance, post-approval only.
+Shipped so far:
+
+- **Per-channel Automation** (`ChannelAutomation` model, 15-min `AUTOMATION_TICK` BullMQ repeatable heartbeat). Auto-import / auto-analyze / auto-publish (paced, APPROVED-only) / chapter-sync per channel, each with daily quotas. AI-suggested settings with heuristic fallback. Automation UI under Settings sidebar group.
+- **Standalone Video Editor** (`EditProject` model, `EDIT_RENDER` job type, multi-track timeline, Phase 1–3 render — filters, transitions, audio mixing, multi-format/quality export). Video Editor is a top-level sidebar item.
+- **Security hardening:** production startup guard for `JWT_SECRET`/`TOKEN_ENCRYPTION_KEY`; Redis-backed auth rate limiting on login/register/refresh.
+- **Public landing page** at `/` (feature grid, download CTAs, Use-in-browser CTA).
+- **CI overhaul:** Node 24, pnpm from `packageManager`, `prisma generate` in typecheck/unit/build jobs, production-build E2E, `TOKEN_ENCRYPTION_KEY` in E2E env, ZAP baseline CI job.
+- **Reliability:** chapter sync surfaces real YouTube errors (`invalid_grant` → reconnect); embedding generation non-fatal; AV1 sources re-acquired as H.264; typed media pipeline errors with friendly Shorts error cards.
+
+Still needed:
+- n8n workflow runtime deployment.
 - Multi-region deployment.
-- Horizontal BullMQ worker scaling (heavy/light pool separation, scale by queue depth).
-- Rate limiting and quota management per subscription tier.
+- Horizontal BullMQ worker scaling.
+- Rate limiting and quota management per subscription tier (beyond auth endpoints).
 - Staging environment.
-- Production infrastructure-as-code (Kubernetes manifests or equivalent).
+- Production infrastructure-as-code.
 
 ---
 
@@ -115,8 +124,8 @@ Still needed to complete Phase 4:
 These items are gaps within phases marked COMPLETED — they were not delivered as part of those phases and remain outstanding:
 
 - n8n runtime deployment (designed in Phase 1 scope, not deployed).
-- In-app video file generation from render pipeline to YouTube upload (Phase 2 Shorts publish requires user-supplied file).
-- Cloudflare R2 storage wiring.
+- In-app video file generation from render pipeline to YouTube upload (Shorts publish and long-form publish both still require a user-supplied `videoFilePath`; standalone editor renders but the path from editor render → YouTube upload is not yet wired).
+- Cloudflare R2 storage wiring (`r2Key` fields present; R2 client not integrated).
 - External video and music generation providers.
 - Staging environment.
 - Production infrastructure-as-code.

@@ -90,9 +90,17 @@ Library sync reads the connected channel's uploaded videos and playlists via the
 
 ## Shorts Publishing
 
-Shorts go through the same compliance and human approval gates as long-form videos. No separate gate or bypass exists. The render preset `RenderPreset.SHORTS_1080X1920` produces the correct 9:16 aspect ratio. The video is published as a standard YouTube video; YouTube automatically categorizes it as a Short based on duration (<=60 s) and aspect ratio.
+Shorts go through the same compliance and human approval gates as long-form videos. No separate gate or bypass exists. Publishing is available to all authenticated users — there is no per-user publish-access grant system. The render preset `RenderPreset.SHORTS_1080X1920` produces the correct 9:16 aspect ratio. The video is published as a standard YouTube video; YouTube automatically categorizes it as a Short based on duration (<=60 s) and aspect ratio.
+
+**Original audio language:** When a Short is published, `PublishingService` sets `snippet.defaultAudioLanguage` on the upload request to the value stored in `ImportedVideo.originalAudioLanguage`. This field is populated from the source video's YouTube `snippet.defaultAudioLanguage` at import time. Viewers hear the original language unless they switch audio tracks.
 
 Shorts-specific metadata fields (audience designation, Shorts-specific category) are not yet implemented (see Planned section).
+
+---
+
+## Chapter Sync Error Handling
+
+Chapter sync errors returned by the YouTube Data API are surfaced to the user with actionable messages. Specifically, an `invalid_grant` error (expired or revoked OAuth tokens) displays a prompt to reconnect the channel rather than a generic failure message.
 
 ---
 

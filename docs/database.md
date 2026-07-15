@@ -60,7 +60,7 @@ This document is the canonical reference for the AI CreatorForce data model. It 
 
 **AgentLog** — `id`, `jobId`, `agentName`, `step`, `input` (Json), `output` (Json), `tokensIn`, `tokensOut`, `latencyMs`. One row per agent step within a job.
 
-**JobType enum** — approximately 50 values covering: `RESEARCH`, `SCRIPT`, `FACT_CHECK`, `COMPLIANCE`, `METADATA`, `THUMBNAIL`, `TREND_ANALYSIS`, `SEO_OPTIMIZATION`, `AUDIENCE_ANALYSIS`, `PUBLISH`, all media pipeline types, all Shorts Studio types (`SHORTS_ANALYZE`, `CHAPTER_DETECTION`, `CAPTION_GENERATION`, `SHORTS_RENDER`, `SHORTS_EXPORT`, `SHORTS_PUBLISH`, `SOCIAL_CONTENT_GENERATION`, `EMBEDDING_GENERATION`, etc.), and `CHANNEL_SYNC`.
+**JobType enum** — approximately 50 values covering: `RESEARCH`, `SCRIPT`, `FACT_CHECK`, `COMPLIANCE`, `METADATA`, `THUMBNAIL`, `TREND_ANALYSIS`, `SEO_OPTIMIZATION`, `AUDIENCE_ANALYSIS`, `PUBLISH`, all media pipeline types, all Shorts Studio types (`SHORTS_ANALYZE`, `CHAPTER_DETECTION`, `CAPTION_GENERATION`, `SHORTS_RENDER`, `SHORTS_EXPORT`, `SHORTS_PUBLISH`, `SOCIAL_CONTENT_GENERATION`, `EMBEDDING_GENERATION`, etc.), `CHANNEL_SYNC`, `EDIT_RENDER` (standalone video editor render), and `AUTOMATION_TICK` (15-min repeatable heartbeat for per-channel automation).
 
 **JobStatus enum** — `PENDING` / `QUEUED` / `RUNNING` / `WAITING_APPROVAL` / `APPROVED` / `REJECTED` / `COMPLETED` / `FAILED` / `CANCELLED`.
 
@@ -82,7 +82,7 @@ This document is the canonical reference for the AI CreatorForce data model. It 
 
 ### Media Assets
 
-**Asset** — `id`, `projectId`, `kind` (`AssetKind` enum — covers all media types: audio, video, thumbnail, voiceover, plus all Shorts Studio asset types), `currentVersionId`, `status` (`BRIEFED` / `GENERATING` / `READY` / `FAILED` / `ACCEPTED`), `label`, `deletedAt`. Index on `[projectId, kind, status]`.
+**Asset** — `id`, `projectId`, `kind` (`AssetKind` enum — covers all media types: audio, video, thumbnail, voiceover, plus all Shorts Studio asset types, and `EDIT_RENDER` for standalone editor render outputs), `currentVersionId`, `status` (`BRIEFED` / `GENERATING` / `READY` / `FAILED` / `ACCEPTED`), `label`, `deletedAt`. Index on `[projectId, kind, status]`.
 
 **AssetVersion** — `id`, `assetId`, `version`, `r2Key`, `contentHash`, `provider`, `model`, `prompt` (Json), `params` (Json), `provenance` (Json), `sizeBytes` (BigInt), `durationMs`, `wordTimestamps` (Json). Stores full provenance for every generated version including provider, model, prompt, and generation params. `r2Key` is the Cloudflare R2 object key (integration planned; field present).
 
@@ -136,7 +136,7 @@ This document is the canonical reference for the AI CreatorForce data model. It 
 
 ### Shorts Studio
 
-**ImportedVideo** — `id`, `projectId`, `youtubeVideoId`, `title`, `description`, `durationMs`, `thumbnailUrl`, `viewCount` (BigInt), `likeCount` (BigInt), `commentCount` (BigInt), `sourceAssetId`, `transcriptStatus` (`PENDING` / ...), `chaptersSyncedAt`, `notes` (text — user-editable reference notes, displayed as a sticky-note indicator in the UI). Unique on `[projectId, youtubeVideoId]`.
+**ImportedVideo** — `id`, `projectId`, `youtubeVideoId`, `title`, `description`, `durationMs`, `thumbnailUrl`, `viewCount` (BigInt), `likeCount` (BigInt), `commentCount` (BigInt), `sourceAssetId`, `transcriptStatus` (`PENDING` / ...), `chaptersSyncedAt`, `originalAudioLanguage` (String?, populated from YouTube `snippet.defaultAudioLanguage` at import time), `notes` (text — user-editable reference notes, displayed as a sticky-note indicator in the UI). Unique on `[projectId, youtubeVideoId]`.
 
 **TranscriptSegment** — Transcript segments from ASR (Whisper / YouTube captions), linked to an `ImportedVideo`. Used as the embedding source for semantic search.
 
@@ -155,6 +155,16 @@ This document is the canonical reference for the AI CreatorForce data model. It 
 **ShortsThumbnail** — Thumbnail variations generated after first render.
 
 **ShortsExportHistory** — Export records linking a clip to its final exported asset and YouTube publish state.
+
+---
+
+### Video Editor
+
+**EditProject** (`edit_projects`) — `id`, `projectId`, `title`, `status`, `width` (Int), `height` (Int), `fps` (Int), `durationMs` (nullable), `timeline` (Json — serialized `EditTimeline`), `renderAssetId` (nullable — FK to the completed render `Asset`), `renderStatus` (nullable), `lastEditedAt`. Scoped to a `Project`; multiple `EditProject` records can exist per project. Timeline JSON is validated against `EditTimelineSchema` from `packages/shared` on every `PUT /editor/:id/timeline` call.
+
+**Channel** has a `automation ChannelAutomation?` relation (one optional `ChannelAutomation` row per channel).
+
+**ChannelAutomation** (`channel_automations`) — `id`, `channelId` (unique — one row per channel), `enabled`, `autoImport`, `autoAnalyze`, `autoPublish`, `chapterSyncEnabled`, `publishIntervalMinutes` (default 240), `maxPublishesPerDay` (default 2), `maxImportsPerDay` (default 3), `lastTickAt` (nullable), `aiSuggestion` (Json, nullable — last AI-generated suggestion). Created on first PUT; prior to creation, service returns default values.
 
 ---
 
