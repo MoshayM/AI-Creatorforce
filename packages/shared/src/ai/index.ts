@@ -1000,7 +1000,8 @@ export async function embedTexts(texts: string[]): Promise<EmbeddingResult> {
     try {
       let lastErr: unknown;
       let response: OpenAI.CreateEmbeddingResponse | null = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      const MAX_ATTEMPTS = 3;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         try {
           response = await client.embeddings.create({ model, input: batchTexts, dimensions: EMBEDDING_DIMS });
           break;
@@ -1008,7 +1009,11 @@ export async function embedTexts(texts: string[]): Promise<EmbeddingResult> {
           lastErr = err;
           const status = (err as { status?: number }).status ?? 0;
           if (status !== 429 && status < 500) throw err;
-          await new Promise((r) => setTimeout(r, 1000 * 4 ** attempt));
+          // Don't sleep after the final attempt — we're about to give up, so a
+          // dead/quota-exhausted provider fails in ~5s instead of ~21s.
+          if (attempt < MAX_ATTEMPTS - 1) {
+            await new Promise((r) => setTimeout(r, 1000 * 4 ** attempt));
+          }
         }
       }
       if (!response) throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));

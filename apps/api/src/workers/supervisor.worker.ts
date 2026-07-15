@@ -33,6 +33,14 @@ import { CaptionGenerationService } from '../modules/shorts-studio/caption-gener
 import { ShortsRenderService } from '../modules/shorts-studio/shorts-render.service';
 import { ShortsExportService } from '../modules/shorts-studio/shorts-export.service';
 import { SHORTS_IMPORT_STAGES } from '../modules/shorts-studio/shorts-studio.service';
+
+/**
+ * Analysis stages whose failure must NOT fail the whole SHORTS_ANALYZE job.
+ * Embeddings only power semantic search — clips are already produced by the
+ * earlier stages, so a missing/slow embedding provider (e.g. quota exhausted)
+ * degrades search rather than blocking the user's Shorts.
+ */
+const OPTIONAL_SHORTS_STAGES = new Set<string>(['EMBEDDING_GENERATION']);
 import { composeVideo, ffmpegPath, runFfmpegCapture, type ComposeScene } from '../modules/media/adapters/ffmpeg.util';
 import { encodeWhooshWav } from '../modules/media/adapters/codec.util';
 import { checkDurations, analyzeLoudness } from '../modules/media/quality.util';
@@ -1456,6 +1464,13 @@ export class SupervisorWorker extends WorkerHost {
               } as Parameters<typeof this.prisma.agentJob.update>[0]['data'],
             }).catch(() => undefined);
             this.events.emitJobFailed(child.id, failure.error, projectId);
+            // Optional stages (embeddings power semantic search only) must never
+            // fail the whole analysis — the clip-producing stages above already
+            // completed and persisted. Log and continue instead of aborting.
+            if (OPTIONAL_SHORTS_STAGES.has(stageType)) {
+              this.log(jobId, projectId, `Optional stage ${stageType} failed — continuing (does not block Shorts): ${failure.error}`);
+              continue;
+            }
             throw err;
           }
         }
