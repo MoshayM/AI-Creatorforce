@@ -36,7 +36,12 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'pnpm --filter @cf/web dev',
+    // CI: production server against a prebuilt .next (the CI job builds it) —
+    // `next dev` cold-compiles every route on a 2-core runner and blew the
+    // 40-minute job cap. Local runs keep the dev server.
+    command: process.env['CI']
+      ? 'pnpm --filter @cf/web exec next start -p 3007'
+      : 'pnpm --filter @cf/web dev',
     url: 'http://localhost:3007',
     reuseExistingServer: true,
     timeout: 120_000,

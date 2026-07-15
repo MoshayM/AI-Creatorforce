@@ -379,6 +379,16 @@ jobs:
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ env.GEMINI_API_KEY }}
 
+      # Production build for the e2e web server (playwright.config uses
+      # `next start` on CI). NEXT_PUBLIC_* are inlined at build time.
+      - name: Build web app
+        run: pnpm --filter @cf/web... build
+        env:
+          NEXT_PUBLIC_API_URL: 'http://localhost:4007/api/v1'
+          NEXT_PUBLIC_USE_MOCK: 'false'
+          SKIP_ENV_VALIDATION: 'true'
+          NEXT_TELEMETRY_DISABLED: '1'
+
       - name: Install Playwright browsers
         run: pnpm --filter @cf/e2e exec playwright install --with-deps ${{ matrix.browser }}
 
