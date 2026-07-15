@@ -60,6 +60,7 @@ import { createHash, randomUUID } from 'crypto';
 import { ChannelSyncService } from '../modules/channels/channel-sync.service';
 import { MetricsService } from '../modules/metrics/metrics.service';
 import { AutomationService } from '../modules/automation/automation.service';
+import { EditorService } from '../modules/editor/editor.service';
 import { toJobFailure } from '../modules/media/media.errors';
 import { appendVideoImportLog } from '../modules/media/video-import-log.util';
 
@@ -119,6 +120,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly channelSync: ChannelSyncService,
     private readonly metrics: MetricsService,
     private readonly automation: AutomationService,
+    private readonly editorSvc: EditorService,
   ) {
     super();
   }
@@ -1460,6 +1462,22 @@ export class SupervisorWorker extends WorkerHost {
 
         this.log(jobId, projectId, 'Shorts analysis pipeline complete ✓');
         return { importedVideoId, stages: stageResults };
+      }
+
+      case 'EDIT_RENDER': {
+        const editProjectId = payload['editProjectId'] as string;
+        const preset = (payload['preset'] as string | undefined) ?? 'SOURCE';
+        if (!editProjectId) throw new Error('EDIT_RENDER requires payload.editProjectId');
+        this.log(jobId, projectId, 'Starting standalone editor render…', `editProjectId=${editProjectId} preset=${preset}`);
+        const result = await this.editorSvc.runRender(
+          editProjectId,
+          // @reason: validated as EditRenderPreset in EditorService.render() before enqueue
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          preset as any,
+          (msg) => this.log(jobId, projectId, msg),
+        );
+        this.log(jobId, projectId, 'Editor render complete ✓', `assetId=${result.assetId} · ${(result.sizeBytes / 1024 / 1024).toFixed(1)} MB`);
+        return result;
       }
 
       default:

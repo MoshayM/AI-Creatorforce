@@ -1,10 +1,36 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Clapperboard, Loader2, Download, Wand2, CheckCircle2, XCircle, Clock, Film, Captions, Sparkles, ChevronDown, ChevronRight, Search, X, FolderDown, ListVideo, StickyNote } from 'lucide-react';
 import { api, type LibraryVideo, type LibraryPlaylist, type LibraryVideosPage, type LibraryPlaylistsPage, type LibraryPlaylistItemsPage } from '@/lib/api';
 import { JobErrorCard } from '@/components/job-error-card';
+
+/**
+ * "Send to Video Edit" — spins up a standalone edit project seeded from this
+ * imported video, then routes into the new editor. Uses the shared
+ * `api.editor.create` contract (sourceKind IMPORTED_VIDEO).
+ */
+function SendToEditorButton({ importedVideoId }: { importedVideoId: string }) {
+  const router = useRouter();
+  const create = useMutation({
+    // projectId is resolved server-side from the imported video.
+    mutationFn: () => api.editor.createFromImported(importedVideoId).then((r) => r.data),
+    onSuccess: (data) => router.push(`/editor/${data.id}`),
+  });
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); create.mutate(); }}
+      disabled={create.isPending}
+      title="Open this video in the full Video Editor"
+      className="flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 rounded-lg text-sm hover:bg-brand-50 disabled:opacity-50 justify-center"
+    >
+      {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
+      Video Edit
+    </button>
+  );
+}
 
 interface Channel {
   id: string;
@@ -750,7 +776,7 @@ export default function ShortsStudioPage() {
                           <AnalysisProgress importedVideoId={v.id} onRetry={() => analyzeMutation.mutate(v.id)} />
                           <NotesEditor video={v} channelId={channelId} />
                         </div>
-                        <div className="flex gap-2 shrink-0">
+                        <div className="flex gap-2 shrink-0 flex-wrap">
                           <button
                             onClick={(e) => { e.stopPropagation(); analyzeMutation.mutate(v.id); }}
                             disabled={analyzeMutation.isPending}
@@ -761,6 +787,9 @@ export default function ShortsStudioPage() {
                               : <Wand2 className="w-4 h-4" />}
                             Analyze
                           </button>
+                          {/* Seed a standalone edit project from this imported video.
+                              The backend resolves the owning project from the source id. */}
+                          <SendToEditorButton importedVideoId={v.id} />
                           {v._count.topicSegments > 0 && (
                             <Link
                               href={`/shorts-studio/videos/${v.id}`}

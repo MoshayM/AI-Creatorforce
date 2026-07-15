@@ -731,6 +731,37 @@ export const api = {
     suggest: (channelId: string) =>
       apiClient.post<AutomationSuggestion>(`/channels/${channelId}/automation/suggest`),
   },
+  editor: {
+    create: (projectId: string, body: {
+      sourceKind?: 'VIDEO' | 'IMPORTED_VIDEO' | 'ASSET';
+      sourceId?: string;
+      title?: string;
+      width?: number;
+      height?: number;
+      fps?: number;
+    }) =>
+      apiClient.post<EditProject>(`/editor/projects/${projectId}`, body),
+    /** All edits the current user owns (channel-first — no projectId needed). */
+    listMine: () => apiClient.get<EditProject[]>(`/editor/mine`),
+    /** Blank edit; the container project is resolved server-side. */
+    createBlank: (body: { title?: string; width?: number; height?: number; fps?: number }) =>
+      apiClient.post<EditProject>(`/editor/blank`, body),
+    /** Open an imported video; projectId resolved from the video server-side. */
+    createFromImported: (importedVideoId: string, title?: string) =>
+      apiClient.post<EditProject>(`/editor/from-imported/${importedVideoId}`, { title }),
+    get: (editId: string) =>
+      apiClient.get<EditProject>(`/editor/${editId}`),
+    listByProject: (projectId: string) =>
+      apiClient.get<EditProject[]>(`/editor/projects/${projectId}`),
+    saveTimeline: (editId: string, timeline: EditTimeline) =>
+      apiClient.put<EditProject>(`/editor/${editId}/timeline`, timeline),
+    mediaBin: (editId: string) =>
+      apiClient.get<MediaBinEntry[]>(`/editor/${editId}/media-bin`),
+    render: (editId: string, preset: RenderPreset) =>
+      apiClient.post<{ renderStatus: RenderStatus }>(`/editor/${editId}/render`, { preset }),
+    renderStatus: (editId: string) =>
+      apiClient.get<{ renderStatus: RenderStatus; renderAssetId?: string | null; downloadPath?: string }>(`/editor/${editId}/render-status`),
+  },
 };
 
 // ── Enterprise admin dashboard (Phase 5 §9) ──────────────────────────────────
@@ -782,4 +813,71 @@ export interface AdminProvider {
   avgHealthScore: number;
   costRates: Array<{ unit: string; inputCost: number; outputCost: number }>;
   healthEvents: Array<{ event: string; checkedAt: string }>;
+}
+
+// ── Editor types ──────────────────────────────────────────────────────────────
+
+export interface EditItemProperties {
+  volume?: number;
+  speed?: number;
+  opacity?: number;
+  x?: number;
+  y?: number;
+  scale?: number;
+  text?: string;
+  fontSize?: number;
+  color?: string;
+}
+
+export interface EditItem {
+  id: string;
+  sourceAssetId?: string;
+  kind: 'VIDEO' | 'IMAGE' | 'AUDIO' | 'TEXT';
+  timelineStartMs: number;
+  timelineEndMs: number;
+  sourceInMs?: number;
+  sourceOutMs?: number;
+  properties?: EditItemProperties;
+}
+
+export interface EditTrack {
+  id: string;
+  kind: 'VIDEO' | 'AUDIO' | 'TEXT';
+  label: string;
+  items: EditItem[];
+}
+
+export interface EditTimeline {
+  width: number;
+  height: number;
+  fps: number;
+  durationMs: number;
+  tracks: EditTrack[];
+}
+
+export type RenderPreset = '1080P_16_9' | '1080P_9_16' | '720P_16_9' | '1080P_1_1' | 'SOURCE';
+export type RenderStatus = 'PENDING' | 'QUEUED' | 'RUNNING' | 'READY' | 'FAILED';
+export type EditProjectStatus = 'DRAFT' | 'RENDERING' | 'READY' | 'FAILED';
+
+export interface EditProject {
+  id: string;
+  projectId: string;
+  title: string;
+  status: EditProjectStatus;
+  width: number;
+  height: number;
+  fps: number;
+  durationMs: number;
+  timeline: EditTimeline;
+  renderAssetId?: string | null;
+  renderStatus?: RenderStatus | null;
+  lastEditedAt: string;
+}
+
+export interface MediaBinEntry {
+  id: string;
+  kind: 'VIDEO' | 'IMAGE' | 'AUDIO';
+  label: string;
+  durationMs: number;
+  path: string;
 }

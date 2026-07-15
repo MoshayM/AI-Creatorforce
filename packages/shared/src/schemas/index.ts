@@ -5,3 +5,4 @@ export * from './channel.schema';
 export * from './video.schema';
 export * from './shorts.schema';
 export * from './copilot.schema';
+export * from './edit-project.schema';

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, Youtube, ChevronDown, Workflow } from 'lucide-react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, Youtube, ChevronDown, Workflow, Film, Menu, X } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -17,6 +17,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
   { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
+  { href: '/editor', icon: Film, label: 'Video Editor' },
   { href: '/approvals', icon: CheckSquare, label: 'Approvals' },
   {
     href: '/settings',
@@ -81,6 +82,8 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
   const [isAdmin, setIsAdmin] = useState(false);
   /** Explicit expand/collapse choices per nav group; unset falls back to route-based auto-open. */
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  /** Mobile off-canvas sidebar (below lg the sidebar is a drawer). */
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // ── Notifications bell state ───────────────────────────────────────────────
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -127,6 +130,9 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
     return () => document.removeEventListener('mousedown', onOutside);
   }, []);
 
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => { setSidebarOpen(false); }, [pathname]);
+
   async function handleMarkRead(id: string) {
     try {
       await api.notifications.markRead(id);
@@ -165,9 +171,29 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="min-h-screen bg-[#e9e1f8] p-3 md:p-5">
       <div className="dash-shell mx-auto max-w-[1500px] bg-white rounded-[2rem] shadow-xl flex h-[calc(100vh-2.5rem)] overflow-hidden">
-        {/* Rounded purple sidebar (design ref: ux.jpg) */}
-        <aside className="m-3 w-60 shrink-0 bg-gradient-to-b from-[#9d6ff0] to-[#7c4fd8] rounded-[1.75rem] flex flex-col text-white shadow-lg">
-          <div className="px-5 pt-6 pb-4">
+        {/* Backdrop behind the mobile drawer */}
+        {sidebarOpen && (
+          <div
+            className="lg:hidden fixed inset-0 z-40 bg-black/40"
+            aria-hidden="true"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+        {/* Sidebar: static column on lg+, off-canvas drawer below lg (design ref: ux.jpg) */}
+        <aside
+          className={`m-3 w-60 shrink-0 bg-gradient-to-b from-[#9d6ff0] to-[#7c4fd8] rounded-[1.75rem] flex flex-col text-white shadow-lg
+            max-lg:fixed max-lg:inset-y-3 max-lg:left-3 max-lg:z-50 max-lg:transition-transform max-lg:duration-200
+            ${sidebarOpen ? 'max-lg:translate-x-0' : 'max-lg:-translate-x-[110%]'}`}
+        >
+          <div className="px-5 pt-6 pb-4 relative">
+            <button
+              type="button"
+              aria-label="Close navigation menu"
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden absolute top-4 right-4 flex items-center justify-center w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
             <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-md">
               <Zap className="w-7 h-7 text-brand-600" />
             </div>
@@ -242,8 +268,18 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
         </aside>
 
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Top bar: notification bell + user chip */}
-          <div className="dash-topbar flex items-center justify-end gap-3 px-8 pt-5">
+          {/* Top bar: hamburger (mobile) + notification bell + user chip */}
+          <div className="dash-topbar flex items-center justify-between lg:justify-end gap-3 px-4 lg:px-8 pt-5">
+            <button
+              type="button"
+              aria-label="Open navigation menu"
+              aria-expanded={sidebarOpen}
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+            >
+              <Menu className="w-4 h-4 text-gray-600" />
+            </button>
+            <div className="flex items-center gap-3">
             {/* ── Notification bell ───────────────────────────────────────────── */}
             <div className="relative" ref={bellRef}>
               <button
@@ -324,6 +360,7 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
                 <p className="text-sm font-semibold text-gray-800">{userName}</p>
                 <p className="text-[11px] text-gray-500">Creator</p>
               </div>
+            </div>
             </div>
           </div>
 

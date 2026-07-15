@@ -39,6 +39,7 @@ import { BiModule } from './modules/bi/bi.module';
 import { DevPortalModule } from './modules/dev-portal/dev-portal.module';
 import { FlagsModule } from './modules/flags/flags.module';
 import { AutomationModule } from './modules/automation/automation.module';
+import { EditorModule } from './modules/editor/editor.module';
 
 @Module({
   imports: [
@@ -95,6 +96,7 @@ import { AutomationModule } from './modules/automation/automation.module';
     DevPortalModule,
     FlagsModule,
     AutomationModule,
+    EditorModule,
     MetricsModule,
     HealthModule,
   ],

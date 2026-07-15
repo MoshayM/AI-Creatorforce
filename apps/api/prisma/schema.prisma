@@ -136,6 +136,7 @@ model Project {
   renders        Render[]
   importedVideos ImportedVideo[]
   shortClips     ShortClip[]
+  editProjects   EditProject[]
 
   @@map("projects")
 }
@@ -224,6 +225,8 @@ enum JobType {
   SOCIAL_CONTENT_GENERATION
   CHANNEL_SYNC
   AUTOMATION_TICK
+  // Standalone video editor (editor module)
+  EDIT_RENDER
 }
 
 enum JobStatus {
@@ -454,6 +457,8 @@ enum AssetKind {
   SHORTS_THUMBNAIL
   SHORTS_PREVIEW
   SHORTS_FINAL_EXPORT
+  // Standalone video editor (editor module)
+  EDIT_RENDER
 }
 
 enum AssetStatus {
@@ -1946,6 +1951,35 @@ model DeveloperWebhookDelivery {
 
   @@index([status, nextAttemptAt])
   @@map("developer_webhook_deliveries")
+}
+
+// ── Standalone Video Editor (editor module) ───────────────────────────────────
+// An EditProject is a user-managed multi-track edit session scoped to a Project.
+// The timeline (EditTimeline JSON) is validated against the EditTimelineSchema from
+// @cf/shared before every save. renderAssetId points to the last successful render
+// (AssetKind.EDIT_RENDER). This model exists after a pending migration — services
+// access it via (this.prisma as any).editProject with a // @reason comment.
+
+model EditProject {
+  id             String   @id @default(cuid())
+  projectId      String
+  title          String
+  status         String   @default("DRAFT")
+  width          Int      @default(1920)
+  height         Int      @default(1080)
+  fps            Int      @default(30)
+  durationMs     Int      @default(0)
+  timeline       Json     @default("{}")
+  renderAssetId  String?
+  renderStatus   String   @default("NONE")
+  lastEditedAt   DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("edit_projects")
 }
 
 /// Automation NEVER bypasses compliance/approval — autoPublish only paces

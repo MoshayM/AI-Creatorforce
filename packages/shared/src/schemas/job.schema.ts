@@ -47,6 +47,8 @@ export const JobTypeSchema = z.enum([
   'CHANNEL_SYNC',
   // Per-channel automation heartbeat (runs every 15 min via repeatable job)
   'AUTOMATION_TICK',
+  // Standalone video editor (editor module)
+  'EDIT_RENDER',
 ]);
 export type JobType = z.infer<typeof JobTypeSchema>;
 
