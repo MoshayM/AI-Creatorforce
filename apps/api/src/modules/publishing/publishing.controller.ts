@@ -2,9 +2,7 @@ import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsOptional, IsArray, IsDateString } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 import { PublishingService } from './publishing.service';
-import { PublishAccessService } from '../publish-access/publish-access.service';
 
 class PublishDto {
   @IsString() videoId!: string;
@@ -21,14 +19,10 @@ class PublishDto {
 @UseGuards(JwtAuthGuard)
 @Controller('publishing')
 export class PublishingController {
-  constructor(
-    private readonly svc: PublishingService,
-    private readonly publishAccess: PublishAccessService,
-  ) {}
+  constructor(private readonly svc: PublishingService) {}
 
   @Post('publish')
-  async publish(@Body() dto: PublishDto, @CurrentUser() user: JwtPayload) {
-    await this.publishAccess.assertCanPublishDirect(user.sub, user.role);
+  publish(@Body() dto: PublishDto) {
     return this.svc.publish(
       {
         videoId: dto.videoId,

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, Youtube, ShieldCheck, ChevronDown } from 'lucide-react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, Youtube, ChevronDown } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -178,9 +178,6 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
             href: '/admin',
             icon: Gauge,
             label: 'Admin',
-            children: [
-              { href: '/admin/publish-access', icon: ShieldCheck, label: 'Publish access' },
-            ],
           } as NavItem] : [])].map(({ href, icon: Icon, label, children }) => {
               // Groups open on click (chevron or navigating into the section)
               // and auto-open while the current page lives inside them.
