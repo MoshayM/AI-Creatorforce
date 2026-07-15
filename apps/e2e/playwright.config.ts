@@ -4,8 +4,13 @@ export default defineConfig({
   testDir: './src',
   fullyParallel: true,
   forbidOnly: !!process.env['CI'],
-  retries: process.env['CI'] ? 2 : 1,
+  // One retry (was 2 on CI): a broadly-failing suite at 2 retries × 60s spent
+  // 40+ min and the job was killed with no report.
+  retries: 1,
   workers: 1,
+  // Hard cap on the whole run so a single hanging test aborts the run cleanly
+  // (with a report artifact) instead of GitHub cancelling the job at its cap.
+  globalTimeout: process.env['CI'] ? 25 * 60_000 : undefined,
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   timeout: 60_000,
   expect: {

@@ -90,7 +90,7 @@ test.describe('Discover / Trend Analysis', () => {
     await page.getByPlaceholder(/enter your niche/i).fill('Technology');
     await page.getByRole('button', { name: /analyze/i }).click();
     await expect(page.getByText('AI Agents Automation 2026')).toBeVisible({ timeout: 10_000 });
-    const downloadPromise = page.waitForEvent('download');
+    const downloadPromise = page.waitForEvent('download', { timeout: 15_000 });
     await page.getByRole('button', { name: /save/i }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/^trends-technology-\d{4}-\d{2}-\d{2}\.json$/);
