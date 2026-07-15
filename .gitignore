@@ -33,3 +33,4 @@ yt-dlp/
 .tools/
 .zap/zap-baseline-web.*
 .zap/zap-summary.json
+.vercel

@@ -1,0 +1,22 @@
+# Keep the Vercel CLI upload small — exclude everything the build doesn't need.
+node_modules
+**/node_modules
+.git
+.tools
+storage
+logs
+**/.next
+**/dist
+**/coverage
+.turbo
+apps/e2e
+apps/api
+n8n
+infra
+*.zip
+*.png
+*.jpg
+*.PNG
+*.pdb
+*.log
+.zap
