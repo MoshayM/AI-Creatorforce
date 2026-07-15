@@ -4,6 +4,7 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type { Request, Response } from 'express';
@@ -37,6 +38,8 @@ export function categorize(status: number): { code: string; retryable: boolean }
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(AllExceptionsFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -49,8 +52,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const correlationId = currentCorrelationId() ?? null;
 
-    // Only report 5xx errors to Sentry; 4xx are expected client errors
+    // Only report 5xx errors to Sentry; 4xx are expected client errors.
+    // ALSO log them locally — without a Sentry DSN these were invisible,
+    // leaving nothing but an opaque "Internal server error" to debug from.
     if (status >= 500) {
+      const err = exception instanceof Error ? exception : new Error(String(exception));
+      this.logger.error(
+        `${request.method} ${request.url} → ${status} (${correlationId ?? 'no-correlation-id'}): ${err.message}`,
+        err.stack?.slice(0, 3000),
+      );
       Sentry.captureException(exception, {
         extra: {
           method: request.method,
