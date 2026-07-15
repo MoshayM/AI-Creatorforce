@@ -817,6 +817,31 @@ export interface AdminProvider {
 
 // ── Editor types ──────────────────────────────────────────────────────────────
 
+export interface EditItemFilters {
+  brightness?: number;   // -1..1
+  contrast?: number;     // 0..2
+  saturation?: number;   // 0..3
+  grayscale?: boolean;
+  blur?: number;         // 0..20
+}
+
+export type TransitionType = 'fade' | 'dissolve' | 'slide';
+
+export interface EditItemTransition {
+  type: TransitionType;
+  durationMs: number;   // 100..3000
+}
+
+export type TextAnimType = 'none' | 'fade-in' | 'slide-up';
+
+export interface EditKeyframe {
+  atMs: number;
+  opacity?: number;
+  scale?: number;
+  x?: number;
+  y?: number;
+}
+
 export interface EditItemProperties {
   volume?: number;
   speed?: number;
@@ -827,6 +852,11 @@ export interface EditItemProperties {
   text?: string;
   fontSize?: number;
   color?: string;
+  // Phase 2 — all optional; Phase-1 items without these still work
+  filters?: EditItemFilters;
+  transitionIn?: EditItemTransition;
+  textAnim?: TextAnimType;
+  keyframes?: EditKeyframe[];
 }
 
 export interface EditItem {

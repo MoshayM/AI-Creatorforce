@@ -6,6 +6,10 @@ import { StorageService } from '../media/storage.service';
 import { JobsService } from '../jobs/jobs.service';
 import type { EditTimeline } from '@cf/shared';
 
+// ── Phase 2 render helpers (re-exported via module for test access) ──────────
+// We test translation helpers indirectly by inspecting runFfmpeg call args.
+import * as ffmpegUtil from '../media/adapters/ffmpeg.util';
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function makeValidTimeline(durationMs = 10_000): EditTimeline {
@@ -288,6 +292,497 @@ describe('EditorService', () => {
     it('render throws NotFoundException when EditProject not found', async () => {
       editProjectMock.findUnique.mockResolvedValue(null);
       await expect(service.render('bad-ep', 'user-1', 'SOURCE')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ── Phase 2 render translation tests ─────────────────────────────────────
+  //
+  // These tests spy on runFfmpeg/runFfmpegWithProgress and assert that the
+  // generated ffmpeg argument arrays contain expected Phase 2 filter strings.
+  // No real media files are required — storage.exists() returns true for
+  // asset keys, and storage.resolve() returns a predictable /storage/<key>
+  // path. All ffmpeg calls are mocked to resolve immediately.
+
+  describe('Phase 2 render translation (runRender)', () => {
+    const baseTimeline: EditTimeline = {
+      width: 1920,
+      height: 1080,
+      fps: 30,
+      durationMs: 10_000,
+      tracks: [
+        {
+          id: 'track-0',
+          kind: 'VIDEO',
+          label: 'Video',
+          items: [
+            {
+              id: 'item-0',
+              sourceAssetId: 'asset-vid',
+              kind: 'VIDEO',
+              timelineStartMs: 0,
+              timelineEndMs: 10_000,
+              sourceInMs: 0,
+              sourceOutMs: 10_000,
+            },
+          ],
+        },
+      ],
+    };
+
+    /** Wire up the full runRender mock stack */
+    function setupRunRenderMocks(timelineOverride: EditTimeline = baseTimeline) {
+      editProjectMock.findUnique.mockResolvedValue(
+        makeEditProjectRow({ renderStatus: 'NONE', timeline: timelineOverride }),
+      );
+      editProjectMock.update.mockResolvedValue({});
+      storageMock.exists.mockReturnValue(true);
+      storageMock.resolve.mockImplementation((key: string) => `/storage/${key}`);
+
+      prismaMock.asset.findUnique.mockImplementation(({ where }: { where: { id: string } }) => {
+        return Promise.resolve({
+          id: where.id,
+          label: where.id,
+          kind: 'VIDEO',
+          versions: [{ id: `ver-${where.id}`, r2Key: `keys/${where.id}`, durationMs: 10_000, sizeBytes: 1024 }],
+        });
+      });
+      prismaMock.asset.create.mockResolvedValue({ id: 'new-asset', projectId: 'proj-1', kind: 'EDIT_RENDER', label: 'out' });
+      prismaMock.assetVersion.create.mockResolvedValue({ id: 'new-ver', r2Key: 'renders/editor/proj-1/new-asset.mp4', durationMs: 10_000, sizeBytes: BigInt(1024) });
+      prismaMock.asset.update.mockResolvedValue({});
+
+      // Mock storage.copyIn (not in storageMock interface by default)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (storageMock as any).copyIn = jest.fn().mockResolvedValue(undefined);
+    }
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('back-compat: Phase-1 timeline (no new props) renders with scale filter only — no eq/drawtext/xfade', async () => {
+      setupRunRenderMocks();
+
+      const runFfmpegSpy = jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      const runFfmpegWithProgressSpy = jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+
+      // Mock fsp.stat and fsp.readFile for the persistence step
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+
+      await service.runRender('ep-1', '1080P_16_9');
+
+      // runFfmpeg is used for segment extraction; check its args contain scale but NOT eq/drawtext/xfade
+      const allExtractArgs = runFfmpegSpy.mock.calls.flatMap((c) => c[0]);
+      const extractVf = allExtractArgs.find((a) => a.startsWith('scale='));
+      expect(extractVf).toContain('scale=1920:1080');
+      expect(allExtractArgs.join(' ')).not.toContain('eq=');
+      expect(allExtractArgs.join(' ')).not.toContain('drawtext');
+
+      // runFfmpegWithProgress should not include xfade or drawtext
+      const allProgressArgs = runFfmpegWithProgressSpy.mock.calls.flatMap((c) => c[0]);
+      expect(allProgressArgs.join(' ')).not.toContain('xfade');
+      expect(allProgressArgs.join(' ')).not.toContain('drawtext');
+
+      runFfmpegSpy.mockRestore();
+      runFfmpegWithProgressSpy.mockRestore();
+    });
+
+    it('filters: VIDEO item with brightness/contrast/saturation produces eq= in extraction vf', async () => {
+      const timelineWithFilters: EditTimeline = {
+        ...baseTimeline,
+        tracks: [
+          {
+            id: 'track-0',
+            kind: 'VIDEO',
+            label: 'Video',
+            items: [
+              {
+                id: 'item-0',
+                sourceAssetId: 'asset-vid',
+                kind: 'VIDEO',
+                timelineStartMs: 0,
+                timelineEndMs: 10_000,
+                properties: {
+                  filters: { brightness: 0.1, contrast: 1.2, saturation: 1.5 },
+                },
+              },
+            ],
+          },
+        ],
+      };
+      setupRunRenderMocks(timelineWithFilters);
+
+      const runFfmpegSpy = jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+
+      await service.runRender('ep-1', '1080P_16_9');
+
+      const extractArgs = runFfmpegSpy.mock.calls.flatMap((c) => c[0]);
+      const vfArg = extractArgs[extractArgs.indexOf('-vf') + 1] ?? '';
+      expect(vfArg).toContain('eq=brightness=0.1:contrast=1.2:saturation=1.5');
+
+      runFfmpegSpy.mockRestore();
+    });
+
+    it('filters: grayscale produces hue=s=0 in extraction vf', async () => {
+      const timelineGray: EditTimeline = {
+        ...baseTimeline,
+        tracks: [
+          {
+            id: 'track-0',
+            kind: 'VIDEO',
+            label: 'Video',
+            items: [
+              {
+                id: 'item-0',
+                sourceAssetId: 'asset-vid',
+                kind: 'VIDEO',
+                timelineStartMs: 0,
+                timelineEndMs: 10_000,
+                properties: { filters: { grayscale: true } },
+              },
+            ],
+          },
+        ],
+      };
+      setupRunRenderMocks(timelineGray);
+
+      const runFfmpegSpy = jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+
+      await service.runRender('ep-1', '1080P_16_9');
+
+      const extractArgs = runFfmpegSpy.mock.calls.flatMap((c) => c[0]);
+      const vfArg = extractArgs[extractArgs.indexOf('-vf') + 1] ?? '';
+      expect(vfArg).toContain('hue=s=0');
+
+      runFfmpegSpy.mockRestore();
+    });
+
+    it('filters: blur produces gblur=sigma= in extraction vf', async () => {
+      const timelineBlur: EditTimeline = {
+        ...baseTimeline,
+        tracks: [
+          {
+            id: 'track-0',
+            kind: 'VIDEO',
+            label: 'Video',
+            items: [
+              {
+                id: 'item-0',
+                sourceAssetId: 'asset-vid',
+                kind: 'VIDEO',
+                timelineStartMs: 0,
+                timelineEndMs: 10_000,
+                properties: { filters: { blur: 5 } },
+              },
+            ],
+          },
+        ],
+      };
+      setupRunRenderMocks(timelineBlur);
+
+      const runFfmpegSpy = jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+
+      await service.runRender('ep-1', '1080P_16_9');
+
+      const extractArgs = runFfmpegSpy.mock.calls.flatMap((c) => c[0]);
+      const vfArg = extractArgs[extractArgs.indexOf('-vf') + 1] ?? '';
+      expect(vfArg).toContain('gblur=sigma=5');
+
+      runFfmpegSpy.mockRestore();
+    });
+
+    it('transition: two VIDEO items with transitionIn produces xfade in filter_complex', async () => {
+      const timelineTransition: EditTimeline = {
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        durationMs: 20_000,
+        tracks: [
+          {
+            id: 'track-0',
+            kind: 'VIDEO',
+            label: 'Video',
+            items: [
+              {
+                id: 'item-0',
+                sourceAssetId: 'asset-a',
+                kind: 'VIDEO',
+                timelineStartMs: 0,
+                timelineEndMs: 10_000,
+              },
+              {
+                id: 'item-1',
+                sourceAssetId: 'asset-b',
+                kind: 'VIDEO',
+                timelineStartMs: 10_000,
+                timelineEndMs: 20_000,
+                properties: { transitionIn: { type: 'fade', durationMs: 1000 } },
+              },
+            ],
+          },
+        ],
+      };
+      setupRunRenderMocks(timelineTransition);
+
+      jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      const progressSpy = jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+
+      await service.runRender('ep-1', '1080P_16_9');
+
+      // The first runFfmpegWithProgress call is the xfade/composite pass
+      const firstProgressArgs = progressSpy.mock.calls[0]?.[0] ?? [];
+      const fcIdx = firstProgressArgs.indexOf('-filter_complex');
+      expect(fcIdx).toBeGreaterThanOrEqual(0);
+      const fcStr = firstProgressArgs[fcIdx + 1] ?? '';
+      expect(fcStr).toContain('xfade');
+      expect(fcStr).toContain('transition=fade');
+
+      progressSpy.mockRestore();
+    });
+
+    it('transition: slide type produces xfade=transition=slideleft', async () => {
+      const timelineSlide: EditTimeline = {
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        durationMs: 20_000,
+        tracks: [
+          {
+            id: 'track-0',
+            kind: 'VIDEO',
+            label: 'Video',
+            items: [
+              {
+                id: 'item-0',
+                sourceAssetId: 'asset-a',
+                kind: 'VIDEO',
+                timelineStartMs: 0,
+                timelineEndMs: 10_000,
+              },
+              {
+                id: 'item-1',
+                sourceAssetId: 'asset-b',
+                kind: 'VIDEO',
+                timelineStartMs: 10_000,
+                timelineEndMs: 20_000,
+                properties: { transitionIn: { type: 'slide', durationMs: 800 } },
+              },
+            ],
+          },
+        ],
+      };
+      setupRunRenderMocks(timelineSlide);
+
+      jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      const progressSpy = jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+
+      await service.runRender('ep-1', '1080P_16_9');
+
+      const firstProgressArgs = progressSpy.mock.calls[0]?.[0] ?? [];
+      const fcIdx = firstProgressArgs.indexOf('-filter_complex');
+      const fcStr = firstProgressArgs[fcIdx + 1] ?? '';
+      expect(fcStr).toContain('transition=slideleft');
+
+      progressSpy.mockRestore();
+    });
+
+    it('TEXT item: produces drawtext in second-pass filter_complex when font resolves', async () => {
+      // Mock resolveFont to return a known path so drawtext is attempted
+      jest.spyOn(require('fs'), 'existsSync').mockImplementation((p: unknown) => {
+        // Pretend arialbd.ttf exists so resolveFont() returns it
+        if (typeof p === 'string' && p.includes('arial')) return true;
+        return false;
+      });
+
+      const timelineWithText: EditTimeline = {
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        durationMs: 10_000,
+        tracks: [
+          {
+            id: 'track-0',
+            kind: 'VIDEO',
+            label: 'Video',
+            items: [
+              {
+                id: 'item-0',
+                sourceAssetId: 'asset-vid',
+                kind: 'VIDEO',
+                timelineStartMs: 0,
+                timelineEndMs: 10_000,
+              },
+            ],
+          },
+          {
+            id: 'track-text',
+            kind: 'TEXT',
+            label: 'Text',
+            items: [
+              {
+                id: 'text-0',
+                kind: 'TEXT',
+                timelineStartMs: 1000,
+                timelineEndMs: 5000,
+                properties: {
+                  text: 'Hello World',
+                  fontSize: 60,
+                  color: 'white',
+                  textAnim: 'fade-in',
+                },
+              },
+            ],
+          },
+        ],
+      };
+      setupRunRenderMocks(timelineWithText);
+
+      jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      const progressSpy = jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+
+      await service.runRender('ep-1', '1080P_16_9');
+
+      // Second pass (drawtext) is the last runFfmpegWithProgress call
+      const lastProgressArgs = progressSpy.mock.calls[progressSpy.mock.calls.length - 1]?.[0] ?? [];
+      const fcIdx = lastProgressArgs.indexOf('-filter_complex');
+      const fcStr = fcIdx >= 0 ? (lastProgressArgs[fcIdx + 1] ?? '') : '';
+      expect(fcStr).toContain('drawtext');
+      expect(fcStr).toContain('Hello World');
+      // fade-in anim: alpha expression should be present
+      expect(fcStr).toContain('alpha=');
+
+      progressSpy.mockRestore();
+      jest.restoreAllMocks();
+    });
+
+    it('TEXT item without font: logs warning, no drawtext, no crash', async () => {
+      // existsSync returns false → resolveFont() returns null
+      jest.spyOn(require('fs'), 'existsSync').mockReturnValue(false);
+
+      const timelineTextNoFont: EditTimeline = {
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        durationMs: 10_000,
+        tracks: [
+          {
+            id: 'track-0',
+            kind: 'VIDEO',
+            label: 'Video',
+            items: [
+              {
+                id: 'item-0',
+                sourceAssetId: 'asset-vid',
+                kind: 'VIDEO',
+                timelineStartMs: 0,
+                timelineEndMs: 10_000,
+              },
+            ],
+          },
+          {
+            id: 'track-text',
+            kind: 'TEXT',
+            label: 'Text',
+            items: [
+              {
+                id: 'text-0',
+                kind: 'TEXT',
+                timelineStartMs: 0,
+                timelineEndMs: 5000,
+                properties: { text: 'Hello', textAnim: 'none' },
+              },
+            ],
+          },
+        ],
+      };
+      setupRunRenderMocks(timelineTextNoFont);
+
+      jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      const progressSpy = jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+
+      const logs: string[] = [];
+      // Should NOT throw
+      await expect(service.runRender('ep-1', '1080P_16_9', (msg) => logs.push(msg))).resolves.toBeDefined();
+
+      expect(logs.some((l) => l.includes('no usable font'))).toBe(true);
+
+      // No drawtext in any progress call args
+      const allProgressArgs = progressSpy.mock.calls.flatMap((c) => c[0]);
+      expect(allProgressArgs.join(' ')).not.toContain('drawtext');
+
+      progressSpy.mockRestore();
+      jest.restoreAllMocks();
+    });
+
+    it('Phase-1 back-compat: schema still validates a timeline with no Phase-2 props', () => {
+      const { EditTimelineSchema } = require('@cf/shared');
+      const result = EditTimelineSchema.safeParse(baseTimeline);
+      expect(result.success).toBe(true);
+    });
+
+    it('schema: rejects out-of-range filter values', () => {
+      const { EditItemPropertiesSchema } = require('@cf/shared');
+      // brightness > 1 should fail
+      const bad = EditItemPropertiesSchema.safeParse({
+        filters: { brightness: 5 },
+      });
+      expect(bad.success).toBe(false);
+    });
+
+    it('schema: accepts all Phase-2 properties together', () => {
+      const { EditItemPropertiesSchema } = require('@cf/shared');
+      const result = EditItemPropertiesSchema.safeParse({
+        filters: { brightness: 0.2, contrast: 1.1, saturation: 1.0, grayscale: false, blur: 3 },
+        transitionIn: { type: 'fade', durationMs: 500 },
+        textAnim: 'slide-up',
+        keyframes: [
+          { atMs: 0, opacity: 0, x: 100, y: 200 },
+          { atMs: 2000, opacity: 1, x: 50, y: 100 },
+        ],
+      });
+      expect(result.success).toBe(true);
     });
   });
 });

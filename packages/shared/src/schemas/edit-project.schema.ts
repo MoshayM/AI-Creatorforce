@@ -4,7 +4,36 @@ import { z } from 'zod';
 // These are the canonical timeline structures for the standalone video editor.
 // Both API (EditorService) and web (timeline canvas) code against the same shape.
 
+// Phase 2: new optional properties — all back-compatible, Phase-1 timelines
+// validate unchanged. Features: per-item video filters, clip transitions,
+// text animations, and keyframe animation (opacity/scale/position).
+
+export const EditItemFiltersSchema = z.object({
+  brightness: z.number().min(-1).max(1).optional(),
+  contrast: z.number().min(0).max(2).optional(),
+  saturation: z.number().min(0).max(3).optional(),
+  grayscale: z.boolean().optional(),
+  blur: z.number().min(0).max(20).optional(),
+});
+export type EditItemFilters = z.infer<typeof EditItemFiltersSchema>;
+
+export const EditTransitionInSchema = z.object({
+  type: z.enum(['fade', 'dissolve', 'slide']),
+  durationMs: z.number().int().positive(),
+});
+export type EditTransitionIn = z.infer<typeof EditTransitionInSchema>;
+
+export const EditKeyframeSchema = z.object({
+  atMs: z.number().int().nonnegative(),
+  opacity: z.number().min(0).max(1).optional(),
+  scale: z.number().positive().optional(),
+  x: z.number().optional(),
+  y: z.number().optional(),
+});
+export type EditKeyframe = z.infer<typeof EditKeyframeSchema>;
+
 export const EditItemPropertiesSchema = z.object({
+  // Phase 1
   volume: z.number().min(0).max(2).optional(),
   speed: z.number().min(0.1).max(10).optional(),
   opacity: z.number().min(0).max(1).optional(),
@@ -14,6 +43,11 @@ export const EditItemPropertiesSchema = z.object({
   text: z.string().optional(),
   fontSize: z.number().positive().optional(),
   color: z.string().optional(),
+  // Phase 2 — all optional, back-compatible
+  filters: EditItemFiltersSchema.optional(),
+  transitionIn: EditTransitionInSchema.optional(),
+  textAnim: z.enum(['none', 'fade-in', 'slide-up']).optional(),
+  keyframes: z.array(EditKeyframeSchema).optional(),
 });
 export type EditItemProperties = z.infer<typeof EditItemPropertiesSchema>;
 

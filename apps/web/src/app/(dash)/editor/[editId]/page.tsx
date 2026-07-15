@@ -7,6 +7,7 @@ import {
   ArrowLeft, Film, Play, Pause, Loader2, Save, Download, Wand2,
   Volume2, Zap, Type, Image, X,
   ZoomIn, ZoomOut, Plus, Maximize2,
+  SlidersHorizontal, ChevronDown, Clapperboard, Sparkles, KeyRound,
 } from 'lucide-react';
 import {
   api,
@@ -15,6 +16,12 @@ import {
   type EditTimeline,
   type EditTrack,
   type EditItem,
+  type EditItemProperties,
+  type EditItemFilters,
+  type TransitionType,
+  type EditItemTransition,
+  type TextAnimType,
+  type EditKeyframe,
   type MediaBinEntry,
   type RenderPreset,
   type RenderStatus,
@@ -283,10 +290,18 @@ function AiEditDialog({ editId, timeline, onClose }: { editId: string; timeline:
 function Inspector({
   item,
   onChange,
+  currentTimeMs,
 }: {
   item: EditItem | null;
   onChange: (patch: Partial<EditItem>) => void;
+  currentTimeMs: number;
 }) {
+  // Collapsible section open states
+  const [effectsOpen, setEffectsOpen] = useState(true);
+  const [transitionOpen, setTransitionOpen] = useState(true);
+  const [textAnimOpen, setTextAnimOpen] = useState(true);
+  const [keyframesOpen, setKeyframesOpen] = useState(true);
+
   if (!item) {
     return (
       <div className="h-full flex items-center justify-center text-gray-400 text-sm p-4 text-center">
@@ -298,12 +313,23 @@ function Inspector({
   const props = item.properties ?? {};
 
   // @reason: EditItemProperties keys are statically known; the dynamic key is always a valid property name.
-  const setProp = (key: keyof typeof props, value: number | string) => {
+  const setProp = (key: keyof EditItemProperties, value: number | string | boolean | EditItemFilters | EditItemTransition | TextAnimType | EditKeyframe[] | undefined) => {
     onChange({ properties: { ...props, [key]: value } });
+  };
+
+  const filters = props.filters ?? {};
+
+  const setFilter = (key: keyof EditItemFilters, value: number | boolean) => {
+    onChange({ properties: { ...props, filters: { ...filters, [key]: value } } });
+  };
+
+  const resetFilters = () => {
+    onChange({ properties: { ...props, filters: undefined } });
   };
 
   return (
     <div className="p-4 space-y-4 overflow-y-auto h-full">
+      {/* ── Item info ── */}
       <div>
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
           {item.kind} item
@@ -315,6 +341,7 @@ function Inspector({
         </div>
       </div>
 
+      {/* ── Volume (AUDIO / VIDEO) ── */}
       {(item.kind === 'AUDIO' || item.kind === 'VIDEO') && (
         <div>
           <label htmlFor="insp-volume" className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1.5">
@@ -334,6 +361,7 @@ function Inspector({
         </div>
       )}
 
+      {/* ── Speed (VIDEO) ── */}
       {item.kind === 'VIDEO' && (
         <div>
           <label htmlFor="insp-speed" className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1.5">
@@ -353,6 +381,7 @@ function Inspector({
         </div>
       )}
 
+      {/* ── Opacity / Scale / Position (VIDEO / IMAGE) ── */}
       {(item.kind === 'VIDEO' || item.kind === 'IMAGE') && (
         <>
           <div>
@@ -408,6 +437,7 @@ function Inspector({
         </>
       )}
 
+      {/* ── Text controls (TEXT) ── */}
       {item.kind === 'TEXT' && (
         <>
           <div>
@@ -445,6 +475,336 @@ function Inspector({
             />
           </div>
         </>
+      )}
+
+      {/* ── EFFECTS section (VIDEO / IMAGE) ── */}
+      {/* TODO (Phase 2): Effects/filters are stored in properties.filters and sent to the render/export pipeline.
+          Live preview does NOT reflect these in Phase 2 — the preview still shows the raw clip.
+          WYSIWYG canvas preview is planned for Phase 3. */}
+      {(item.kind === 'VIDEO' || item.kind === 'IMAGE') && (
+        <div className="border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 w-full text-left mb-3 min-h-[44px]"
+            onClick={() => setEffectsOpen((o) => !o)}
+            aria-expanded={effectsOpen}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex-1">Effects</p>
+            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${effectsOpen ? '' : '-rotate-90'}`} />
+          </button>
+          {effectsOpen && (
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="insp-brightness" className="text-xs font-medium text-gray-700 flex justify-between mb-1">
+                  <span>Brightness</span>
+                  <span className="tabular-nums">{(filters.brightness ?? 0).toFixed(2)}</span>
+                </label>
+                <input
+                  id="insp-brightness"
+                  type="range"
+                  min={-1}
+                  max={1}
+                  step={0.01}
+                  value={filters.brightness ?? 0}
+                  onChange={(e) => setFilter('brightness', clamp(parseFloat(e.target.value), -1, 1))}
+                  className="w-full accent-brand-600"
+                />
+              </div>
+              <div>
+                <label htmlFor="insp-contrast" className="text-xs font-medium text-gray-700 flex justify-between mb-1">
+                  <span>Contrast</span>
+                  <span className="tabular-nums">{(filters.contrast ?? 1).toFixed(2)}</span>
+                </label>
+                <input
+                  id="insp-contrast"
+                  type="range"
+                  min={0}
+                  max={2}
+                  step={0.01}
+                  value={filters.contrast ?? 1}
+                  onChange={(e) => setFilter('contrast', clamp(parseFloat(e.target.value), 0, 2))}
+                  className="w-full accent-brand-600"
+                />
+              </div>
+              <div>
+                <label htmlFor="insp-saturation" className="text-xs font-medium text-gray-700 flex justify-between mb-1">
+                  <span>Saturation</span>
+                  <span className="tabular-nums">{(filters.saturation ?? 1).toFixed(2)}</span>
+                </label>
+                <input
+                  id="insp-saturation"
+                  type="range"
+                  min={0}
+                  max={3}
+                  step={0.01}
+                  value={filters.saturation ?? 1}
+                  onChange={(e) => setFilter('saturation', clamp(parseFloat(e.target.value), 0, 3))}
+                  className="w-full accent-brand-600"
+                />
+              </div>
+              <div>
+                <label htmlFor="insp-blur" className="text-xs font-medium text-gray-700 flex justify-between mb-1">
+                  <span>Blur</span>
+                  <span className="tabular-nums">{(filters.blur ?? 0).toFixed(1)}px</span>
+                </label>
+                <input
+                  id="insp-blur"
+                  type="range"
+                  min={0}
+                  max={20}
+                  step={0.5}
+                  value={filters.blur ?? 0}
+                  onChange={(e) => setFilter('blur', clamp(parseFloat(e.target.value), 0, 20))}
+                  className="w-full accent-brand-600"
+                />
+              </div>
+              <div className="flex items-center gap-2 min-h-[44px]">
+                <input
+                  id="insp-grayscale"
+                  type="checkbox"
+                  checked={filters.grayscale ?? false}
+                  onChange={(e) => setFilter('grayscale', e.target.checked)}
+                  className="w-4 h-4 accent-brand-600 rounded"
+                />
+                <label htmlFor="insp-grayscale" className="text-xs font-medium text-gray-700 cursor-pointer">Grayscale</label>
+              </div>
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="text-xs text-gray-500 hover:text-red-600 underline min-h-[44px] w-full text-left"
+              >
+                Reset effects
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TRANSITION section (VIDEO items) ── */}
+      {/* TODO (Phase 2): Transition is stored in properties.transitionIn and applied on render/export.
+          Live preview does NOT show the transition in Phase 2. WYSIWYG planned for Phase 3. */}
+      {item.kind === 'VIDEO' && (
+        <div className="border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 w-full text-left mb-3 min-h-[44px]"
+            onClick={() => setTransitionOpen((o) => !o)}
+            aria-expanded={transitionOpen}
+          >
+            <Clapperboard className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex-1">Transition in</p>
+            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${transitionOpen ? '' : '-rotate-90'}`} />
+          </button>
+          {transitionOpen && (
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="insp-transition-type" className="text-xs font-medium text-gray-700 block mb-1.5">Type</label>
+                <select
+                  id="insp-transition-type"
+                  value={props.transitionIn?.type ?? 'none'}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === 'none') {
+                      setProp('transitionIn', undefined);
+                    } else {
+                      setProp('transitionIn', {
+                        type: v as TransitionType,
+                        durationMs: props.transitionIn?.durationMs ?? 500,
+                      });
+                    }
+                  }}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+                >
+                  <option value="none">None</option>
+                  <option value="fade">Fade</option>
+                  <option value="dissolve">Dissolve</option>
+                  <option value="slide">Slide</option>
+                </select>
+              </div>
+              {props.transitionIn && (
+                <div>
+                  <label htmlFor="insp-transition-dur" className="text-xs font-medium text-gray-700 flex justify-between mb-1.5">
+                    <span>Duration</span>
+                    <span className="tabular-nums">{props.transitionIn.durationMs}ms</span>
+                  </label>
+                  <input
+                    id="insp-transition-dur"
+                    type="range"
+                    min={100}
+                    max={3000}
+                    step={50}
+                    value={props.transitionIn.durationMs}
+                    onChange={(e) => {
+                      const dur = clamp(parseInt(e.target.value, 10), 100, 3000);
+                      setProp('transitionIn', { ...props.transitionIn!, durationMs: dur });
+                    }}
+                    className="w-full accent-brand-600"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TEXT ANIMATION section (TEXT items) ── */}
+      {/* TODO (Phase 2): textAnim is stored in properties and applied on render/export.
+          Live preview does NOT animate text in Phase 2. WYSIWYG planned for Phase 3. */}
+      {item.kind === 'TEXT' && (
+        <div className="border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 w-full text-left mb-3 min-h-[44px]"
+            onClick={() => setTextAnimOpen((o) => !o)}
+            aria-expanded={textAnimOpen}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex-1">Text animation</p>
+            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${textAnimOpen ? '' : '-rotate-90'}`} />
+          </button>
+          {textAnimOpen && (
+            <div>
+              <label htmlFor="insp-text-anim" className="text-xs font-medium text-gray-700 block mb-1.5">Animation</label>
+              <select
+                id="insp-text-anim"
+                value={props.textAnim ?? 'none'}
+                onChange={(e) => setProp('textAnim', e.target.value as TextAnimType)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                <option value="none">None</option>
+                <option value="fade-in">Fade in</option>
+                <option value="slide-up">Slide up</option>
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── KEYFRAMES section (VIDEO / IMAGE / TEXT) ── */}
+      {/* TODO (Phase 2): Keyframe interpolation is applied on render/export only.
+          Live preview does NOT reflect keyframe motion in Phase 2. WYSIWYG curve editor planned for Phase 3. */}
+      {(item.kind === 'VIDEO' || item.kind === 'IMAGE' || item.kind === 'TEXT') && (
+        <div className="border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 w-full text-left mb-3 min-h-[44px]"
+            onClick={() => setKeyframesOpen((o) => !o)}
+            aria-expanded={keyframesOpen}
+          >
+            <KeyRound className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex-1">Keyframes</p>
+            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${keyframesOpen ? '' : '-rotate-90'}`} />
+          </button>
+          {keyframesOpen && (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const existing = props.keyframes ?? [];
+                  // Avoid duplicate atMs
+                  if (existing.some((kf) => kf.atMs === currentTimeMs)) return;
+                  const updated = [...existing, { atMs: currentTimeMs }].sort((a, b) => a.atMs - b.atMs);
+                  setProp('keyframes', updated);
+                }}
+                className="flex items-center gap-1.5 w-full px-3 py-2.5 border border-dashed border-brand-300 text-brand-700 text-xs rounded-lg hover:bg-brand-50 min-h-[44px]"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add keyframe at {fmtMs(currentTimeMs)}
+              </button>
+              {(props.keyframes ?? []).length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-1">No keyframes yet</p>
+              )}
+              {(props.keyframes ?? []).map((kf, idx) => (
+                <div key={kf.atMs} className="border border-gray-100 rounded-xl p-3 space-y-2 bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-gray-600">{fmtMs(kf.atMs)}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = (props.keyframes ?? []).filter((_, i) => i !== idx);
+                        setProp('keyframes', updated.length > 0 ? updated : undefined);
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                      aria-label={`Delete keyframe at ${fmtMs(kf.atMs)}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label htmlFor={`kf-opacity-${idx}`} className="text-[10px] font-medium text-gray-500 block mb-0.5">Opacity</label>
+                      <input
+                        id={`kf-opacity-${idx}`}
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        placeholder="—"
+                        value={kf.opacity ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value === '' ? undefined : clamp(parseFloat(e.target.value), 0, 1);
+                          const updated = (props.keyframes ?? []).map((k, i) => i === idx ? { ...k, opacity: v } : k);
+                          setProp('keyframes', updated);
+                        }}
+                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor={`kf-scale-${idx}`} className="text-[10px] font-medium text-gray-500 block mb-0.5">Scale</label>
+                      <input
+                        id={`kf-scale-${idx}`}
+                        type="number"
+                        min={0.1}
+                        max={10}
+                        step={0.01}
+                        placeholder="—"
+                        value={kf.scale ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value === '' ? undefined : clamp(parseFloat(e.target.value), 0.1, 10);
+                          const updated = (props.keyframes ?? []).map((k, i) => i === idx ? { ...k, scale: v } : k);
+                          setProp('keyframes', updated);
+                        }}
+                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor={`kf-x-${idx}`} className="text-[10px] font-medium text-gray-500 block mb-0.5">X</label>
+                      <input
+                        id={`kf-x-${idx}`}
+                        type="number"
+                        step={1}
+                        placeholder="—"
+                        value={kf.x ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                          const updated = (props.keyframes ?? []).map((k, i) => i === idx ? { ...k, x: v } : k);
+                          setProp('keyframes', updated);
+                        }}
+                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor={`kf-y-${idx}`} className="text-[10px] font-medium text-gray-500 block mb-0.5">Y</label>
+                      <input
+                        id={`kf-y-${idx}`}
+                        type="number"
+                        step={1}
+                        placeholder="—"
+                        value={kf.y ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                          const updated = (props.keyframes ?? []).map((k, i) => i === idx ? { ...k, y: v } : k);
+                          setProp('keyframes', updated);
+                        }}
+                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -1088,7 +1448,7 @@ export default function EditorWorkspacePage() {
             <Maximize2 className="w-3.5 h-3.5 text-gray-500" />
             <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Inspector</p>
           </div>
-          <Inspector item={selectedItem} onChange={handleInspectorChange} />
+          <Inspector item={selectedItem} onChange={handleInspectorChange} currentTimeMs={currentTimeMs} />
         </aside>
 
         {/* Mobile inspector slide-over */}
@@ -1102,7 +1462,7 @@ export default function EditorWorkspacePage() {
                   <X className="w-4 h-4 text-gray-500" />
                 </button>
               </div>
-              <Inspector item={selectedItem} onChange={handleInspectorChange} />
+              <Inspector item={selectedItem} onChange={handleInspectorChange} currentTimeMs={currentTimeMs} />
             </div>
           </div>
         )}
