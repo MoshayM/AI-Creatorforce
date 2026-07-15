@@ -46,8 +46,16 @@ async function bootstrap() {
   // First in the chain so every downstream log, error envelope, and Sentry
   // event carries the request's correlation ID.
   app.use(correlationMiddleware);
+  // Allow the dev origin, the production domain (aicreatorforce.net + www), and
+  // any extra origins from WEB_URL (comma-separated) — e.g. a Vercel preview URL.
+  const allowedOrigins = [
+    ...(process.env['WEB_URL'] ?? '').split(',').map((o) => o.trim()).filter(Boolean),
+    'http://localhost:3007',
+    'https://aicreatorforce.net',
+    'https://www.aicreatorforce.net',
+  ];
   app.enableCors({
-    origin: process.env['WEB_URL'] ?? 'http://localhost:3007',
+    origin: allowedOrigins,
     credentials: true,
   });
 

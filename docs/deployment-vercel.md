@@ -15,6 +15,14 @@ CreatorForce is a **split deployment**: the Next.js frontend can run on Vercel, 
 
 **Why the backend isn't Vercel-deployable:** Vercel runs stateless serverless functions with short timeouts and no persistent disk. The API is a persistent NestJS process; the workers are long-running BullMQ consumers that shell out to FFmpeg for multi-minute renders and write files to disk. None of that fits the serverless model. Deploy the API+workers on a container/VM host and point the frontend at it.
 
+## Domain
+
+Production domain: **`aicreatorforce.net`** (see the root `CNAME`). Point the apex + `www` at the frontend host. Suggested split:
+- Frontend (Vercel): `aicreatorforce.net` and `www.aicreatorforce.net`
+- API (separate host): a subdomain such as `api.aicreatorforce.net` → set `NEXT_PUBLIC_API_URL=https://api.aicreatorforce.net/api/v1` and `NEXT_PUBLIC_WS_URL=wss://api.aicreatorforce.net`.
+
+The API already allows `https://aicreatorforce.net` and `https://www.aicreatorforce.net` as CORS origins (plus anything in `WEB_URL`, comma-separated).
+
 ## Frontend on Vercel (this is what `vercel.json` configures)
 
 1. Push to GitHub (done — repo is `MoshayM/AI-Creatorforce`).
