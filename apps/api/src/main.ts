@@ -16,7 +16,29 @@ import { StructuredLogger } from './common/structured-logger';
   return Number(this);
 };
 
+/**
+ * Fail fast in production on placeholder/weak secrets. In dev these fall back
+ * to 'dev-secret' for convenience, but a production process must never boot
+ * signing JWTs with a public default or encrypting OAuth tokens with a weak key.
+ */
+function assertProductionSecrets(): void {
+  if (process.env['NODE_ENV'] !== 'production') return;
+  const problems: string[] = [];
+  const jwt = process.env['JWT_SECRET'];
+  if (!jwt || jwt === 'dev-secret' || jwt.length < 32) {
+    problems.push('JWT_SECRET must be set to a strong value (≥32 chars, not the dev default) in production');
+  }
+  const enc = process.env['TOKEN_ENCRYPTION_KEY'];
+  if (!enc || enc.length < 32) {
+    problems.push('TOKEN_ENCRYPTION_KEY must be set to at least 32 chars in production');
+  }
+  if (problems.length > 0) {
+    throw new Error(`Refusing to start in production with insecure config:\n  - ${problems.join('\n  - ')}`);
+  }
+}
+
 async function bootstrap() {
+  assertProductionSecrets();
   // JSON lines in production (docs4/38, risk R-04); readable console in dev.
   const app = await NestFactory.create(AppModule, { logger: new StructuredLogger() });
 

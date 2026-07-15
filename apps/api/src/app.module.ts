@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import { RateLimitGuard } from './common/guards/rate-limit.guard';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { HealthModule } from './modules/health/health.module';
@@ -100,6 +102,8 @@ import { EditorModule } from './modules/editor/editor.module';
     MetricsModule,
     HealthModule,
   ],
-  providers: [],
+  // Global guard so any route can opt into rate limiting with @RateLimit(...).
+  // No-op on routes without the decorator; fails open if Redis is down.
+  providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })
 export class AppModule {}

@@ -21,6 +21,7 @@ import { OAuthService } from './oauth.service';
 import { ProviderRegistry } from './providers/provider.registry';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RateLimit } from '../../common/guards/rate-limit.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/decorators/current-user.decorator';
 
@@ -74,6 +75,7 @@ export class AuthController {
   // ── Existing email/password endpoints ────────────────────────────────────────
 
   @Post('register')
+  @RateLimit({ bucket: 'auth-register', limit: 5, windowSecs: 60 })
   register(@Body() dto: RegisterDto, @Req() req: Request) {
     return this.auth.register(dto, {
       deviceFingerprint: dto.deviceFingerprint,
@@ -84,6 +86,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ bucket: 'auth-login', limit: 10, windowSecs: 60 })
   login(@Body() dto: LoginDto, @Req() req: Request) {
     return this.auth.login(dto, {
       ip: req.ip,
@@ -93,6 +96,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ bucket: 'auth-refresh', limit: 30, windowSecs: 60 })
   refresh(@Body() dto: RefreshDto, @Req() req: Request) {
     return this.auth.refresh(dto.refreshToken, {
       ip: req.ip,
