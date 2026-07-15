@@ -757,8 +757,12 @@ export const api = {
       apiClient.put<EditProject>(`/editor/${editId}/timeline`, timeline),
     mediaBin: (editId: string) =>
       apiClient.get<MediaBinEntry[]>(`/editor/${editId}/media-bin`),
-    render: (editId: string, preset: RenderPreset) =>
-      apiClient.post<{ renderStatus: RenderStatus }>(`/editor/${editId}/render`, { preset }),
+    render: (editId: string, options: RenderPreset | EditExportOptions) =>
+      apiClient.post<{ renderStatus: RenderStatus }>(
+        `/editor/${editId}/render`,
+        // Back-compat: a plain string becomes { preset }; an options object is passed as-is.
+        typeof options === 'string' ? { preset: options } : options,
+      ),
     renderStatus: (editId: string) =>
       apiClient.get<{ renderStatus: RenderStatus; renderAssetId?: string | null; downloadPath?: string }>(`/editor/${editId}/render-status`),
   },
@@ -857,6 +861,11 @@ export interface EditItemProperties {
   transitionIn?: EditItemTransition;
   textAnim?: TextAnimType;
   keyframes?: EditKeyframe[];
+  // Phase 3 audio controls — all optional; VIDEO and AUDIO items only
+  fadeInMs?: number;     // 0..10000
+  fadeOutMs?: number;    // 0..10000
+  gainDb?: number;       // -60..12  (0 = unity)
+  duckUnderVoice?: boolean; // AUDIO items: duck this track when voice is detected
 }
 
 export interface EditItem {
@@ -887,6 +896,16 @@ export interface EditTimeline {
 
 export type RenderPreset = '1080P_16_9' | '1080P_9_16' | '720P_16_9' | '1080P_1_1' | 'SOURCE';
 export type RenderStatus = 'PENDING' | 'QUEUED' | 'RUNNING' | 'READY' | 'FAILED';
+export type RenderFormat = 'mp4' | 'webm';
+export type RenderQuality = 'draft' | 'standard' | 'high';
+
+/** Phase 3: extended export options; a bare RenderPreset string is still accepted. */
+export interface EditExportOptions {
+  preset: RenderPreset;
+  format?: RenderFormat;
+  quality?: RenderQuality;
+}
+
 export type EditProjectStatus = 'DRAFT' | 'RENDERING' | 'READY' | 'FAILED';
 
 export interface EditProject {

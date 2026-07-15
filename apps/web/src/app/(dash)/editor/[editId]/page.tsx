@@ -8,6 +8,7 @@ import {
   Volume2, Zap, Type, Image, X,
   ZoomIn, ZoomOut, Plus, Maximize2,
   SlidersHorizontal, ChevronDown, Clapperboard, Sparkles, KeyRound,
+  Music,
 } from 'lucide-react';
 import {
   api,
@@ -25,6 +26,9 @@ import {
   type MediaBinEntry,
   type RenderPreset,
   type RenderStatus,
+  type EditExportOptions,
+  type RenderFormat,
+  type RenderQuality,
 } from '@/lib/api';
 import { JobErrorCard } from '@/components/job-error-card';
 
@@ -64,8 +68,21 @@ const PRESETS: { value: RenderPreset; label: string }[] = [
   { value: 'SOURCE', label: 'Match source' },
 ];
 
+const FORMATS: { value: RenderFormat; label: string }[] = [
+  { value: 'mp4', label: 'MP4 (H.264)' },
+  { value: 'webm', label: 'WebM (VP9)' },
+];
+
+const QUALITIES: { value: RenderQuality; label: string; hint: string }[] = [
+  { value: 'draft', label: 'Draft', hint: 'Fast, lower bitrate — good for review' },
+  { value: 'standard', label: 'Standard', hint: 'Balanced quality and file size' },
+  { value: 'high', label: 'High', hint: 'Maximum quality, larger file' },
+];
+
 function ExportDialog({ editId, onClose }: { editId: string; onClose: () => void }) {
   const [preset, setPreset] = useState<RenderPreset>('1080P_16_9');
+  const [format, setFormat] = useState<RenderFormat>('mp4');
+  const [quality, setQuality] = useState<RenderQuality>('standard');
   const [renderStatus, setRenderStatus] = useState<RenderStatus | null>(null);
   const [downloadPath, setDownloadPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +100,8 @@ function ExportDialog({ editId, onClose }: { editId: string; onClose: () => void
     setError(null);
     setRenderStatus(null);
     try {
-      const res = await api.editor.render(editId, preset);
+      const options: EditExportOptions = { preset, format, quality };
+      const res = await api.editor.render(editId, options);
       setRenderStatus(res.data.renderStatus);
       // Poll render-status
       pollRef.current = setInterval(async () => {
@@ -112,6 +130,9 @@ function ExportDialog({ editId, onClose }: { editId: string; onClose: () => void
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Build a download filename hint from the chosen format
+  const downloadFilename = `export.${format}`;
 
   return (
     <div
@@ -142,6 +163,38 @@ function ExportDialog({ editId, onClose }: { editId: string; onClose: () => void
             </select>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="export-format" className="text-sm font-medium text-gray-700 block mb-1.5">Format</label>
+              <select
+                id="export-format"
+                value={format}
+                onChange={(e) => setFormat(e.target.value as RenderFormat)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                {FORMATS.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="export-quality" className="text-sm font-medium text-gray-700 block mb-1.5">Quality</label>
+              <select
+                id="export-quality"
+                value={quality}
+                onChange={(e) => setQuality(e.target.value as RenderQuality)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                {QUALITIES.map((q) => (
+                  <option key={q.value} value={q.value}>{q.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-400 -mt-2">
+            {QUALITIES.find((q) => q.value === quality)?.hint}
+          </p>
+
           {renderStatus && renderStatus !== 'READY' && renderStatus !== 'FAILED' && (
             <div className="flex items-center gap-2 text-sm text-brand-700 bg-brand-50 rounded-xl px-4 py-3">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -154,10 +207,10 @@ function ExportDialog({ editId, onClose }: { editId: string; onClose: () => void
               <p className="text-sm text-green-800 font-medium">Render complete!</p>
               <a
                 href={downloadPath}
-                download
+                download={downloadFilename}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
               >
-                <Download className="w-4 h-4" /> Download
+                <Download className="w-4 h-4" /> Download {downloadFilename}
               </a>
             </div>
           )}
@@ -301,6 +354,7 @@ function Inspector({
   const [transitionOpen, setTransitionOpen] = useState(true);
   const [textAnimOpen, setTextAnimOpen] = useState(true);
   const [keyframesOpen, setKeyframesOpen] = useState(true);
+  const [audioOpen, setAudioOpen] = useState(true);
 
   if (!item) {
     return (
@@ -676,6 +730,100 @@ function Inspector({
                 <option value="fade-in">Fade in</option>
                 <option value="slide-up">Slide up</option>
               </select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── AUDIO section (VIDEO / AUDIO) ── */}
+      {/* TODO (Phase 3): Fade envelope and gain are applied on render/export only.
+          Live preview does NOT reflect audio processing in Phase 3.
+          Waveform visualisation skipped — no client-side audio decode; add in a future phase. */}
+      {(item.kind === 'VIDEO' || item.kind === 'AUDIO') && (
+        <div className="border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 w-full text-left mb-3 min-h-[44px]"
+            onClick={() => setAudioOpen((o) => !o)}
+            aria-expanded={audioOpen}
+          >
+            <Music className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex-1">Audio</p>
+            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${audioOpen ? '' : '-rotate-90'}`} />
+          </button>
+          {audioOpen && (
+            <div className="space-y-3">
+              {/* Fade in */}
+              <div>
+                <label htmlFor="insp-fade-in" className="text-xs font-medium text-gray-700 flex justify-between mb-1">
+                  <span>Fade in</span>
+                  <span className="tabular-nums">{props.fadeInMs ?? 0} ms</span>
+                </label>
+                <input
+                  id="insp-fade-in"
+                  type="number"
+                  min={0}
+                  max={10000}
+                  step={50}
+                  value={props.fadeInMs ?? 0}
+                  onChange={(e) => setProp('fadeInMs', clamp(parseInt(e.target.value, 10) || 0, 0, 10000))}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+                />
+              </div>
+              {/* Fade out */}
+              <div>
+                <label htmlFor="insp-fade-out" className="text-xs font-medium text-gray-700 flex justify-between mb-1">
+                  <span>Fade out</span>
+                  <span className="tabular-nums">{props.fadeOutMs ?? 0} ms</span>
+                </label>
+                <input
+                  id="insp-fade-out"
+                  type="number"
+                  min={0}
+                  max={10000}
+                  step={50}
+                  value={props.fadeOutMs ?? 0}
+                  onChange={(e) => setProp('fadeOutMs', clamp(parseInt(e.target.value, 10) || 0, 0, 10000))}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+                />
+              </div>
+              {/* Gain */}
+              <div>
+                <label htmlFor="insp-gain" className="text-xs font-medium text-gray-700 flex justify-between mb-1">
+                  <span>Gain</span>
+                  <span className="tabular-nums">{(props.gainDb ?? 0).toFixed(1)} dB</span>
+                </label>
+                <input
+                  id="insp-gain"
+                  type="range"
+                  min={-60}
+                  max={12}
+                  step={0.5}
+                  value={props.gainDb ?? 0}
+                  onChange={(e) => setProp('gainDb', clamp(parseFloat(e.target.value), -60, 12))}
+                  className="w-full accent-brand-600"
+                />
+                <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>-60 dB</span>
+                  <span>0 dB</span>
+                  <span>+12 dB</span>
+                </div>
+              </div>
+              {/* Duck under voice (AUDIO items only) */}
+              {item.kind === 'AUDIO' && (
+                <div className="flex items-center gap-2 min-h-[44px]">
+                  <input
+                    id="insp-duck-voice"
+                    type="checkbox"
+                    checked={props.duckUnderVoice ?? false}
+                    onChange={(e) => setProp('duckUnderVoice', e.target.checked)}
+                    className="w-4 h-4 accent-brand-600 rounded"
+                  />
+                  <label htmlFor="insp-duck-voice" className="text-xs font-medium text-gray-700 cursor-pointer">
+                    Duck under voice
+                  </label>
+                </div>
+              )}
             </div>
           )}
         </div>

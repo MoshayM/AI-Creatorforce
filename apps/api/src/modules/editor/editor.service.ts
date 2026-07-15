@@ -16,9 +16,11 @@ import { JobsService } from '../jobs/jobs.service';
 import {
   EditTimelineSchema,
   EditRenderPresetSchema,
+  EditExportOptionsSchema,
   EDIT_PRESET_DIMS,
   type EditTimeline,
   type EditRenderPreset,
+  type EditExportOptions,
   type EditItemFilters,
   type EditKeyframe,
 } from '@cf/shared';
@@ -36,6 +38,45 @@ import { FFmpegExecutionError } from '../media/media.errors';
 /** Clamp n to [min, max]. */
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
+}
+
+/**
+ * Map export quality + format to ffmpeg codec argument arrays.
+ *
+ * mp4  → libx264 (CRF) + aac.
+ * webm → libvpx-vp9 (CRF mode, b:v=0) + libopus.
+ *
+ * draft    = fast/high-CRF  (mp4 CRF 28 veryfast; webm CRF 40 realtime)
+ * standard = balanced       (mp4 CRF 23 veryfast; webm CRF 31 good)     ← default
+ * high     = slow/low-CRF   (mp4 CRF 18 slow;     webm CRF 20 best)
+ *
+ * Returns separate video and audio arg arrays so callers can omit audio args
+ * when the output has no audio stream.
+ */
+function buildCodecArgs(
+  format: 'mp4' | 'webm',
+  quality: 'draft' | 'standard' | 'high',
+): { video: string[]; audio: string[] } {
+  if (format === 'webm') {
+    const crf = quality === 'draft' ? 40 : quality === 'standard' ? 31 : 20;
+    const deadline = quality === 'draft' ? 'realtime' : quality === 'high' ? 'best' : 'good';
+    return {
+      video: ['-c:v', 'libvpx-vp9', '-crf', String(crf), '-b:v', '0', '-deadline', deadline, '-pix_fmt', 'yuv420p'],
+      audio: ['-c:a', 'libopus', '-b:a', '128k'],
+    };
+  }
+  // mp4 / libx264
+  const crf = quality === 'draft' ? 28 : quality === 'standard' ? 23 : 18;
+  const x264preset = quality === 'high' ? 'slow' : 'veryfast';
+  return {
+    video: ['-c:v', 'libx264', '-preset', x264preset, '-crf', String(crf), '-pix_fmt', 'yuv420p'],
+    audio: ['-c:a', 'aac', '-b:a', '160k'],
+  };
+}
+
+/** Convert gainDb (-60..+12) to a linear amplitude multiplier. */
+function gainDbToLinear(db: number): number {
+  return Math.pow(10, clamp(db, -60, 12) / 20);
 }
 
 /**
@@ -601,29 +642,41 @@ export class EditorService {
   async render(
     id: string,
     userId: string,
-    preset: unknown,
+    presetOrOptions: unknown,
   ): Promise<{ jobId: string; renderStatus: string }> {
     const row = await this.assertEditProjectOwnership(id, userId);
 
-    // Validate preset
-    const presetParse = EditRenderPresetSchema.safeParse(preset);
-    if (!presetParse.success) {
-      throw new BadRequestException(
-        `Invalid preset — must be one of: ${EditRenderPresetSchema.options.join(', ')}`,
-      );
+    // Accept a bare preset string (Phase 1/2 back-compat) or an EditExportOptions object
+    let exportOptions: EditExportOptions;
+    if (typeof presetOrOptions === 'string') {
+      const presetParse = EditRenderPresetSchema.safeParse(presetOrOptions);
+      if (!presetParse.success) {
+        throw new BadRequestException(
+          `Invalid preset — must be one of: ${EditRenderPresetSchema.options.join(', ')}`,
+        );
+      }
+      exportOptions = { preset: presetParse.data, format: 'mp4', quality: 'standard' };
+    } else {
+      const optsParse = EditExportOptionsSchema.safeParse(presetOrOptions);
+      if (!optsParse.success) {
+        throw new BadRequestException(
+          `Invalid export options: ${optsParse.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ')}`,
+        );
+      }
+      exportOptions = optsParse.data;
     }
-    const validPreset = presetParse.data;
 
-    const idempotencyKey = `edit-render:${id}:${row.lastEditedAt.toISOString()}`;
+    // Include format+quality in key so switching format/quality forces a new render
+    const idempotencyKey = `edit-render:${id}:${row.lastEditedAt.toISOString()}:${exportOptions.format}:${exportOptions.quality}`;
 
     const job = await this.jobs.enqueue(
       row.projectId,
       'EDIT_RENDER',
-      { editProjectId: id, preset: validPreset },
+      { editProjectId: id, preset: exportOptions.preset, format: exportOptions.format, quality: exportOptions.quality },
       { idempotencyKey },
     );
 
-     
+
     await ep(this.prisma).update({
       where: { id },
       data: { renderStatus: 'QUEUED' },
@@ -693,16 +746,27 @@ export class EditorService {
    *    Applied as drawtext alpha+position for TEXT items; VIDEO keyframe opacity
    *    requires format=rgba which changes pix_fmt and is deferred to Phase 3.
    *
+   * Phase 3 additions (this phase):
+   * ─────────────────────────────────────────────────────────────────────────────
+   * 5. AUDIO MIXING: ALL audio sources are mixed — VIDEO item audio (via extracted
+   *    segment files) + every AUDIO-track item. Per-item controls: volume, gainDb
+   *    (dB gain, converted to linear), fadeInMs/fadeOutMs (afade), timelineStartMs
+   *    (adelay). duckUnderVoice items get a constant -9 dB (×0.354 linear) reduction
+   *    rather than sidechaincompress (fragile across ffmpeg-static builds).
+   * 6. EXPORT FORMAT/QUALITY: mp4 (libx264+aac, default) or webm (libvpx-vp9+libopus).
+   *    quality: draft=high-CRF/fast, standard=balanced (default), high=low-CRF/slow.
+   *    Output extension + r2Key match the chosen format.
+   *    render() accepts either a bare preset string (back-compat) or EditExportOptions.
+   *
    * Phase 1 limitations still present:
    * ─────────────────────────────────────────────────────────────────────────────
    * - Multiple VIDEO tracks: Only the FIRST VIDEO track is rendered.
-   * - Multiple AUDIO tracks: First AUDIO track item is used as voicePath.
-   * - Speed property: Not applied (requires setpts/atempo chain; Phase 3).
+   * - Speed property: Not applied (requires setpts/atempo chain; Phase 4).
    * - IMAGE items: Supported via zoompan still; filters not yet applied to images.
    */
   async runRender(
     editProjectId: string,
-    preset: EditRenderPreset,
+    presetOrOptions: EditRenderPreset | EditExportOptions,
     onLog?: (msg: string) => void,
   ): Promise<{
     assetId: string;
@@ -711,7 +775,22 @@ export class EditorService {
     sizeBytes: number;
     durationMs: number;
   }> {
-     
+    // Normalize preset or options into discrete vars
+    let preset: EditRenderPreset;
+    let exportFormat: 'mp4' | 'webm';
+    let exportQuality: 'draft' | 'standard' | 'high';
+    if (typeof presetOrOptions === 'string') {
+      preset = presetOrOptions;
+      exportFormat = 'mp4';
+      exportQuality = 'standard';
+    } else {
+      preset = presetOrOptions.preset;
+      // format/quality are optional in the payload — default to mp4/standard.
+      exportFormat = presetOrOptions.format ?? 'mp4';
+      exportQuality = presetOrOptions.quality ?? 'standard';
+    }
+
+
     const row = (await ep(this.prisma).findUnique({
       where: { id: editProjectId },
     })) as EditProjectRow | null;
@@ -764,7 +843,6 @@ export class EditorService {
     try {
       // ── Extract the primary VIDEO track ──────────────────────────────────
       const videoTrack = timeline.tracks.find((t) => t.kind === 'VIDEO');
-      const audioTrack = timeline.tracks.find((t) => t.kind === 'AUDIO');
       const textTrack = timeline.tracks.find((t) => t.kind === 'TEXT');
 
       if (!videoTrack || videoTrack.items.length === 0) {
@@ -789,6 +867,8 @@ export class EditorService {
         path: string;
         durationSecs: number;
         isImage: boolean;
+        /** Present for VIDEO items; used by Phase 3 audio source collection. */
+        itemId?: string;
         transitionIn?: { type: 'fade' | 'dissolve' | 'slide'; durationMs: number };
       }[] = [];
 
@@ -868,6 +948,7 @@ export class EditorService {
             path: segPath,
             durationSecs: itemDurationSecs,
             isImage: false,
+            itemId: item.id,
             transitionIn: item.properties?.transitionIn,
           });
           onLog?.(`Item ${i + 1}/${sortedVideoItems.length}: VIDEO extracted (${Math.round(trimDuration)}s trim → ${Math.round(itemDurationSecs)}s slot)`);
@@ -883,34 +964,104 @@ export class EditorService {
         throw new BadRequestException('No renderable video or image items found after resolving assets');
       }
 
-      // ── Resolve optional audio from first AUDIO track ────────────────────
-      let voicePath: string | undefined;
-      if (audioTrack && audioTrack.items.length > 0) {
-        const audioItem = audioTrack.items.sort((a, b) => a.timelineStartMs - b.timelineStartMs)[0]!;
-        if (audioItem.sourceAssetId) {
+      // ── Phase 3: Collect ALL audio sources ──────────────────────────────────
+      //
+      // Two source types:
+      //   1. VIDEO segment files — each extracted .mp4 carries its own audio,
+      //      positioned at its timelineStartMs via adelay.
+      //   2. AUDIO-track items — voice, music, SFX assets.
+      //
+      // Per-item controls: volume (linear), gainDb (dB → linear multiplier),
+      // fadeInMs / fadeOutMs (afade), duckUnderVoice (constant -9 dB = ×0.354).
+      //
+      // sidechaincompress is NOT used for ducking — fragile across ffmpeg-static
+      // builds (no guarantee the lavfi sidechain graph compiles). Constant gain
+      // reduction is a reliable alternative.
+
+      interface AudioSource {
+        path: string;
+        /** Timeline position where this clip starts (ms). */
+        offsetMs: number;
+        /** Combined volume multiplier (volume × gainDb → linear × duck factor). */
+        volume: number;
+        fadeInMs: number;
+        fadeOutMs: number;
+        /** Clip duration in ms — used to compute fadeOut start time. */
+        clipDurationMs: number;
+      }
+      const audioSources: AudioSource[] = [];
+
+      // 1. VIDEO segment audio.
+      // segmentPaths entries for VIDEO items carry an itemId field that matches
+      // sortedVideoItems[i].id. Use it to look up the item's audio properties.
+      const videoItemById = new Map(sortedVideoItems.map((item) => [item.id, item]));
+      for (const seg of segmentPaths) {
+        if (seg.isImage || !seg.itemId) continue;
+        const item = videoItemById.get(seg.itemId);
+        if (!item) continue;
+
+        const vol = item.properties?.volume ?? 1;
+        const gainLinear = item.properties?.gainDb !== undefined
+          ? gainDbToLinear(item.properties.gainDb)
+          : 1;
+        const duckFactor = item.properties?.duckUnderVoice ? 0.354 : 1;
+
+        audioSources.push({
+          path: seg.path,
+          offsetMs: item.timelineStartMs,
+          volume: vol * gainLinear * duckFactor,
+          fadeInMs: item.properties?.fadeInMs ?? 0,
+          fadeOutMs: item.properties?.fadeOutMs ?? 0,
+          clipDurationMs: item.timelineEndMs - item.timelineStartMs,
+        });
+      }
+
+      // 2. AUDIO-track items (all AUDIO-kind tracks, all items)
+      const audioTracks = timeline.tracks.filter((t) => t.kind === 'AUDIO');
+      for (const aTrack of audioTracks) {
+        for (const audioItem of aTrack.items.slice().sort((a, b) => a.timelineStartMs - b.timelineStartMs)) {
+          if (!audioItem.sourceAssetId) continue;
           const audioAsset = await this.prisma.asset.findUnique({
             where: { id: audioItem.sourceAssetId },
             include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
           });
           const r2Key = audioAsset?.versions[0]?.r2Key;
-          if (r2Key && this.storage.exists(r2Key)) {
-            voicePath = this.storage.resolve(r2Key);
-            onLog?.(`Audio track resolved: ${audioAsset?.label ?? audioItem.sourceAssetId}`);
+          if (!r2Key || !this.storage.exists(r2Key)) {
+            onLog?.(`Audio item ${audioItem.id}: asset not found — skipping`);
+            continue;
           }
+          onLog?.(`Audio item ${audioItem.id}: ${audioAsset?.label ?? audioItem.sourceAssetId}`);
+
+          const vol = audioItem.properties?.volume ?? 1;
+          const gainLinear = audioItem.properties?.gainDb !== undefined
+            ? gainDbToLinear(audioItem.properties.gainDb)
+            : 1;
+          const duckFactor = audioItem.properties?.duckUnderVoice ? 0.354 : 1;
+
+          audioSources.push({
+            path: this.storage.resolve(r2Key),
+            offsetMs: audioItem.timelineStartMs,
+            volume: vol * gainLinear * duckFactor,
+            fadeInMs: audioItem.properties?.fadeInMs ?? 0,
+            fadeOutMs: audioItem.properties?.fadeOutMs ?? 0,
+            clipDurationMs: audioItem.timelineEndMs - audioItem.timelineStartMs,
+          });
         }
       }
 
       // ── Concatenate all segments into an intermediate file ───────────────
       // When transitions are requested, use filter_complex with xfade instead
       // of the concat demuxer (xfade is incompatible with the concat demuxer path).
+      // Intermediates are always mp4/libx264 for speed; only the final output uses exportFormat.
       const compositePath = path.join(workDir, 'composite.mp4');
-      const outPath = path.join(workDir, 'final.mp4');
+      const outExt = exportFormat === 'webm' ? 'webm' : 'mp4';
+      const outPath = path.join(workDir, `final.${outExt}`);
       const totalSecs = segmentPaths.reduce((s, seg) => s + seg.durationSecs, 0);
 
       const allVideo = segmentPaths.every((s) => !s.isImage);
 
-      if (!hasTransitions && segmentPaths.length === 1 && !segmentPaths[0]!.isImage && !voicePath) {
-        // Single video segment, no audio mixing — direct re-encode
+      if (!hasTransitions && segmentPaths.length === 1 && !segmentPaths[0]!.isImage && audioSources.length === 0) {
+        // Single video segment, no additional audio mixing — direct re-encode
         onLog?.('Single segment — direct encode');
         const seg = segmentPaths[0]!;
         const singleArgs = [
@@ -1029,10 +1180,10 @@ export class EditorService {
         await runFfmpegWithProgress(mixedArgs, totalSecs, (pct) => onLog?.(`Encoding: ${pct}%`));
       }
 
-      // ── Phase 2: TEXT burn-in + audio mix as a second pass ───────────────
-      // TEXT track items are burned as drawtext overlays onto the composite.
-      // Audio mixing happens in this same pass.
-      // If neither text nor audio, just rename composite → final.
+      // ── Phase 2+3: TEXT burn-in + multi-source audio mix — second pass ──────
+      // TEXT track items → drawtext overlays.
+      // audioSources (collected above) → per-source filter chains with volume,
+      // afade (in/out), and adelay (timeline offset), all merged via amix.
 
       const validTextItems = sortedTextItems.filter(
         (item) => item.properties?.text && item.kind === 'TEXT',
@@ -1094,49 +1245,87 @@ export class EditorService {
         onLog?.(`TEXT item ${item.id}: burned at ${startSecs.toFixed(1)}s–${endSecs.toFixed(1)}s (${anim})`);
       }
 
-      const needsSecondPass = textFilters.length > 0 || voicePath;
+      // ── Phase 3: Build per-source audio filter chains ────────────────────────
+      // Each AudioSource becomes a separate ffmpeg input in the second pass.
+      // Filter chain per source: [N:a]volume=V[,afade=in...][,afade=out...][,adelay=Ms|Ms][aN]
+      // Composite video is always input 0; audio sources start at index 1.
+      const audioPassInputArgs: string[] = [];
+      const audioFilterChains: string[] = [];
+      const audioOutputLabels: string[] = [];
+      const audioInputBase = 1; // composite.mp4 is [0]
+
+      for (let ai = 0; ai < audioSources.length; ai++) {
+        const src = audioSources[ai]!;
+        audioPassInputArgs.push('-i', src.path);
+        const idx = audioInputBase + ai;
+
+        let filterChain = `[${idx}:a]volume=${src.volume.toFixed(4)}`;
+        if (src.fadeInMs > 0) {
+          filterChain += `,afade=t=in:st=0:d=${(src.fadeInMs / 1000).toFixed(3)}`;
+        }
+        if (src.fadeOutMs > 0 && src.clipDurationMs > 0) {
+          const fadeOutStart = Math.max(0, (src.clipDurationMs - src.fadeOutMs) / 1000);
+          filterChain += `,afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${(src.fadeOutMs / 1000).toFixed(3)}`;
+        }
+        if (src.offsetMs > 0) {
+          // adelay takes ms values; pipe-separated per-channel; all=1 works for any channel count
+          filterChain += `,adelay=${src.offsetMs}|${src.offsetMs}`;
+        }
+
+        const label = `[a${ai}]`;
+        filterChain += label;
+        audioFilterChains.push(filterChain);
+        audioOutputLabels.push(label);
+      }
+
+      let audioMixFilter = '';
+      let finalAudioLabel = '';
+      if (audioOutputLabels.length > 1) {
+        audioMixFilter = `${audioOutputLabels.join('')}amix=inputs=${audioOutputLabels.length}:duration=first:dropout_transition=2[aout]`;
+        finalAudioLabel = '[aout]';
+      } else if (audioOutputLabels.length === 1) {
+        finalAudioLabel = audioOutputLabels[0]!;
+      }
+
+      const hasAudio = audioOutputLabels.length > 0;
+      const needsSecondPass = textFilters.length > 0 || hasAudio;
+      const codecArgs = buildCodecArgs(exportFormat, exportQuality);
 
       if (!needsSecondPass) {
-        // No text, no audio: composite is the final output
+        // No text, no extra audio sources: composite is the final output.
+        // NOTE: if exportFormat is webm and there's no second pass, the rename
+        // moves composite.mp4 → final.webm (extension mismatch). In practice
+        // this branch is unreachable when a VIDEO track is present because VIDEO
+        // segment audio is always added as an audioSource above.
         await fsp.rename(compositePath, outPath);
       } else {
-        // Second pass: overlay text + mix audio onto composite
-        const passArgs: string[] = ['-i', compositePath];
-        if (voicePath) passArgs.push('-i', voicePath);
+        // Second pass: overlay text + mix all audio sources
+        const passArgs: string[] = ['-i', compositePath, ...audioPassInputArgs];
+        const passFilters: string[] = [...audioFilterChains];
+        if (audioMixFilter) passFilters.push(audioMixFilter);
 
-        const passFilters: string[] = [];
-        let videoLabel = '[0:v]';
-
+        // Raw input streams are mapped WITHOUT brackets (`0:v`); only a
+        // filtergraph OUTPUT label is bracketed (`[vtxt]`). Using `[0:v]` with
+        // -map makes ffmpeg look for a nonexistent filtergraph label and fail.
+        let videoLabel = '0:v';
         if (textFilters.length > 0) {
-          // Chain all drawtext filters: [0:v]drawtext=...,drawtext=...[vtxt]
           passFilters.push(`[0:v]${textFilters.join(',')}[vtxt]`);
           videoLabel = '[vtxt]';
         }
 
-        if (voicePath) {
-          passFilters.push('[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2[aout]');
-        }
-
-        // If we have audio in the composite (segment audio), map it; when mixing
-        // with voicePath use the amix label, otherwise map stream 0:a directly.
-        const hasCompositeAudio = segmentPaths.some((s) => !s.isImage);
-        const audioMap: string[] = voicePath
-          ? ['-map', '[aout]']
-          : hasCompositeAudio
-          ? ['-map', '0:a']
-          : [];
-        const fcStr = passFilters.length > 0 ? ['-filter_complex', passFilters.join(';')] : [];
-        const mapV = passFilters.length > 0 ? ['-map', videoLabel] : ['-map', '0:v'];
+        const fcStr: string[] = passFilters.length > 0 ? ['-filter_complex', passFilters.join(';')] : [];
+        const mapV = ['-map', videoLabel];
+        const mapA: string[] = hasAudio ? ['-map', finalAudioLabel] : [];
 
         const finalArgs = [
           ...passArgs,
-          ...(fcStr.length > 0 ? fcStr : []),
+          ...fcStr,
           ...mapV,
-          ...audioMap,
-          '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p',
-          ...(voicePath ? ['-c:a', 'aac', '-b:a', '160k'] : hasCompositeAudio ? ['-c:a', 'copy'] : []),
+          ...mapA,
+          ...codecArgs.video,
+          ...(hasAudio ? codecArgs.audio : []),
           '-t', String(totalSecs),
-          '-movflags', '+faststart',
+          ...(exportFormat === 'mp4' ? ['-movflags', '+faststart'] : []),
           outPath,
         ];
         await runFfmpegWithProgress(finalArgs, totalSecs, (pct) => onLog?.(`Final pass: ${pct}%`));
@@ -1146,16 +1335,17 @@ export class EditorService {
       const stat = await fsp.stat(outPath);
       const totalDurationMs = Math.round(totalSecs * 1000);
 
+      const videoModel = exportFormat === 'webm' ? 'libvpx-vp9' : 'libx264';
       const asset = await this.prisma.asset.create({
         data: {
           projectId: row.projectId,
           kind: 'EDIT_RENDER',
-          label: `Editor render: ${row.title} (${preset})`,
+          label: `Editor render: ${row.title} (${preset}/${exportFormat})`,
           status: 'READY',
         },
       });
 
-      const r2Key = `renders/editor/${row.projectId}/${asset.id}.mp4`;
+      const r2Key = `renders/editor/${row.projectId}/${asset.id}.${outExt}`;
       await this.storage.copyIn(r2Key, outPath);
 
       const contentHash = createHash('sha256').update(await fsp.readFile(outPath)).digest('hex');
@@ -1166,12 +1356,14 @@ export class EditorService {
           r2Key,
           contentHash,
           provider: 'ffmpeg',
-          model: 'libx264',
+          model: videoModel,
           provenance: {
             provider: 'ffmpeg',
-            model: 'libx264',
+            model: videoModel,
             generatedAt: new Date().toISOString(),
             preset,
+            format: exportFormat,
+            quality: exportQuality,
             resolution: `${width}x${height}`,
             segments: segmentPaths.length,
           } as never,
@@ -1214,7 +1406,7 @@ export class EditorService {
 
       // Re-wrap as typed error if it's a plain ffmpeg error
       if (err instanceof Error && !err.message.includes('EditProject') && !err.message.includes('No video')) {
-        throw new FFmpegExecutionError(err.message, { editProjectId, preset });
+        throw new FFmpegExecutionError(err.message, { editProjectId, preset, format: exportFormat });
       }
       throw err;
     }

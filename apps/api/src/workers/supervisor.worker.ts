@@ -1467,13 +1467,17 @@ export class SupervisorWorker extends WorkerHost {
       case 'EDIT_RENDER': {
         const editProjectId = payload['editProjectId'] as string;
         const preset = (payload['preset'] as string | undefined) ?? 'SOURCE';
+        const format = payload['format'] as string | undefined;
+        const quality = payload['quality'] as string | undefined;
         if (!editProjectId) throw new Error('EDIT_RENDER requires payload.editProjectId');
-        this.log(jobId, projectId, 'Starting standalone editor render…', `editProjectId=${editProjectId} preset=${preset}`);
+        this.log(jobId, projectId, 'Starting standalone editor render…', `editProjectId=${editProjectId} preset=${preset} format=${format ?? 'mp4'} quality=${quality ?? 'standard'}`);
+        // Pass the full export options (format/quality) through, not just preset —
+        // the render() enqueue persists all three in the payload.
         const result = await this.editorSvc.runRender(
           editProjectId,
-          // @reason: validated as EditRenderPreset in EditorService.render() before enqueue
+          // @reason: fields validated as EditRenderPreset/format/quality in EditorService.render() before enqueue
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          preset as any,
+          { preset, format, quality } as any,
           (msg) => this.log(jobId, projectId, msg),
         );
         this.log(jobId, projectId, 'Editor render complete ✓', `assetId=${result.assetId} · ${(result.sizeBytes / 1024 / 1024).toFixed(1)} MB`);

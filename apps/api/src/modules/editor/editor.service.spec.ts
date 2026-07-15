@@ -254,8 +254,8 @@ describe('EditorService', () => {
       expect(jobsMock.enqueue).toHaveBeenCalledWith(
         'proj-1',
         'EDIT_RENDER',
-        { editProjectId: 'ep-1', preset: '1080P_16_9' },
-        { idempotencyKey: `edit-render:ep-1:${mockEditProjectRow.lastEditedAt.toISOString()}` },
+        { editProjectId: 'ep-1', preset: '1080P_16_9', format: 'mp4', quality: 'standard' },
+        { idempotencyKey: `edit-render:ep-1:${mockEditProjectRow.lastEditedAt.toISOString()}:mp4:standard` },
       );
       expect(result.jobId).toBe('job-123');
       expect(result.renderStatus).toBe('QUEUED');
@@ -265,7 +265,7 @@ describe('EditorService', () => {
       await service.render('ep-1', 'user-1', 'SOURCE');
       expect(jobsMock.enqueue).toHaveBeenCalledWith(
         'proj-1', 'EDIT_RENDER',
-        { editProjectId: 'ep-1', preset: 'SOURCE' },
+        { editProjectId: 'ep-1', preset: 'SOURCE', format: 'mp4', quality: 'standard' },
         expect.objectContaining({ idempotencyKey: expect.stringContaining('edit-render:ep-1:') }),
       );
     });
@@ -371,6 +371,8 @@ describe('EditorService', () => {
       jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
       jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
       jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
 
       await service.runRender('ep-1', '1080P_16_9');
 
@@ -422,6 +424,8 @@ describe('EditorService', () => {
       jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
       jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
       jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
 
       await service.runRender('ep-1', '1080P_16_9');
 
@@ -462,6 +466,8 @@ describe('EditorService', () => {
       jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
       jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
       jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
 
       await service.runRender('ep-1', '1080P_16_9');
 
@@ -502,6 +508,8 @@ describe('EditorService', () => {
       jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
       jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
       jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
 
       await service.runRender('ep-1', '1080P_16_9');
 
@@ -552,6 +560,8 @@ describe('EditorService', () => {
       jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
       jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
       jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
 
       await service.runRender('ep-1', '1080P_16_9');
 
@@ -606,6 +616,8 @@ describe('EditorService', () => {
       jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
       jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
       jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
 
       await service.runRender('ep-1', '1080P_16_9');
 
@@ -676,6 +688,8 @@ describe('EditorService', () => {
       jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
       jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
       jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
 
       await service.runRender('ep-1', '1080P_16_9');
 
@@ -741,6 +755,8 @@ describe('EditorService', () => {
       jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
       jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
       jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
 
       const logs: string[] = [];
       // Should NOT throw
@@ -783,6 +799,322 @@ describe('EditorService', () => {
         ],
       });
       expect(result.success).toBe(true);
+    });
+  });
+
+  // ── Phase 3 render tests ───────────────────────────────────────────────────
+
+  describe('Phase 3: audio mixing + export format', () => {
+    // Re-use the Phase 2 mock setup helper
+    const baseP3Timeline: EditTimeline = {
+      width: 1920,
+      height: 1080,
+      fps: 30,
+      durationMs: 10_000,
+      tracks: [
+        {
+          id: 'track-0',
+          kind: 'VIDEO',
+          label: 'Video',
+          items: [
+            {
+              id: 'item-0',
+              sourceAssetId: 'asset-vid',
+              kind: 'VIDEO',
+              timelineStartMs: 0,
+              timelineEndMs: 10_000,
+            },
+          ],
+        },
+      ],
+    };
+
+    /** Wire up the full runRender mock stack */
+    function setupP3Mocks(timelineOverride: EditTimeline = baseP3Timeline) {
+      editProjectMock.findUnique.mockResolvedValue(
+        makeEditProjectRow({ renderStatus: 'NONE', timeline: timelineOverride }),
+      );
+      editProjectMock.update.mockResolvedValue({});
+      storageMock.exists.mockReturnValue(true);
+      storageMock.resolve.mockImplementation((key: string) => `/storage/${key}`);
+      prismaMock.asset.findUnique.mockImplementation(({ where }: { where: { id: string } }) => {
+        return Promise.resolve({
+          id: where.id,
+          label: where.id,
+          kind: 'VIDEO',
+          versions: [{ id: `ver-${where.id}`, r2Key: `keys/${where.id}`, durationMs: 10_000, sizeBytes: 1024 }],
+        });
+      });
+      prismaMock.asset.create.mockResolvedValue({ id: 'new-asset', projectId: 'proj-1', kind: 'EDIT_RENDER', label: 'out' });
+      prismaMock.assetVersion.create.mockResolvedValue({ id: 'new-ver', r2Key: 'renders/editor/proj-1/new-asset.mp4', durationMs: 10_000, sizeBytes: BigInt(1024) });
+      prismaMock.asset.update.mockResolvedValue({});
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (storageMock as any).copyIn = jest.fn().mockResolvedValue(undefined);
+    }
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('multi-audio: two AUDIO-track items produce amix with volume/adelay in filter_complex', async () => {
+      const multiAudioTimeline: EditTimeline = {
+        ...baseP3Timeline,
+        tracks: [
+          {
+            id: 'track-0',
+            kind: 'VIDEO',
+            label: 'Video',
+            items: [
+              {
+                id: 'item-0',
+                sourceAssetId: 'asset-vid',
+                kind: 'VIDEO',
+                timelineStartMs: 0,
+                timelineEndMs: 10_000,
+                properties: { volume: 0.8 },
+              },
+            ],
+          },
+          {
+            id: 'track-audio-1',
+            kind: 'AUDIO',
+            label: 'Voice',
+            items: [
+              {
+                id: 'audio-0',
+                sourceAssetId: 'asset-voice',
+                kind: 'AUDIO',
+                timelineStartMs: 0,
+                timelineEndMs: 10_000,
+                properties: { volume: 1.0, fadeInMs: 500 },
+              },
+            ],
+          },
+          {
+            id: 'track-audio-2',
+            kind: 'AUDIO',
+            label: 'Music',
+            items: [
+              {
+                id: 'audio-1',
+                sourceAssetId: 'asset-music',
+                kind: 'AUDIO',
+                timelineStartMs: 2_000,
+                timelineEndMs: 10_000,
+                properties: { volume: 0.3, duckUnderVoice: false, gainDb: -3 },
+              },
+            ],
+          },
+        ],
+      };
+      setupP3Mocks(multiAudioTimeline);
+
+      jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      const progressSpy = jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
+
+      await service.runRender('ep-1', '1080P_16_9');
+
+      // The final pass (last runFfmpegWithProgress) should have amix + volume + afade
+      const allProgressCalls = progressSpy.mock.calls;
+      const lastCall = allProgressCalls[allProgressCalls.length - 1]!;
+      const lastArgs = lastCall[0] ?? [];
+      const fcIdx = lastArgs.indexOf('-filter_complex');
+      expect(fcIdx).toBeGreaterThanOrEqual(0);
+      const fcStr = lastArgs[fcIdx + 1] ?? '';
+
+      // amix with >= 2 sources (VIDEO audio + voice + music = 3)
+      expect(fcStr).toContain('amix=inputs=');
+      // volume filter present
+      expect(fcStr).toContain('volume=');
+      // afade for the voice item (fadeInMs: 500)
+      expect(fcStr).toContain('afade=t=in');
+      // adelay for music (offsetMs 2000)
+      expect(fcStr).toContain('adelay=2000|2000');
+
+      progressSpy.mockRestore();
+    });
+
+    it('webm export: second-pass uses libvpx-vp9 and libopus, outPath ends in .webm', async () => {
+      setupP3Mocks();
+
+      jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      const progressSpy = jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 2048 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
+
+      await service.runRender('ep-1', { preset: '1080P_16_9', format: 'webm', quality: 'standard' });
+
+      // The final output pass should use libvpx-vp9 and libopus
+      const allCalls = progressSpy.mock.calls;
+      const lastArgs = allCalls[allCalls.length - 1]?.[0] ?? [];
+
+      // codec check
+      expect(lastArgs.join(' ')).toContain('libvpx-vp9');
+      expect(lastArgs.join(' ')).toContain('libopus');
+      // output path ends in .webm
+      const outArg = lastArgs[lastArgs.length - 1] ?? '';
+      expect(outArg).toMatch(/\.webm$/);
+
+      progressSpy.mockRestore();
+    });
+
+    it('quality=draft uses high CRF (28 for mp4)', async () => {
+      setupP3Mocks();
+
+      jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      const progressSpy = jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
+
+      await service.runRender('ep-1', { preset: 'SOURCE', format: 'mp4', quality: 'draft' });
+
+      const allCalls = progressSpy.mock.calls;
+      const lastArgs = allCalls[allCalls.length - 1]?.[0] ?? [];
+      expect(lastArgs.join(' ')).toContain('-crf 28');
+
+      progressSpy.mockRestore();
+    });
+
+    it('quality=high uses low CRF (18 for mp4) and slow preset', async () => {
+      setupP3Mocks();
+
+      jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      const progressSpy = jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
+
+      await service.runRender('ep-1', { preset: 'SOURCE', format: 'mp4', quality: 'high' });
+
+      const allCalls = progressSpy.mock.calls;
+      const lastArgs = allCalls[allCalls.length - 1]?.[0] ?? [];
+      const argsStr = lastArgs.join(' ');
+      expect(argsStr).toContain('-crf 18');
+      expect(argsStr).toContain('-preset slow');
+
+      progressSpy.mockRestore();
+    });
+
+    it('Phase-1/2 back-compat: bare string preset with no audio props still renders as mp4', async () => {
+      setupP3Mocks();
+
+      jest.spyOn(ffmpegUtil, 'runFfmpeg').mockResolvedValue();
+      const progressSpy = jest.spyOn(ffmpegUtil, 'runFfmpegWithProgress').mockResolvedValue();
+      jest.spyOn(require('fs').promises, 'stat').mockResolvedValue({ size: 1024 } as never);
+      jest.spyOn(require('fs').promises, 'readFile').mockResolvedValue(Buffer.from('fake'));
+      jest.spyOn(require('fs').promises, 'mkdtemp').mockResolvedValue('/tmp/cf-edit-test');
+      jest.spyOn(require('fs').promises, 'rm').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'rename').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'writeFile').mockResolvedValue(undefined);
+      jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as never);
+
+      const result = await service.runRender('ep-1', '1080P_16_9');
+      expect(result).toBeDefined();
+      expect(result.key).toMatch(/\.mp4$/);
+
+      // No webm codec in any call
+      const allArgs = progressSpy.mock.calls.flatMap((c) => c[0]);
+      expect(allArgs.join(' ')).not.toContain('libvpx-vp9');
+      expect(allArgs.join(' ')).not.toContain('libopus');
+
+      progressSpy.mockRestore();
+    });
+
+    it('render(): accepts EditExportOptions object with format=webm', async () => {
+      prismaMock.project.findUnique.mockResolvedValue({ userId: 'user-1' });
+      editProjectMock.findUnique.mockResolvedValue(makeEditProjectRow());
+      editProjectMock.update.mockResolvedValue({ ...makeEditProjectRow(), renderStatus: 'QUEUED' });
+      jobsMock.enqueue.mockResolvedValue({ id: 'job-webm' });
+
+      const result = await service.render('ep-1', 'user-1', {
+        preset: '1080P_16_9',
+        format: 'webm',
+        quality: 'high',
+      });
+
+      expect(result.jobId).toBe('job-webm');
+      expect(jobsMock.enqueue).toHaveBeenCalledWith(
+        'proj-1',
+        'EDIT_RENDER',
+        { editProjectId: 'ep-1', preset: '1080P_16_9', format: 'webm', quality: 'high' },
+        expect.objectContaining({ idempotencyKey: expect.stringContaining(':webm:high') }),
+      );
+    });
+
+    it('render(): bare preset string still works (back-compat)', async () => {
+      prismaMock.project.findUnique.mockResolvedValue({ userId: 'user-1' });
+      editProjectMock.findUnique.mockResolvedValue(makeEditProjectRow());
+      editProjectMock.update.mockResolvedValue({ ...makeEditProjectRow(), renderStatus: 'QUEUED' });
+      jobsMock.enqueue.mockResolvedValue({ id: 'job-mp4' });
+
+      const result = await service.render('ep-1', 'user-1', '1080P_16_9');
+      expect(result.jobId).toBe('job-mp4');
+      expect(jobsMock.enqueue).toHaveBeenCalledWith(
+        'proj-1',
+        'EDIT_RENDER',
+        { editProjectId: 'ep-1', preset: '1080P_16_9', format: 'mp4', quality: 'standard' },
+        expect.objectContaining({ idempotencyKey: expect.stringContaining(':mp4:standard') }),
+      );
+    });
+
+    it('schema: EditExportOptionsSchema validates correctly', () => {
+      const { EditExportOptionsSchema } = require('@cf/shared');
+
+      const valid = EditExportOptionsSchema.safeParse({ preset: '1080P_16_9', format: 'webm', quality: 'high' });
+      expect(valid.success).toBe(true);
+
+      // Missing format/quality => uses defaults
+      const defaults = EditExportOptionsSchema.safeParse({ preset: 'SOURCE' });
+      expect(defaults.success).toBe(true);
+      if (defaults.success) {
+        expect(defaults.data.format).toBe('mp4');
+        expect(defaults.data.quality).toBe('standard');
+      }
+
+      const invalid = EditExportOptionsSchema.safeParse({ preset: 'INVALID' });
+      expect(invalid.success).toBe(false);
+    });
+
+    it('schema: Phase 3 audio props accepted by EditItemPropertiesSchema', () => {
+      const { EditItemPropertiesSchema } = require('@cf/shared');
+
+      const result = EditItemPropertiesSchema.safeParse({
+        volume: 0.8,
+        fadeInMs: 500,
+        fadeOutMs: 1000,
+        gainDb: -6,
+        duckUnderVoice: true,
+      });
+      expect(result.success).toBe(true);
+
+      // gainDb out of range
+      const bad = EditItemPropertiesSchema.safeParse({ gainDb: 100 });
+      expect(bad.success).toBe(false);
+
+      // fadeInMs negative
+      const bad2 = EditItemPropertiesSchema.safeParse({ fadeInMs: -1 });
+      expect(bad2.success).toBe(false);
     });
   });
 });

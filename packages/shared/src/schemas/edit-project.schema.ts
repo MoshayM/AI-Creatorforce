@@ -48,6 +48,20 @@ export const EditItemPropertiesSchema = z.object({
   transitionIn: EditTransitionInSchema.optional(),
   textAnim: z.enum(['none', 'fade-in', 'slide-up']).optional(),
   keyframes: z.array(EditKeyframeSchema).optional(),
+  // Phase 3 — audio mixing controls (all optional, back-compatible)
+  /** Fade-in duration in ms at the start of this clip's audio. */
+  fadeInMs: z.number().int().min(0).optional(),
+  /** Fade-out duration in ms at the end of this clip's audio. */
+  fadeOutMs: z.number().int().min(0).optional(),
+  /** Per-item audio gain in dB (-60 to +12). Applied multiplicatively with volume. */
+  gainDb: z.number().min(-60).max(12).optional(),
+  /**
+   * When true (on MUSIC/AUDIO items), this source is treated as a background
+   * that should be lowered when other non-ducked audio overlaps.
+   * Implemented as a constant -9 dB reduction (×0.354 linear).
+   * sidechaincompress is not used — fragile across ffmpeg-static builds.
+   */
+  duckUnderVoice: z.boolean().optional(),
 });
 export type EditItemProperties = z.infer<typeof EditItemPropertiesSchema>;
 
@@ -102,3 +116,18 @@ export const EDIT_PRESET_DIMS: Record<Exclude<EditRenderPreset, 'SOURCE'>, { wid
   '720P_16_9':  { width: 1280, height: 720 },
   '1080P_1_1':  { width: 1080, height: 1080 },
 };
+
+/**
+ * Advanced export options for Phase 3.
+ * Callers may pass either a bare EditRenderPreset string (back-compat)
+ * or an EditExportOptions object with format/quality overrides.
+ *
+ * format: 'mp4' (libx264+aac, default) | 'webm' (libvpx-vp9+libopus).
+ * quality: 'draft' (fast/high-CRF) | 'standard' (balanced, default) | 'high' (slow/low-CRF).
+ */
+export const EditExportOptionsSchema = z.object({
+  preset: EditRenderPresetSchema,
+  format: z.enum(['mp4', 'webm']).default('mp4'),
+  quality: z.enum(['draft', 'standard', 'high']).default('standard'),
+});
+export type EditExportOptions = z.infer<typeof EditExportOptionsSchema>;

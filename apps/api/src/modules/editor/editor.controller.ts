@@ -118,13 +118,21 @@ export class EditorController {
     return this.editor.mediaBin(id, user.sub);
   }
 
-  /** Enqueue an EDIT_RENDER job */
+  /** Enqueue an EDIT_RENDER job. Body: { preset, format?, quality? } */
   @Post(':id/render')
   async render(
     @Param('id') id: string,
-    @Body() body: { preset?: string },
+    @Body() body: { preset?: string; format?: 'mp4' | 'webm'; quality?: 'draft' | 'standard' | 'high' },
     @CurrentUser() user: JwtPayload,
   ) {
+    // Forward the full export options — the service validates preset/format/quality.
+    if (body.format || body.quality) {
+      return this.editor.render(id, user.sub, {
+        preset: (body.preset ?? 'SOURCE') as never,
+        format: body.format,
+        quality: body.quality,
+      });
+    }
     return this.editor.render(id, user.sub, body.preset ?? 'SOURCE');
   }
 
