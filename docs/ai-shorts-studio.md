@@ -405,27 +405,33 @@ startMs  endMs  text  emphasis  emoji  speakerColor?  templateId?
 
 ## 12. Smart Reframing
 
-**Status: 🟡 Partial** — `apps/api/src/modules/shorts-studio/smart-reframe.service.ts`
-Implemented: static center-crop keyframe strategy; interface is designed for dynamic tracking.
-Planned: face detection, active-speaker tracking (§27).
+**Status: ✅ Implemented (face + movement tracking)** — `apps/api/src/modules/shorts-studio/smart-reframe.service.ts`
 
-### Current strategy
+### Detection strategy
 
-`SmartReframeService.ensureKeyframes()` computes a single keyframe `[{ ms: 0, cx: 0.5, cy: 0.5 }]` — center crop. The keyframe is cached in `ShortClip.reframeKeyframes` (JSON) so re-renders skip re-computation.
+`SmartReframeService.ensureKeyframes(shortClipId, { sourcePath, spans })`:
+
+1. Samples the clip's source spans at 2 fps as small grayscale frames (ffmpeg → PGM).
+2. Per frame, runs face detection with the bundled pico cascade (`pico-face.ts`, a clean-room TS implementation of the MIT pico runtime; cascade asset at `apps/api/assets/facefinder`, override via `FACEFINDER_PATH`). The strongest face cluster above a confidence floor sets the crop center.
+3. When no face is found, falls back to the **movement centroid** — frame-difference mass against the previous sample (gestures, robots, screen action).
+4. When nothing is detected, holds the previous position — a still subject never snaps the crop back to center.
+5. EMA-smooths the path (`reframe-path.ts`) so the rendered pan is calm.
+
+The keyframe path is cached in `ShortClip.reframeKeyframes` (JSON) so re-renders skip re-computation. A single legacy center keyframe is upgraded to a tracked path on the next render. Detection failures degrade to center-crop — tracking must never block a render.
 
 ### Render integration
 
-`ShortsRenderService` reads `reframeKeyframes[0].cx` and applies it as the horizontal crop offset in the ffmpeg filter:
+`ShortsRenderService` builds a per-segment crop-x expression from the path (`buildCxExpr`): a constant when the subject doesn't move, otherwise a clamped piecewise-linear pan in segment-relative time:
 
 ```
-crop='min(iw,ih*W/H)':'ih':'(iw-min(iw,ih*W/H))*cx':'0',scale=W:H
+crop='min(iw,ih*W/H)':'ih':'(iw-min(iw,ih*W/H))*(cxExpr)':'0',scale=W:H
 ```
 
-For 16:9 clips, a `scale + pad` filter is used instead (no crop).
+The whole x option is single-quoted — the expression contains commas, which split the filtergraph when unquoted. For 16:9 clips, a `scale + pad` filter is used instead (no crop).
 
-### Extension path
+### Verified
 
-The `ReframeKeyframe` interface (`{ ms, cx, cy }`) matches the spec for face/speaker tracking output. Replacing `computeKeyframes()` with a detector that yields a time-varying keyframe array requires no changes to the renderer.
+Live-tested against a real 57s clip: 113 keyframes from 114 samples (12 face, 101 motion), crop center traveling 0.33 → 0.71, rendered 1080×1920 with the pan applied. Active-speaker (audio-correlated) tracking remains a future refinement (§27).
 
 ---
 

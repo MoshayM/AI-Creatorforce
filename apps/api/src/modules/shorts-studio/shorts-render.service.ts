@@ -9,6 +9,7 @@ import { runFfmpeg, runFfmpegCapture, escapeFilterPath } from '../media/adapters
 import { buildSrt } from '../media/subtitle.util';
 import { CLIP_TYPE_PRESETS } from './clip-type-presets';
 import { SmartReframeService } from './smart-reframe.service';
+import { buildCxExpr } from './reframe-path';
 import { videoSpans } from './timeline-map.util';
 import { ThumbnailGenerationService } from './thumbnail-generation.service';
 
@@ -82,8 +83,7 @@ export class ShortsRenderService {
       }
       const sourcePath = this.storage.resolve(sourceKey);
 
-      const keyframes = await this.reframe.ensureKeyframes(shortClipId);
-      const cx = keyframes[0]?.cx ?? 0.5;
+      const keyframes = await this.reframe.ensureKeyframes(shortClipId, { sourcePath, spans });
 
       await this.prisma.shortClip.update({ where: { id: shortClipId }, data: { status: 'RENDERING' } });
 
@@ -91,15 +91,19 @@ export class ShortsRenderService {
       const workDir = path.join(os.tmpdir(), `cf-render-${shortClipId}`);
       await fsp.mkdir(workDir, { recursive: true });
       const encoder = await this.pickEncoder();
-      onLog?.(`Rendering ${spans.length} segment(s) at ${out.width}×${out.height} (${encoder})…`);
-
-      const crop = preset.aspect === '16:9'
-        ? `scale=${out.width}:${out.height}:force_original_aspect_ratio=decrease,pad=${out.width}:${out.height}:(ow-iw)/2:(oh-ih)/2`
-        : `crop='min(iw,ih*${out.width}/${out.height})':'ih':'(iw-min(iw,ih*${out.width}/${out.height}))*${cx.toFixed(3)}':'0',scale=${out.width}:${out.height}`;
+      onLog?.(`Rendering ${spans.length} segment(s) at ${out.width}×${out.height} (${encoder}, ${keyframes.length} reframe keyframe(s))…`);
 
       const segmentPaths: string[] = [];
       for (let i = 0; i < spans.length; i++) {
         const span = spans[i]!;
+        // Crop x follows the face/motion path: buildCxExpr returns a constant
+        // when the subject doesn't move, or a piecewise-linear pan in
+        // segment-relative t. The whole x option stays single-quoted — the
+        // expression contains commas, which split the filtergraph unquoted.
+        const cxExpr = buildCxExpr(keyframes, span.timelineStartMs, span.timelineEndMs);
+        const crop = preset.aspect === '16:9'
+          ? `scale=${out.width}:${out.height}:force_original_aspect_ratio=decrease,pad=${out.width}:${out.height}:(ow-iw)/2:(oh-ih)/2`
+          : `crop='min(iw,ih*${out.width}/${out.height})':'ih':'(iw-min(iw,ih*${out.width}/${out.height}))*(${cxExpr})':'0',scale=${out.width}:${out.height}`;
         const segPath = path.join(workDir, `seg-${i}.mp4`);
         segmentPaths.push(segPath);
         if (await fsp.stat(segPath).then((s) => s.size > 0).catch(() => false)) {
