@@ -44,7 +44,7 @@ This document defines the compliance gate: what is checked, how pass/fail is det
 
 - **`check()`** — calls `callAIStructured` with `ComplianceResultSchema`. The AI response is validated against the Zod schema before any field is read. Returns a `ComplianceResult` with `score`, `passed`, and `flags[]`.
 - **`enforce()`** — wraps `check()` with `mustPassCompliance()`. Throws `BadRequestException` if `passed` is `false`. This is the method that all publishing paths must call.
-- **Content cache** — SHA-256 hash of normalized content (lowercased, trimmed title + script + description + tags). Cache TTL is 24 hours (configurable via `COMPLIANCE_CACHE_TTL_MS` env var). Maximum 500 entries with LRU eviction. Cache is explicitly invalidated when a script is edited via `invalidate()`.
+- **Content cache** — SHA-256 hash of normalized content (lowercased, trimmed title + script + description + tags). Two layers: a Redis shared cache (so multi-instance deployments never pay for the same audit twice; entries are Zod-validated on read — a corrupted entry is a miss, never a verdict) and an in-memory fallback (max 500 entries with LRU eviction, sole layer when Redis is down). Cache TTL is 24 hours (configurable via `COMPLIANCE_CACHE_TTL_MS` env var). Both layers are invalidated when a script is edited via `invalidate()`. The cache is a cost optimization only — `mustPassCompliance()` re-runs on every `enforce()` regardless of which layer served the result.
 - **Result persistence** — `ComplianceResult` is stored in the database, linked to `AgentJob` via the unique `jobId` field. This provides a durable audit record for every compliance decision.
 
 ---

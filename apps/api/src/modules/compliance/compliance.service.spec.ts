@@ -201,6 +201,93 @@ describe('ComplianceService', () => {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
+  // Redis shared cache layer (readiness item 14) — cost optimization only;
+  // the gate re-runs on every enforce() regardless of which layer served it
+  // ──────────────────────────────────────────────────────────────────────────
+  describe('Redis shared cache layer', () => {
+    const redisMock = {
+      get: jest.fn(),
+      set: jest.fn().mockResolvedValue('OK'),
+      del: jest.fn().mockResolvedValue(1),
+      quit: jest.fn().mockResolvedValue(undefined),
+    };
+
+    function withRedis(): ComplianceService {
+      const s = new ComplianceService();
+      (s as unknown as { redis: typeof redisMock; redisAvailable: boolean }).redis = redisMock;
+      (s as unknown as { redisAvailable: boolean }).redisAvailable = true;
+      return s;
+    }
+
+    beforeEach(() => {
+      redisMock.get.mockReset();
+      redisMock.set.mockClear();
+      redisMock.del.mockClear();
+    });
+
+    it('serves a shared hit without calling the AI provider', async () => {
+      const cached = makeResult({ score: 91 });
+      redisMock.get.mockResolvedValue(JSON.stringify(cached));
+
+      const out = await withRedis().check(CONTENT);
+
+      expect(out.score).toBe(91);
+      expect(mockCallAI).not.toHaveBeenCalled();
+    });
+
+    it('treats a corrupted or schema-drifted Redis entry as a miss — never as a verdict', async () => {
+      redisMock.get.mockResolvedValue('{"passed":true}'); // missing required fields
+      const fresh = makeResult({ score: 75 });
+      mockCallAI.mockResolvedValue(fresh);
+
+      const out = await withRedis().check(CONTENT);
+
+      expect(mockCallAI).toHaveBeenCalledTimes(1);
+      expect(out.score).toBe(75);
+    });
+
+    it('writes the fresh verdict to Redis with a TTL after an AI call', async () => {
+      redisMock.get.mockResolvedValue(null);
+      mockCallAI.mockResolvedValue(makeResult());
+
+      await withRedis().check(CONTENT);
+
+      expect(redisMock.set).toHaveBeenCalledWith(
+        expect.stringMatching(/^compliance:result:/),
+        expect.any(String),
+        'PX',
+        expect.any(Number),
+      );
+    });
+
+    it('falls back to the AI call when Redis errors — no crash, no bypass', async () => {
+      redisMock.get.mockRejectedValue(new Error('connection refused'));
+      mockCallAI.mockResolvedValue(makeResult());
+
+      await expect(withRedis().check(CONTENT)).resolves.toMatchObject({ passed: true });
+      expect(mockCallAI).toHaveBeenCalledTimes(1);
+    });
+
+    it('invalidate() clears both layers', async () => {
+      const s = withRedis();
+      redisMock.get.mockResolvedValue(null);
+      mockCallAI.mockResolvedValue(makeResult());
+      await s.check(CONTENT); // populate
+
+      await expect(s.invalidate(CONTENT)).resolves.toBe(true);
+      expect(redisMock.del).toHaveBeenCalledWith(expect.stringMatching(/^compliance:result:/));
+      expect(s.cacheStats().size).toBe(0);
+    });
+
+    it('a cached failing verdict still fails enforce() — cache cannot soften the gate', async () => {
+      redisMock.get.mockResolvedValue(JSON.stringify(makeResult({ passed: false, score: 20 })));
+
+      await expect(withRedis().enforce(CONTENT)).rejects.toThrow(BadRequestException);
+      expect(mockCallAI).not.toHaveBeenCalled();
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
   // mustPassCompliance() — pure gate function from @cf/shared
   // ──────────────────────────────────────────────────────────────────────────
   describe('mustPassCompliance() (shared gate function)', () => {
