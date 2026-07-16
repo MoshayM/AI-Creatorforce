@@ -564,10 +564,23 @@ export class SupervisorWorker extends WorkerHost {
         const scheduledAt = payload['scheduledAt'] ? new Date(payload['scheduledAt'] as string) : undefined;
         const videoFilePath = payload['videoFilePath'] as string | undefined;
 
+        // YouTube AI-disclosure policy (support.google.com/youtube/answer/14328491):
+        // FULL_PRODUCTION narrates with TTS and generates visuals/music, so the
+        // "Altered or synthetic content" label is required whenever the project
+        // carries generated media. Payload may override explicitly.
+        const generatedAssets = await this.prisma.asset.count({
+          where: { projectId, deletedAt: null, kind: { in: ['VOICE', 'IMAGE', 'MUSIC'] } },
+        });
+        const containsSyntheticMedia =
+          (payload['containsSyntheticMedia'] as boolean | undefined) ?? generatedAssets > 0;
+        if (containsSyntheticMedia) {
+          this.log(jobId, projectId, 'AI disclosure enabled', 'Upload carries the "Altered or synthetic content" label per YouTube policy');
+        }
+
         this.log(jobId, projectId, 'Publishing to YouTube…', `"${title?.slice(0, 60)}"`);
         const t0 = Date.now();
         const youtubeVideoId = await this.publishing.publish(
-          { videoId, channelId, title, description, tags, categoryId, scheduledAt, videoFilePath },
+          { videoId, channelId, title, description, tags, categoryId, scheduledAt, videoFilePath, containsSyntheticMedia },
           approvalId,
         );
         this.log(jobId, projectId, 'Published to YouTube ✓', `Video ID: ${youtubeVideoId}`);

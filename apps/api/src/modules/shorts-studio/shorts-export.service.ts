@@ -271,6 +271,23 @@ export class ShortsExportService {
       ? await this.resolveOriginalAudioLanguage(importedVideoId, clip.project.channelId, onLog)
       : null;
 
+    // YouTube AI-disclosure policy (support.google.com/youtube/answer/14328491):
+    // a Short cut from real footage with burned captions is a "minor edit" and
+    // needs no label, but AI voiceover, generated music, or generated imagery
+    // on the timeline is realistic synthetic media and must be disclosed.
+    const syntheticItems = clip.timeline
+      ? await this.prisma.shortsTimelineItem.count({
+          where: {
+            track: { timelineId: clip.timeline.id },
+            sourceAsset: { kind: { in: ['VOICE', 'SHORTS_VOICE', 'MUSIC', 'SHORTS_MUSIC', 'IMAGE'] } },
+          },
+        })
+      : 0;
+    const containsSyntheticMedia = syntheticItems > 0;
+    if (containsSyntheticMedia) {
+      onLog?.('AI disclosure: timeline uses generated voice/music/imagery — setting the "Altered or synthetic content" label');
+    }
+
     onLog?.('Uploading to YouTube…');
     const youtubeVideoId = await this.publishing.publish({
       videoId: video.id,
@@ -280,6 +297,7 @@ export class ShortsExportService {
       tags: metadata.tags,
       videoFilePath: this.storage.resolve(exportKey),
       ...(originalAudioLanguage ? { defaultAudioLanguage: originalAudioLanguage } : {}),
+      containsSyntheticMedia,
     }, approvalId);
 
     await this.prisma.shortsExportHistory.update({
