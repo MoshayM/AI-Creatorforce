@@ -21,22 +21,22 @@ describe('roleHasPermission', () => {
 
 describe('resolveElevatedRole', () => {
   const env = {
-    superAdmins: 'moshaymuthukumar@gmail.com, ethonanpasumvalki@gmail.com',
-    owners: 'mosaym1996@gmail.com,moshay1996@gmail.com',
+    superAdmins: 'admin1@test.example, admin2@test.example',
+    owners: 'owner1@test.example,owner2@test.example',
   };
 
   it('resolves super admins from the env list', () => {
-    expect(resolveElevatedRole('moshaymuthukumar@gmail.com', env)).toBe('SUPER_ADMIN');
-    expect(resolveElevatedRole('ethonanpasumvalki@gmail.com', env)).toBe('SUPER_ADMIN');
+    expect(resolveElevatedRole('admin1@test.example', env)).toBe('SUPER_ADMIN');
+    expect(resolveElevatedRole('admin2@test.example', env)).toBe('SUPER_ADMIN');
   });
 
   it('resolves owners from the env list', () => {
-    expect(resolveElevatedRole('mosaym1996@gmail.com', env)).toBe('OWNER');
-    expect(resolveElevatedRole('moshay1996@gmail.com', env)).toBe('OWNER');
+    expect(resolveElevatedRole('owner1@test.example', env)).toBe('OWNER');
+    expect(resolveElevatedRole('owner2@test.example', env)).toBe('OWNER');
   });
 
   it('is case-insensitive and whitespace-tolerant', () => {
-    expect(resolveElevatedRole('  MoshayMuthukumar@Gmail.com ', env)).toBe('SUPER_ADMIN');
+    expect(resolveElevatedRole('  Admin1@Test.Example ', env)).toBe('SUPER_ADMIN');
   });
 
   it('super-admin list wins when an email is in both lists', () => {

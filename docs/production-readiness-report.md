@@ -160,4 +160,22 @@ The following were explicitly not run and are not reflected in the score:
 
 ---
 
-*Report produced by static file analysis + CI configuration audit on 2026-07-15. Gates marked BLOCKED require shell execution that was denied in this session; they should be re-run via CI or a developer terminal.*
+## Remediation Addendum — 2026-07-16
+
+Status of the checklist above after the follow-up remediation session (shell execution available):
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| 1. Stale e2e specs | **DONE** (commit 50a4cdd, 2026-07-15) | `navigation.spec.ts` rewritten for Settings sub-link nesting; `visual.spec.ts` snapshots marked `test.fixme` pending baseline regen. |
+| 2. Global auth rate limiting | **DONE** (commit 50a4cdd) | Redis-backed `RateLimitGuard` registered as global guard; login 10/60s, register 5/60s, refresh 30/60s. Verified live with 429s. |
+| 3. Redis-backed dev-API rate limiter | **DONE** (this session) | `developer-key.guard.ts` in-memory Map replaced with an atomic Lua sliding window on a Redis sorted set, keyed per `keyId` with per-key `rateLimitPerMin`. Fails open on Redis outage. Unit tests added (admit / reject / fail-open). |
+| 4. Confirm executable gates | **DONE** (this session) | `@cf/shared` build ✅, API `tsc --noEmit` ✅, API lint ✅ (0 errors, 1 pre-existing warning), 49/49 suites, 616/616 unit tests ✅, web `tsc --noEmit` ✅, web production build ✅. |
+| 5. Prod `JWT_SECRET` validation | **DONE** (commit 50a4cdd) | `main.ts` fails fast in production on unset/weak/dev-default `JWT_SECRET` or short `TOKEN_ENCRYPTION_KEY`. |
+| 6. PII in `rbac.spec.ts` | **DONE** (this session) | Gmail addresses replaced with synthetic `@test.example` fixtures. |
+| 9. Dependency audit | **DONE** (this session) | `pnpm audit --audit-level=high` ran: 9 high findings (multer, glob CLI, rollup, picomatch, lodash, tmp — all transitive) remediated via `overrides` in `pnpm-workspace.yaml`. Post-fix: **0 high/critical** (2 low + 11 moderate remain, below the CI gate). Gates re-run green on the updated lockfile. |
+
+Still open from the checklist: 7 (channel OAuth reconnect — user communication task), 8 (Gemini quota-exhausted fallback test), 10 (manual ZAP scan against production URL), and nice-to-haves 11–15.
+
+---
+
+*Report produced by static file analysis + CI configuration audit on 2026-07-15. Gates marked BLOCKED require shell execution that was denied in this session; they should be re-run via CI or a developer terminal. See the Remediation Addendum above for post-report fixes.*

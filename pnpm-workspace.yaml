@@ -2,6 +2,15 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'packages/config/*'
+# Security floors for transitive deps flagged by `pnpm audit --audit-level=high`
+# (2026-07-16). All are patch/minor bumps within the resolved major.
+overrides:
+  multer: '>=2.2.0'
+  'glob@>=10.2.0 <10.5.0': '>=10.5.0'
+  'rollup@>=3.0.0 <3.30.0': '>=3.30.0'
+  'picomatch@>=4.0.0 <4.0.4': '>=4.0.4'
+  'lodash@>=4.0.0 <4.17.24': '>=4.17.24'
+  'tmp@<0.2.6': '>=0.2.6'
 allowBuilds:
   '@nestjs/core': true
   '@prisma/client': true

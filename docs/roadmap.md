@@ -85,7 +85,7 @@ Shipped so far:
 
 - **Per-channel Automation** (`ChannelAutomation` model, 15-min `AUTOMATION_TICK` BullMQ repeatable heartbeat). Auto-import / auto-analyze / auto-publish (paced, APPROVED-only) / chapter-sync per channel, each with daily quotas. AI-suggested settings with heuristic fallback. Automation UI under Settings sidebar group.
 - **Standalone Video Editor** (`EditProject` model, `EDIT_RENDER` job type, multi-track timeline, Phase 1–3 render — filters, transitions, audio mixing, multi-format/quality export). Video Editor is a top-level sidebar item.
-- **Security hardening:** production startup guard for `JWT_SECRET`/`TOKEN_ENCRYPTION_KEY`; Redis-backed auth rate limiting on login/register/refresh.
+- **Security hardening:** production startup guard for `JWT_SECRET`/`TOKEN_ENCRYPTION_KEY`; Redis-backed auth rate limiting on login/register/refresh; Redis-backed sliding-window rate limiting per developer API key (multi-instance safe); dependency security floors via pnpm overrides (0 high/critical audit findings).
 - **Public landing page** at `/` (feature grid, download CTAs, Use-in-browser CTA).
 - **CI overhaul:** Node 24, pnpm from `packageManager`, `prisma generate` in typecheck/unit/build jobs, production-build E2E, `TOKEN_ENCRYPTION_KEY` in E2E env, ZAP baseline CI job.
 - **Reliability:** chapter sync surfaces real YouTube errors (`invalid_grant` → reconnect); embedding generation non-fatal; AV1 sources re-acquired as H.264; typed media pipeline errors with friendly Shorts error cards.
