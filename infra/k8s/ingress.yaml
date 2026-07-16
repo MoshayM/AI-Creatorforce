@@ -1,0 +1,38 @@
+# nginx-ingress + cert-manager. Socket.io needs sticky upstreams and long
+# timeouts; the API path covers both REST (/api) and websockets (/socket.io).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: creatorforce
+  namespace: creatorforce
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: 512m # video uploads
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/affinity: cookie # socket.io session stickiness
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [aicreatorforce.net]
+      secretName: creatorforce-tls
+  rules:
+    - host: aicreatorforce.net
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: api, port: { number: 4007 } }
+          - path: /socket.io
+            pathType: Prefix
+            backend:
+              service: { name: api, port: { number: 4007 } }
+          - path: /health
+            pathType: Exact
+            backend:
+              service: { name: api, port: { number: 4007 } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: web, port: { number: 3007 } }

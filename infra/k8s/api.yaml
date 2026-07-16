@@ -1,0 +1,93 @@
+# API + in-process BullMQ workers. Safe at replicas > 1: auth and dev-API rate
+# limits are Redis-backed, the compliance cache has a Redis shared layer, and
+# BullMQ distributes jobs across pods. The one shared-state requirement is the
+# media volume: renders/assets are files, so /data/storage must be
+# ReadWriteMany until Cloudflare R2 wiring lands (roadmap Phase 4).
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: creatorforce
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 4007
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: creatorforce
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      initContainers:
+        # Schema is migrated exactly once per rollout, before pods serve.
+        - name: migrate
+          image: creatorforce/api:latest
+          command: ["npx", "prisma", "migrate", "deploy"]
+          envFrom:
+            - configMapRef: { name: cf-config }
+            - secretRef: { name: cf-secrets }
+      containers:
+        - name: api
+          image: creatorforce/api:latest
+          ports:
+            - containerPort: 4007
+          envFrom:
+            - configMapRef: { name: cf-config }
+            - secretRef: { name: cf-secrets }
+          env:
+            - name: NODE_ENV
+              value: production
+          livenessProbe:
+            httpGet: { path: /health, port: 4007 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            # /ready checks DB + Redis reachability
+            httpGet: { path: /ready, port: 4007 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            # ffmpeg renders are the hungry part; requests sized for steady
+            # API traffic, limits leave headroom for a render pass.
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: "4", memory: 4Gi }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false # ffmpeg/yt-dlp write temp files
+          volumeMounts:
+            - name: media
+              mountPath: /data/storage
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: media
+          persistentVolumeClaim:
+            claimName: cf-media
+        - name: tmp
+          emptyDir:
+            sizeLimit: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cf-media
+  namespace: creatorforce
+spec:
+  # RWX so every API pod sees the same renders/assets (see header note).
+  # Requires an RWX-capable StorageClass (EFS, Filestore, Azure Files, NFS).
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 100Gi

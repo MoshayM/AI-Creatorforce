@@ -233,3 +233,5 @@ in the release notes.
 - n8n workflow runtime deployment
 - Blue/green or rolling deploy strategy
 - Infrastructure-as-code (IaC) for cloud resources beyond monitoring stack
+
+For container/Kubernetes deployment (Dockerfiles, manifests, HPA, ingress) see [deployment-kubernetes.md](deployment-kubernetes.md).

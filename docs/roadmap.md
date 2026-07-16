@@ -93,7 +93,7 @@ Shipped so far:
 Still needed:
 - n8n workflow runtime deployment.
 - Multi-region deployment.
-- Horizontal BullMQ worker scaling.
+- ~~Horizontal BullMQ worker scaling~~ — DONE: Kubernetes architecture at `infra/k8s/` (API ×2→8 with HPA, Redis-shared rate limits/cache, BullMQ across pods).
 - Rate limiting and quota management per subscription tier (beyond auth endpoints).
 - Staging environment.
 - Production infrastructure-as-code.

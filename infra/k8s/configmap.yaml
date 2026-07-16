@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cf-config
+  namespace: creatorforce
+data:
+  API_PORT: "4007"
+  WEB_URL: "https://aicreatorforce.net"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  MEDIA_STORAGE_DIR: "/data/storage"
+  # Placeholder media must stay off in production (readiness report L-04)
+  ALLOW_OFFLINE_MEDIA: "false"
+  BILLING_ENFORCE_CREDITS: "true"
+  # Multi-pod safety relies on the Redis-backed rate limiters and the Redis
+  # compliance cache — both ship in the API image; nothing to configure here.

@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: creatorforce
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  # secret.yaml is gitignored — copy secret.example.yaml and fill it in,
+  # or manage cf-secrets via SealedSecrets/ExternalSecrets instead.
+  - postgres.yaml
+  - redis.yaml
+  - api.yaml
+  - web.yaml
+  - ingress.yaml
+  - hpa.yaml

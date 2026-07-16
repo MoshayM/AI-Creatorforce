@@ -1,0 +1,66 @@
+# In-cluster Postgres for staging / self-hosted. For production prefer a
+# managed Postgres (RDS/Cloud SQL/Neon) and delete this file — then point
+# DATABASE_URL in cf-secrets at the managed instance.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: creatorforce
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: creatorforce
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: cf
+            - name: POSTGRES_DB
+              value: creatorforce
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cf-secrets
+                  key: POSTGRES_PASSWORD
+                  optional: true
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "cf"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "2", memory: 2Gi }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi

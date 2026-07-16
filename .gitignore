@@ -34,3 +34,4 @@ yt-dlp/
 .zap/zap-baseline-web.*
 .zap/zap-summary.json
 .vercel
+infra/k8s/secret.yaml
