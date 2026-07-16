@@ -701,6 +701,11 @@ describe('EditorService', () => {
       expect(fcStr).toContain('Hello World');
       // fade-in anim: alpha expression should be present
       expect(fcStr).toContain('alpha=');
+      // x/y must be single-quoted: animated expressions (slide-up) contain
+      // commas that split the filtergraph when unquoted (regression: renders
+      // with textAnim slide-up failed with FFMPEG_EXECUTION_FAILED).
+      expect(fcStr).toMatch(/x='[^']*'/);
+      expect(fcStr).toMatch(/y='[^']*'/);
 
       progressSpy.mockRestore();
       jest.restoreAllMocks();

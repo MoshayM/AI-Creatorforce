@@ -31,7 +31,7 @@ import {
   parseMediaProbe,
   escapeFilterPath,
 } from '../media/adapters/ffmpeg.util';
-import { FFmpegExecutionError } from '../media/media.errors';
+import { FFmpegExecutionError, MediaPipelineError } from '../media/media.errors';
 
 // ── Phase 2 render helpers ────────────────────────────────────────────────────
 
@@ -179,8 +179,10 @@ function buildDrawtextFilter(
     `text='${escapedText}'`,
     `fontcolor=${color}`,
     `fontsize=${fs}`,
-    `x=${xExpr}`,
-    `y=${yExpr}`,
+    // x/y must be quoted like alpha/enable: animated expressions (slide-up)
+    // contain commas, which split the filtergraph when unquoted.
+    `x='${xExpr}'`,
+    `y='${yExpr}'`,
     `alpha='${alphaExpr}'`,
     `enable='${enable}'`,
     'borderw=2',
@@ -1404,6 +1406,9 @@ export class EditorService {
 
       await fsp.rm(workDir, { recursive: true, force: true }).catch(() => undefined);
 
+      // Already-typed media errors carry the ffmpeg command + stderrTail —
+      // rethrow as-is so diagnostics survive to AgentJob.errorDetails.
+      if (err instanceof MediaPipelineError) throw err;
       // Re-wrap as typed error if it's a plain ffmpeg error
       if (err instanceof Error && !err.message.includes('EditProject') && !err.message.includes('No video')) {
         throw new FFmpegExecutionError(err.message, { editProjectId, preset, format: exportFormat });
