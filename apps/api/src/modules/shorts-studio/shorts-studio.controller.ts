@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
 import { IsString, IsArray, IsIn, IsOptional, MaxLength } from 'class-validator';
 import type { ClipType } from '@prisma/client';
 import { ApplyCommandsSchema, AssistCapabilitySchema } from '@cf/shared';
@@ -105,6 +105,11 @@ export class ShortsStudioController {
   async listImportedByChannel(@Param('channelId') channelId: string, @CurrentUser() user: JwtPayload) {
     await this.shorts.assertChannelOwnership(channelId, user.sub);
     return this.shorts.listImportedVideosByChannel(channelId);
+  }
+
+  @Delete('videos/:importedVideoId')
+  async deleteImported(@Param('importedVideoId') importedVideoId: string, @CurrentUser() user: JwtPayload) {
+    return this.shorts.deleteImportedVideo(importedVideoId, user.sub);
   }
 
   @Patch('videos/:importedVideoId/notes')

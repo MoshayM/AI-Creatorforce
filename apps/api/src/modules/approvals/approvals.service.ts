@@ -119,11 +119,54 @@ export class ApprovalsService {
   }
 
   async reject(approvalId: string, userId: string, notes?: string) {
-    await this.getOwnedApproval(approvalId, userId);
-    return this.prisma.approval.update({
+    const approval = await this.getOwnedApproval(approvalId, userId);
+    const updated = await this.prisma.approval.update({
       where: { id: approvalId },
       data: { status: 'REJECTED', reviewedBy: userId, reviewedAt: new Date(), notes },
     });
+
+    // Shorts publish approvals: reflect the verdict on the clip itself so the
+    // Clips list stops showing PENDING_APPROVAL. Non-fatal — the approval row
+    // is the source of truth for the review either way.
+    try {
+      const clipId = await this.shortsClipIdForJob(approval.jobId);
+      if (clipId) {
+        await this.prisma.shortClip.update({ where: { id: clipId }, data: { status: 'REJECTED' } });
+      }
+    } catch (err) {
+      this.logger.warn(`Could not mark clip REJECTED after approval rejection: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    return updated;
+  }
+
+  /**
+   * Reviewer verdict "needs work": close the approval and put the clip back
+   * into editing so the user can adjust it and re-request publishing later.
+   */
+  async moveToEditing(approvalId: string, userId: string, notes?: string) {
+    const approval = await this.getOwnedApproval(approvalId, userId);
+    const clipId = await this.shortsClipIdForJob(approval.jobId);
+    if (!clipId) throw new BadRequestException('Only Shorts publish approvals can be moved to editing');
+
+    await this.prisma.$transaction([
+      this.prisma.approval.update({
+        where: { id: approvalId },
+        data: { status: 'REJECTED', reviewedBy: userId, reviewedAt: new Date(), notes: notes?.trim() || 'Moved back to editing' },
+      }),
+      this.prisma.shortClip.update({ where: { id: clipId }, data: { status: 'IN_EDITING' } }),
+    ]);
+    return { shortClipId: clipId, status: 'IN_EDITING' };
+  }
+
+  /** shortClipId from a SHORTS_EXPORT job's result, or null for other job types. */
+  private async shortsClipIdForJob(jobId: string): Promise<string | null> {
+    const job = await this.prisma.agentJob.findUnique({
+      where: { id: jobId },
+      select: { type: true, result: true },
+    });
+    const result = job?.result as { shortClipId?: string } | null;
+    return job?.type === 'SHORTS_EXPORT' && result?.shortClipId ? result.shortClipId : null;
   }
 
   private async getOwnedApproval(approvalId: string, userId: string) {

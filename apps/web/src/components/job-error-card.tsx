@@ -11,6 +11,7 @@ export type JobErrorCode =
   | 'TRANSCRIPTION_FAILED'
   | 'SCENE_DETECTION_FAILED'
   | 'STORAGE_FAILED'
+  | 'CHAPTER_SYNC_FAILED'
   | 'JOB_FAILED';
 
 interface ErrorCopy {
@@ -59,6 +60,11 @@ const CODE_COPY: Record<JobErrorCode, ErrorCopy> = {
     title: 'Storing the video failed',
     desc: 'The processed video could not be saved.',
     fix: 'Check disk space, then retry.',
+  },
+  CHAPTER_SYNC_FAILED: {
+    title: 'Chapter sync failed',
+    desc: null, // use the server's sentence — it names the actual YouTube reason
+    fix: 'If the channel is read-only, connect it with YouTube access (Channels page) and retry. Only channels you own can be synced.',
   },
   JOB_FAILED: {
     title: 'Video processing failed',

@@ -246,11 +246,18 @@ function ExportDialog({ editId, onClose }: { editId: string; onClose: () => void
 
 // ── AI Edit Dialog ────────────────────────────────────────────────────────────
 
-function AiEditDialog({ editId, timeline, onClose }: { editId: string; timeline: EditTimeline | null; onClose: () => void }) {
-  const [instruction, setInstruction] = useState('');
+/** Canned instruction used when the dialog opens in auto-suggest mode. */
+const AUTO_EDIT_INSTRUCTION =
+  'Analyze this video edit and suggest an automatic edit plan: silent sections to trim, ' +
+  'filler words to cut, pacing improvements, and any title/text overlays or transitions ' +
+  'that would improve it. List each suggested edit with timestamps so I can apply them.';
+
+function AiEditDialog({ editId, timeline, autoSuggest = false, onClose }: { editId: string; timeline: EditTimeline | null; autoSuggest?: boolean; onClose: () => void }) {
+  const [instruction, setInstruction] = useState(autoSuggest ? AUTO_EDIT_INSTRUCTION : '');
   const [busy, setBusy] = useState(false);
   const [reply, setReply] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const autoRan = useRef(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -258,8 +265,9 @@ function AiEditDialog({ editId, timeline, onClose }: { editId: string; timeline:
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const submit = async () => {
-    if (!instruction.trim() || busy) return;
+  const submit = async (text?: string) => {
+    const prompt = (text ?? instruction).trim();
+    if (!prompt || busy) return;
     setBusy(true);
     setReply(null);
     setError(null);
@@ -274,7 +282,7 @@ function AiEditDialog({ editId, timeline, onClose }: { editId: string; timeline:
         messages: [
           {
             role: 'user',
-            content: `[Video Editor context — editId: ${editId}, tracks: ${timeline?.tracks.length ?? 0}, duration: ${timeline ? fmtMs(timeline.durationMs) : 'unknown'}]\n\n${instruction}`,
+            content: `[Video Editor context — editId: ${editId}, tracks: ${timeline?.tracks.length ?? 0}, duration: ${timeline ? fmtMs(timeline.durationMs) : 'unknown'}]\n\n${prompt}`,
           },
         ],
         inputMode: 'text',
@@ -287,6 +295,14 @@ function AiEditDialog({ editId, timeline, onClose }: { editId: string; timeline:
       setBusy(false);
     }
   };
+
+  // Auto-suggest: fire the canned request once when opened from "Video Edit"
+  // on an imported video, as soon as the timeline context has loaded.
+  useEffect(() => {
+    if (!autoSuggest || autoRan.current || !timeline) return;
+    autoRan.current = true;
+    void submit(AUTO_EDIT_INSTRUCTION);
+  }, [autoSuggest, timeline]);
 
   return (
     <div
@@ -1174,9 +1190,20 @@ export default function EditorWorkspacePage() {
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [showExport, setShowExport] = useState(false);
   const [showAiEdit, setShowAiEdit] = useState(false);
+  const [aiAutoSuggest, setAiAutoSuggest] = useState(false);
   // Mobile panel visibility
   const [mobileBinOpen, setMobileBinOpen] = useState(false);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+
+  // Arriving from "Video Edit" on an imported video (?autoEdit=1): open the
+  // AI dialog immediately so the assistant proposes an auto-edit plan.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('autoEdit') === '1') {
+      setAiAutoSuggest(true);
+      setShowAiEdit(true);
+    }
+  }, []);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -1618,7 +1645,7 @@ export default function EditorWorkspacePage() {
 
       {/* Dialogs */}
       {showExport && <ExportDialog editId={editId} onClose={() => setShowExport(false)} />}
-      {showAiEdit && <AiEditDialog editId={editId} timeline={timeline} onClose={() => setShowAiEdit(false)} />}
+      {showAiEdit && <AiEditDialog editId={editId} timeline={timeline} autoSuggest={aiAutoSuggest} onClose={() => { setShowAiEdit(false); setAiAutoSuggest(false); }} />}
     </div>
   );
 }

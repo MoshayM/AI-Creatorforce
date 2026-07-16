@@ -61,6 +61,17 @@ export class ShortsStudioService {
     });
   }
 
+  /**
+   * Remove a video from Shorts Studio. Transcript segments, scenes, topics,
+   * chapters and social content cascade at the DB level; the library entry
+   * and any downloaded source asset are left untouched.
+   */
+  async deleteImportedVideo(importedVideoId: string, userId: string) {
+    await this.assertVideoOwnership(importedVideoId, userId);
+    await this.prisma.importedVideo.delete({ where: { id: importedVideoId } });
+    return { deleted: true, importedVideoId };
+  }
+
   /** Channel-first view: every import across the channel's projects. */
   async listImportedVideosByChannel(channelId: string) {
     return this.prisma.importedVideo.findMany({

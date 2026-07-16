@@ -499,6 +499,7 @@ export const api = {
       apiClient.get(`/approvals/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
     approve: (id: string, notes?: string) => apiClient.post(`/approvals/${id}/approve`, { notes }),
     reject: (id: string, notes?: string) => apiClient.post(`/approvals/${id}/reject`, { notes }),
+    moveToEditing: (id: string, notes?: string) => apiClient.post(`/approvals/${id}/move-to-editing`, { notes }),
   },
   trends: {
     analyze: (niche: string) => apiClient.post('/trends/analyze', { niche }),
@@ -581,6 +582,8 @@ export const api = {
       apiClient.post('/shorts-studio/videos/import', { channelId, youtubeVideoId }),
     listImported: (channelId: string) =>
       apiClient.get(`/shorts-studio/channels/${channelId}/imported`),
+    deleteImported: (importedVideoId: string) =>
+      apiClient.delete(`/shorts-studio/videos/${importedVideoId}`),
     updateNotes: (importedVideoId: string, notes: string) =>
       apiClient.patch(`/shorts-studio/videos/${importedVideoId}/notes`, { notes }),
     analyze: (importedVideoId: string) =>

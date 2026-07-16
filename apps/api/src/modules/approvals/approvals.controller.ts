@@ -43,4 +43,9 @@ export class ApprovalsController {
   reject(@Param('id') id: string, @Body() dto: ReviewDto, @CurrentUser() user: JwtPayload) {
     return this.svc.reject(id, user.sub, dto.notes);
   }
+
+  @Post(':id/move-to-editing')
+  moveToEditing(@Param('id') id: string, @Body() dto: ReviewDto, @CurrentUser() user: JwtPayload) {
+    return this.svc.moveToEditing(id, user.sub, dto.notes);
+  }
 }

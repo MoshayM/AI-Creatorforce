@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clapperboard, Loader2, Download, Wand2, CheckCircle2, XCircle, Clock, Film, Captions, Sparkles, ChevronDown, ChevronRight, Search, X, FolderDown, ListVideo, StickyNote } from 'lucide-react';
+import { Clapperboard, Loader2, Download, Wand2, CheckCircle2, XCircle, Clock, Film, Captions, Sparkles, ChevronDown, ChevronRight, Search, X, FolderDown, ListVideo, Trash2 } from 'lucide-react';
 import { api, type LibraryVideo, type LibraryPlaylist, type LibraryVideosPage, type LibraryPlaylistsPage, type LibraryPlaylistItemsPage } from '@/lib/api';
 import { JobErrorCard } from '@/components/job-error-card';
 
@@ -17,7 +17,8 @@ function SendToEditorButton({ importedVideoId }: { importedVideoId: string }) {
   const create = useMutation({
     // projectId is resolved server-side from the imported video.
     mutationFn: () => api.editor.createFromImported(importedVideoId).then((r) => r.data),
-    onSuccess: (data) => router.push(`/editor/${data.id}`),
+    // autoEdit=1 makes the editor immediately ask the AI for auto-edit suggestions.
+    onSuccess: (data) => router.push(`/editor/${data.id}?autoEdit=1`),
   });
   return (
     <button
@@ -160,66 +161,30 @@ function AnalysisProgress({ importedVideoId, onRetry }: { importedVideoId: strin
   );
 }
 
-/** Owner-only free-form notes on an imported video (view / edit / save). */
-function NotesEditor({ video, channelId }: { video: ImportedVideo; channelId: string }) {
+/** Removes the video (and all its analysis data) from Shorts Studio. */
+function DeleteFromImportedButton({ video, channelId }: { video: ImportedVideo; channelId: string }) {
   const qc = useQueryClient();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
-  const save = useMutation({
-    mutationFn: (notes: string) => api.shortsStudio.updateNotes(video.id, notes),
+  const del = useMutation({
+    mutationFn: () => api.shortsStudio.deleteImported(video.id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['shorts-imported', channelId] });
-      setEditing(false);
     },
   });
-
-  if (!editing) {
-    return (
-      <div className="mt-3">
-        {video.notes && (
-          <div className="text-xs text-gray-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5 whitespace-pre-line">
-            <span className="flex items-center gap-1 font-medium text-amber-700 mb-1">
-              <StickyNote className="w-3 h-3" /> Notes
-            </span>
-            {video.notes}
-          </div>
-        )}
-        <button
-          onClick={(e) => { e.stopPropagation(); setDraft(video.notes ?? ''); setEditing(true); }}
-          className="mt-1.5 text-xs text-brand-600 hover:underline flex items-center gap-1"
-        >
-          <StickyNote className="w-3 h-3" /> {video.notes ? 'Edit notes' : 'Add notes'}
-        </button>
-      </div>
-    );
-  }
   return (
-    <div className="mt-3">
-      <textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        rows={3}
-        maxLength={5000}
-        placeholder="Your reference notes for this video…"
-        aria-label="Reference notes"
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs bg-white"
-      />
-      <div className="flex gap-2 mt-1.5">
-        <button
-          onClick={(e) => { e.stopPropagation(); save.mutate(draft); }}
-          disabled={save.isPending}
-          className="flex items-center gap-1 px-3 py-1 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 disabled:opacity-50"
-        >
-          {save.isPending && <Loader2 className="w-3 h-3 animate-spin" />} Save
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); setEditing(false); }}
-          className="px-3 py-1 border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        if (window.confirm(`Delete "${video.title}" from imported videos? Its transcript, scenes, topics and chapters will be removed. The library copy is not affected.`)) {
+          del.mutate();
+        }
+      }}
+      disabled={del.isPending}
+      title="Delete this video from Shorts Studio"
+      className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50 justify-center"
+    >
+      {del.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+      Delete
+    </button>
   );
 }
 
@@ -767,14 +732,12 @@ export default function ShortsStudioPage() {
                           {v._count.topicSegments > 0 ? ` · ${v._count.topicSegments} topics` : v._count.transcriptSegments > 0 ? ' · transcribed' : ''}
                         </p>
                       </div>
-                      {v.notes && <StickyNote className="w-4 h-4 text-amber-500 shrink-0" aria-label="Has notes" />}
                       {v._count.topicSegments > 0 && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
                     </div>
                     {open && (
                       <div className="px-4 pb-4 pt-1 border-t border-gray-50 flex items-start gap-4 flex-wrap">
                         <div className="flex-1 min-w-[240px]">
                           <AnalysisProgress importedVideoId={v.id} onRetry={() => analyzeMutation.mutate(v.id)} />
-                          <NotesEditor video={v} channelId={channelId} />
                         </div>
                         <div className="flex gap-2 shrink-0 flex-wrap">
                           <button
@@ -799,6 +762,7 @@ export default function ShortsStudioPage() {
                               <Sparkles className="w-4 h-4" /> Results
                             </Link>
                           )}
+                          <DeleteFromImportedButton video={v} channelId={channelId} />
                         </div>
                       </div>
                     )}

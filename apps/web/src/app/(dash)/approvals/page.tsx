@@ -1,7 +1,8 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, XCircle, Clock, Loader2, Clapperboard, Tag, FileText, History, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Loader2, Clapperboard, Tag, FileText, History, ExternalLink, ChevronDown, ChevronRight, Scissors } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { api, apiClient } from '@/lib/api';
 import { useEffect, useState } from 'react';
 
@@ -200,6 +201,7 @@ function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggl
 
 export default function ApprovalsPage() {
   const qc = useQueryClient();
+  const router = useRouter();
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [openRows, setOpenRows] = useState<Set<string>>(new Set());
@@ -228,6 +230,18 @@ export default function ApprovalsPage() {
     onSuccess: (_, { id }) => {
       qc.setQueryData<Approval[]>(['approvals'], (old) => (old ?? []).filter((a) => a.id !== id));
       void qc.invalidateQueries({ queryKey: ['approvals-history'] });
+      void qc.invalidateQueries({ queryKey: ['shorts-clips'] });
+    },
+  });
+  // "Needs work": close the approval, put the clip back in editing, open the editor.
+  const moveToEditingMutation = useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      api.approvals.moveToEditing(id, notes[id]).then((r) => r.data as { shortClipId: string }),
+    onSuccess: (data, { id }) => {
+      qc.setQueryData<Approval[]>(['approvals'], (old) => (old ?? []).filter((a) => a.id !== id));
+      void qc.invalidateQueries({ queryKey: ['approvals-history'] });
+      void qc.invalidateQueries({ queryKey: ['shorts-clips'] });
+      router.push(`/shorts-studio/clips/${data.shortClipId}/edit`);
     },
   });
 
@@ -293,6 +307,17 @@ export default function ApprovalsPage() {
                   <XCircle className="w-4 h-4" />
                   Reject
                 </button>
+                {isShortsExport(a.job.type, a.job.result) && a.job.result.shortClipId && (
+                  <button
+                    onClick={() => moveToEditingMutation.mutate({ id: a.id })}
+                    disabled={moveToEditingMutation.isPending}
+                    title="Close this approval and reopen the clip in the timeline editor"
+                    className="flex items-center gap-2 px-4 py-2 border border-brand-300 text-brand-700 rounded-lg hover:bg-brand-50 disabled:opacity-50"
+                  >
+                    {moveToEditingMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+                    Move to editing
+                  </button>
+                )}
               </div>
             </div>
           ))}

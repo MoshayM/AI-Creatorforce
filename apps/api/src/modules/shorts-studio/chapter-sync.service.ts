@@ -69,6 +69,20 @@ export class ChapterSyncService {
       throw new BadRequestException(`YouTube needs at least 3 chapters to render them — this video has ${chapters.length}`);
     }
 
+    // Preflight: syncing edits the live YouTube description, which needs an
+    // OAuth-connected channel. Fail with the real reason instead of the
+    // generic error the token lookup would produce.
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: video.project.channelId },
+      select: { title: true, readOnly: true, encryptedTokens: true },
+    });
+    if (!channel || channel.readOnly || !channel.encryptedTokens) {
+      // Keep under 200 chars — the web error card treats longer strings as technical dumps
+      throw new BadRequestException(
+        `"${channel?.title ?? 'This channel'}" is read-only — YouTube edits need the channel connected with Google OAuth. Only channels you own can be synced.`,
+      );
+    }
+
     const { youtube } = await this.channels.buildAuthedYouTube(video.project.channelId);
 
     // videos.update replaces the whole snippet — fetch it so title/category/tags survive
