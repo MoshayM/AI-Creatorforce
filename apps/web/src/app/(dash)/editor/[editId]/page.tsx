@@ -359,10 +359,12 @@ function AiEditDialog({ editId, timeline, autoSuggest = false, onClose }: { edit
 function Inspector({
   item,
   onChange,
+  onDelete,
   currentTimeMs,
 }: {
   item: EditItem | null;
   onChange: (patch: Partial<EditItem>) => void;
+  onDelete?: () => void;
   currentTimeMs: number;
 }) {
   // Collapsible section open states
@@ -409,6 +411,15 @@ function Inspector({
           <p>End: {fmtMs(item.timelineEndMs)}</p>
           <p>Duration: {fmtMs(item.timelineEndMs - item.timelineStartMs)}</p>
         </div>
+        {onDelete && (
+          <button
+            onClick={onDelete}
+            title="Remove this item from the timeline (Delete)"
+            className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs hover:bg-red-50"
+          >
+            <X className="w-3.5 h-3.5" /> Remove from timeline
+          </button>
+        )}
       </div>
 
       {/* ── Volume (AUDIO / VIDEO) ── */}
@@ -866,9 +877,10 @@ function Inspector({
                 type="button"
                 onClick={() => {
                   const existing = props.keyframes ?? [];
-                  // Avoid duplicate atMs
-                  if (existing.some((kf) => kf.atMs === currentTimeMs)) return;
-                  const updated = [...existing, { atMs: currentTimeMs }].sort((a, b) => a.atMs - b.atMs);
+                  // Schema wants integer ms; avoid duplicate atMs
+                  const atMs = Math.max(0, Math.round(currentTimeMs));
+                  if (existing.some((kf) => kf.atMs === atMs)) return;
+                  const updated = [...existing, { atMs }].sort((a, b) => a.atMs - b.atMs);
                   setProp('keyframes', updated);
                 }}
                 className="flex items-center gap-1.5 w-full px-3 py-2.5 border border-dashed border-brand-300 text-brand-700 text-xs rounded-lg hover:bg-brand-50 min-h-[44px]"
@@ -1249,16 +1261,19 @@ export default function EditorWorkspacePage() {
     });
   }, []);
 
+  // The timeline schema requires integer ms — pointer deltas come in as
+  // fractional pixels, so every write from a drag/trim must round, or the
+  // autosave is rejected with "Invalid timeline: … expected integer".
   const handleMoveItem = useCallback((itemId: string, newStartMs: number) => {
     updateTimeline((tl) => ({
       ...tl,
       tracks: tl.tracks.map((tr) => ({
         ...tr,
-        items: tr.items.map((it) =>
-          it.id === itemId
-            ? { ...it, timelineStartMs: newStartMs, timelineEndMs: newStartMs + (it.timelineEndMs - it.timelineStartMs) }
-            : it,
-        ),
+        items: tr.items.map((it) => {
+          if (it.id !== itemId) return it;
+          const start = Math.max(0, Math.round(newStartMs));
+          return { ...it, timelineStartMs: start, timelineEndMs: start + (it.timelineEndMs - it.timelineStartMs) };
+        }),
       })),
     }));
   }, [updateTimeline]);
@@ -1268,11 +1283,12 @@ export default function EditorWorkspacePage() {
       ...tl,
       tracks: tl.tracks.map((tr) => ({
         ...tr,
-        items: tr.items.map((it) =>
-          it.id === itemId
-            ? { ...it, timelineStartMs: newStartMs, timelineEndMs: newEndMs }
-            : it,
-        ),
+        items: tr.items.map((it) => {
+          if (it.id !== itemId) return it;
+          const start = Math.max(0, Math.round(newStartMs));
+          const end = Math.max(start + 1, Math.round(newEndMs));
+          return { ...it, timelineStartMs: start, timelineEndMs: end };
+        }),
       })),
     }));
   }, [updateTimeline]);
@@ -1296,12 +1312,14 @@ export default function EditorWorkspacePage() {
       const kind = entry.kind === 'AUDIO' ? 'AUDIO' : 'VIDEO';
       const existingTrack = tl.tracks.find((t) => t.kind === kind);
       const trackId = existingTrack?.id ?? `track-${Date.now()}`;
+      // Round: asset durations from ffprobe can be fractional, schema wants int ms
+      const startMs = Math.max(0, Math.round(tl.durationMs));
       const newItem: EditItem = {
         id: `item-${Date.now()}`,
         sourceAssetId: entry.id,
         kind: entry.kind === 'IMAGE' ? 'IMAGE' : entry.kind === 'AUDIO' ? 'AUDIO' : 'VIDEO',
-        timelineStartMs: tl.durationMs,
-        timelineEndMs: tl.durationMs + (entry.durationMs || 5000),
+        timelineStartMs: startMs,
+        timelineEndMs: startMs + Math.max(1, Math.round(entry.durationMs || 5000)),
       };
       const newDuration = newItem.timelineEndMs;
       if (existingTrack) {
@@ -1322,6 +1340,36 @@ export default function EditorWorkspacePage() {
       return { ...tl, durationMs: newDuration, tracks: [...tl.tracks, newTrack] };
     });
   }, [updateTimeline]);
+
+  // Remove an item from the timeline (Inspector button or Delete/Backspace).
+  // Empty tracks are pruned and the master duration recomputed.
+  const handleDeleteItem = useCallback((itemId: string) => {
+    setSelectedItemId((sel) => (sel === itemId ? null : sel));
+    updateTimeline((tl) => {
+      const tracks = tl.tracks
+        .map((tr) => ({ ...tr, items: tr.items.filter((it) => it.id !== itemId) }))
+        .filter((tr) => tr.items.length > 0);
+      const durationMs = tracks.reduce(
+        (max, tr) => tr.items.reduce((m, it) => Math.max(m, it.timelineEndMs), max),
+        0,
+      );
+      return { ...tl, tracks, durationMs };
+    });
+  }, [updateTimeline]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (selectedItemId) {
+        e.preventDefault();
+        handleDeleteItem(selectedItemId);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedItemId, handleDeleteItem]);
 
   // Playback via rAF
   const startPlay = useCallback(() => {
@@ -1348,18 +1396,6 @@ export default function EditorWorkspacePage() {
 
   useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
 
-  // Sync video element to currentTimeMs
-  useEffect(() => {
-    if (!videoRef.current) return;
-    const v = videoRef.current;
-    if (playing) {
-      void v.play().catch(() => undefined);
-    } else {
-      v.pause();
-      v.currentTime = currentTimeMs / 1000;
-    }
-  }, [playing, currentTimeMs]);
-
   // Find the currently-active video source for the preview
   const activeVideoItem = timeline?.tracks
     .filter((t) => t.kind === 'VIDEO')
@@ -1370,6 +1406,40 @@ export default function EditorWorkspacePage() {
     ? mediaBin.find((e) => e.id === activeVideoItem.sourceAssetId)
     : null;
   const videoSrc = activeMediaEntry?.path ?? null;
+
+  // TEXT items overlapping the playhead — overlaid on the preview as a
+  // lower-third approximation of the rendered output.
+  const activeTextItems = timeline?.tracks
+    .filter((t) => t.kind === 'TEXT')
+    .flatMap((t) => t.items)
+    .filter((it) => it.timelineStartMs <= currentTimeMs && it.timelineEndMs > currentTimeMs) ?? [];
+
+  // Clip-local source time: timeline offset within the clip, scaled by its
+  // speed, plus the source trim-in point. This is what the render produces,
+  // so the preview seeks here instead of the raw global timeline time.
+  const activeSourceSec = activeVideoItem
+    ? ((activeVideoItem.sourceInMs ?? 0) + (currentTimeMs - activeVideoItem.timelineStartMs) * (activeVideoItem.properties?.speed ?? 1)) / 1000
+    : 0;
+
+  // Slave the <video> element to the rAF master clock. While playing, only
+  // correct drift beyond a threshold so playback doesn't stutter from
+  // constant micro-seeks; when paused/seeking, snap exactly.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const rate = activeVideoItem?.properties?.speed ?? 1;
+    if (v.playbackRate !== rate) v.playbackRate = rate;
+    const vol = clamp(activeVideoItem?.properties?.volume ?? 1, 0, 1);
+    v.volume = vol;
+    v.muted = vol === 0;
+    if (playing && activeVideoItem) {
+      if (Math.abs(v.currentTime - activeSourceSec) > 0.35) v.currentTime = activeSourceSec;
+      if (v.paused) void v.play().catch(() => undefined);
+    } else {
+      if (!v.paused) v.pause();
+      if (Math.abs(v.currentTime - activeSourceSec) > 0.05) v.currentTime = activeSourceSec;
+    }
+  }, [playing, currentTimeMs, activeVideoItem, activeSourceSec]);
 
   // Selected item
   const selectedItem = selectedItemId
@@ -1498,20 +1568,41 @@ export default function EditorWorkspacePage() {
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
           {/* Preview area */}
-          <div className="shrink-0 bg-black flex items-center justify-center" style={{ height: 280 }}>
+          <div className="relative shrink-0 bg-black flex items-center justify-center" style={{ height: 280 }}>
             {videoSrc ? (
-              <video
-                ref={videoRef}
-                src={videoSrc}
-                className="max-w-full max-h-full object-contain"
-                onTimeUpdate={() => {
-                  if (videoRef.current) setCurrentTimeMs(videoRef.current.currentTime * 1000);
-                }}
-                playsInline
-              >
-                {/* Source clips carry no sidecar caption file; empty track satisfies a11y. */}
-                <track kind="captions" />
-              </video>
+              <>
+                {/* The rAF loop is the master clock — the element never drives
+                    currentTimeMs (two competing clocks made the playhead jump). */}
+                <video
+                  ref={videoRef}
+                  src={videoSrc}
+                  className="max-w-full max-h-full object-contain"
+                  style={{ opacity: clamp(activeVideoItem?.properties?.opacity ?? 1, 0, 1) }}
+                  onLoadedMetadata={(e) => { e.currentTarget.currentTime = activeSourceSec; }}
+                  playsInline
+                >
+                  {/* Source clips carry no sidecar caption file; empty track satisfies a11y. */}
+                  <track kind="captions" />
+                </video>
+                {activeTextItems.map((it) => (
+                  <span
+                    key={it.id}
+                    className="absolute left-1/2 -translate-x-1/2 pointer-events-none font-semibold text-center px-2 max-w-[90%] truncate"
+                    style={{
+                      bottom: '12%',
+                      color: it.properties?.color ?? '#ffffff',
+                      fontSize: Math.max(10, (it.properties?.fontSize ?? 32) * 0.4),
+                      opacity: clamp(it.properties?.opacity ?? 1, 0, 1),
+                      textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                    }}
+                  >
+                    {it.properties?.text ?? ''}
+                  </span>
+                ))}
+                <span className="absolute top-2 right-2 text-[10px] uppercase tracking-wide bg-black/50 text-white/70 px-2 py-0.5 rounded-full pointer-events-none">
+                  Approximate preview
+                </span>
+              </>
             ) : (
               <div className="text-gray-600 text-sm text-center space-y-1 p-4">
                 <Film className="w-8 h-8 mx-auto opacity-40" />
@@ -1623,7 +1714,7 @@ export default function EditorWorkspacePage() {
             <Maximize2 className="w-3.5 h-3.5 text-gray-500" />
             <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Inspector</p>
           </div>
-          <Inspector item={selectedItem} onChange={handleInspectorChange} currentTimeMs={currentTimeMs} />
+          <Inspector item={selectedItem} onChange={handleInspectorChange} onDelete={selectedItemId ? () => handleDeleteItem(selectedItemId) : undefined} currentTimeMs={currentTimeMs} />
         </aside>
 
         {/* Mobile inspector slide-over */}
@@ -1637,7 +1728,7 @@ export default function EditorWorkspacePage() {
                   <X className="w-4 h-4 text-gray-500" />
                 </button>
               </div>
-              <Inspector item={selectedItem} onChange={handleInspectorChange} currentTimeMs={currentTimeMs} />
+              <Inspector item={selectedItem} onChange={handleInspectorChange} onDelete={selectedItemId ? () => handleDeleteItem(selectedItemId) : undefined} currentTimeMs={currentTimeMs} />
             </div>
           </div>
         )}
