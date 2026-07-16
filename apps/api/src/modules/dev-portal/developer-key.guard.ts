@@ -3,10 +3,13 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Logger,
+  OnModuleDestroy,
   SetMetadata,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import Redis from 'ioredis';
 import { Request } from 'express';
 import { DevPortalService } from './dev-portal.service';
 import { scopeAllows } from './dev-portal.utils';
@@ -32,43 +35,26 @@ export function PaidAction(): MethodDecorator & ClassDecorator {
   return SetMetadata(PAID_ACTION_KEY, true);
 }
 
-// ── In-memory sliding-window rate limiter ──────────────────────────────────────
+// ── Redis-backed sliding-window rate limiter ───────────────────────────────────
 
-interface WindowEntry {
-  timestamps: number[];
-}
+const RATE_WINDOW_MS = 60_000;
 
 /**
- * Simple in-memory sliding-window rate limiter per keyId.
+ * Atomic sliding window on a sorted set: evict entries older than the window,
+ * count what remains, admit + record only if under the limit. Running as one
+ * Lua script means concurrent requests across pods can't both slip past the
+ * limit between the count and the insert.
  *
- * NOTE: This is a per-process in-memory implementation suitable for
- * single-instance deployments and development. For production multi-instance
- * deployments, replace with a Redis-backed sliding window (e.g., lua script
- * on a sorted set). The rateLimitPerMin field on the key exposes the limit to
- * any future Redis implementation without schema changes.
+ * KEYS[1] = ratelimit key, ARGV = [nowMs, windowMs, limit, member]
+ * Returns 1 if admitted, 0 if rate-limited.
  */
-const rateLimitWindows = new Map<string, WindowEntry>();
-
-function checkRateLimit(keyId: string, limitPerMin: number): boolean {
-  const now = Date.now();
-  const windowStart = now - 60_000;
-
-  let entry = rateLimitWindows.get(keyId);
-  if (!entry) {
-    entry = { timestamps: [] };
-    rateLimitWindows.set(keyId, entry);
-  }
-
-  // Evict timestamps outside the window
-  entry.timestamps = entry.timestamps.filter((t) => t > windowStart);
-
-  if (entry.timestamps.length >= limitPerMin) {
-    return false; // rate limit exceeded
-  }
-
-  entry.timestamps.push(now);
-  return true;
-}
+const SLIDING_WINDOW_LUA = `
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, tonumber(ARGV[1]) - tonumber(ARGV[2]))
+if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[3]) then return 0 end
+redis.call('ZADD', KEYS[1], ARGV[1], ARGV[4])
+redis.call('PEXPIRE', KEYS[1], ARGV[2])
+return 1
+`;
 
 // ── Guard ──────────────────────────────────────────────────────────────────────
 
@@ -86,14 +72,58 @@ function checkRateLimit(keyId: string, limitPerMin: number): boolean {
  * are refused at the guard level: routes declare themselves with
  * `@PaidAction()` and sandbox keys never reach their handlers (Wave 18, R-12).
  *
- * Rate limiting: simple in-memory sliding window per keyId (see note above).
+ * Rate limiting: Redis-backed sliding window per keyId (see note above) — safe
+ * for multi-instance deployments. Redis being down FAILS OPEN: the limiter is
+ * an abuse speed bump, not the security boundary (key verification is), and an
+ * outage must not take down the developer API.
  */
 @Injectable()
-export class DeveloperKeyGuard implements CanActivate {
+export class DeveloperKeyGuard implements CanActivate, OnModuleDestroy {
+  private readonly logger = new Logger(DeveloperKeyGuard.name);
+  private readonly redis: Redis;
+  private redisAvailable = true;
+
   constructor(
     private readonly devPortal: DevPortalService,
     private readonly reflector: Reflector,
-  ) {}
+  ) {
+    this.redis = new Redis({
+      host: process.env['REDIS_HOST'] ?? '127.0.0.1',
+      port: Number(process.env['REDIS_PORT'] ?? 6379),
+      lazyConnect: true,
+      enableOfflineQueue: false,
+      maxRetriesPerRequest: 1,
+    });
+    this.redis.on('error', () => { this.redisAvailable = false; });
+    this.redis.on('ready', () => { this.redisAvailable = true; });
+  }
+
+  async onModuleDestroy() {
+    await this.redis.quit().catch(() => undefined);
+  }
+
+  /** Returns true if the request is admitted, false if rate-limited. */
+  private async checkRateLimit(keyId: string, limitPerMin: number): Promise<boolean> {
+    if (!this.redisAvailable) return true; // fail open when Redis is unreachable
+    const now = Date.now();
+    try {
+      const admitted = await this.redis.eval(
+        SLIDING_WINDOW_LUA,
+        1,
+        `ratelimit:devkey:${keyId}`,
+        now,
+        RATE_WINDOW_MS,
+        limitPerMin,
+        `${now}:${Math.random().toString(36).slice(2, 10)}`,
+      );
+      return admitted === 1;
+    } catch (err) {
+      this.logger.warn(
+        `Dev-key rate limiter degraded (allowing request): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return true;
+    }
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -109,7 +139,7 @@ export class DeveloperKeyGuard implements CanActivate {
     }
 
     // Rate limiting
-    if (!checkRateLimit(verified.keyId, verified.rateLimitPerMin)) {
+    if (!(await this.checkRateLimit(verified.keyId, verified.rateLimitPerMin))) {
       throw new ForbiddenException('Rate limit exceeded');
     }
 

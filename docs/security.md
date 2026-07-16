@@ -114,6 +114,19 @@ Login, registration, and token-refresh endpoints are protected by a Redis-backed
 
 ---
 
+## Developer API Rate Limiting
+
+External `/dev-api/*` requests are rate-limited per API key by a Redis-backed **sliding-window** limiter (atomic Lua script on a sorted set), replacing the earlier in-memory implementation that was unsafe for multi-instance deployments.
+
+**Implementation:** `apps/api/src/modules/dev-portal/developer-key.guard.ts` — enforced inside `DeveloperKeyGuard` after key verification, before scope/paid-action checks.
+
+**Behavior:**
+- Keyed by `keyId`; per-key limit comes from the key's `rateLimitPerMin` field.
+- 60-second sliding window; over-limit requests get `403 Rate limit exceeded` and are excluded from usage analytics.
+- Fails **open** when Redis is unreachable (same availability trade-off as auth rate limiting — key verification remains the security boundary).
+
+---
+
 ## Secrets Management
 
 All sensitive values are injected via environment variables. The application refuses to boot if required secrets are absent (see Production Startup Guard above). Required environment variables:
@@ -175,5 +188,5 @@ OWASP ZAP baseline scan is defined in `.zap/plan.yaml` and runs in CI on every p
 
 - BurpSuite active scan (referenced in docs4, not yet wired into CI).
 - Snyk dependency monitoring (docs4 references it; CI currently uses `pnpm audit` instead).
-- Per-route rate limiting beyond auth endpoints — auth login/register/refresh now have Redis-backed rate limiting; other routes do not yet.
+- Per-route rate limiting beyond auth and dev-API endpoints — auth login/register/refresh and `/dev-api/*` (per key) now have Redis-backed rate limiting; other internal routes do not yet.
 - Per-tenant database row-level security (RLS).
