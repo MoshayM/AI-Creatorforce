@@ -36,7 +36,16 @@ export class BillingService {
     if (!this._stripe) {
       const key = process.env['STRIPE_SECRET_KEY'];
       if (!key) throw new BadRequestException('Billing is not configured (STRIPE_SECRET_KEY missing)');
-      this._stripe = new Stripe(key, { apiVersion: '2025-02-24.acacia' });
+      // STRIPE_API_BASE points the SDK at a local emulator (e.g. localstripe)
+      // for integration testing. Unset in production — the SDK then uses
+      // api.stripe.com as normal.
+      const base = process.env['STRIPE_API_BASE'];
+      let hostOpts: Pick<Stripe.StripeConfig, 'host' | 'port' | 'protocol'> = {};
+      if (base) {
+        const u = new URL(base);
+        hostOpts = { host: u.hostname, port: Number(u.port || (u.protocol === 'https:' ? 443 : 80)), protocol: u.protocol.replace(':', '') as 'http' | 'https' };
+      }
+      this._stripe = new Stripe(key, { apiVersion: '2025-02-24.acacia', ...hostOpts });
     }
     return this._stripe;
   }
@@ -189,9 +198,23 @@ export class BillingService {
     return { checkoutUrl: session.url, credits: pack.credits, pack: { id: pack.id, name: pack.name } };
   }
 
-  async handleWebhook(payload: Buffer, signature: string) {
+  async handleWebhook(payload: Buffer | undefined, signature: string) {
     const secret = process.env['STRIPE_WEBHOOK_SECRET'] ?? '';
-    const event = this.stripe.webhooks.constructEvent(payload, signature, secret);
+    if (!payload) {
+      // rawBody missing means the Nest app was created without rawBody:true —
+      // fail loudly as a config error rather than a cryptic verify failure.
+      throw new BadRequestException('Webhook raw body unavailable (rawBody not enabled)');
+    }
+    let event: Stripe.Event;
+    try {
+      event = this.stripe.webhooks.constructEvent(payload, signature, secret);
+    } catch (err) {
+      // A bad signature is the caller's problem (forged/misconfigured), not a
+      // server fault — 400 stops Stripe from pointlessly retrying it.
+      throw new BadRequestException(
+        `Webhook signature verification failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     // §6.2: dedupe on the gateway's event id — duplicate deliveries are no-ops
     try {

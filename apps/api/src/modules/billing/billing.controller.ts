@@ -38,6 +38,6 @@ export class BillingController {
     @Req() req: RawBodyRequest<Request>,
     @Headers('stripe-signature') sig: string,
   ) {
-    return this.svc.handleWebhook(req.rawBody!, sig);
+    return this.svc.handleWebhook(req.rawBody, sig);
   }
 }

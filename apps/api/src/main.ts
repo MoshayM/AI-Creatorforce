@@ -40,7 +40,11 @@ function assertProductionSecrets(): void {
 async function bootstrap() {
   assertProductionSecrets();
   // JSON lines in production (docs4/38, risk R-04); readable console in dev.
-  const app = await NestFactory.create(AppModule, { logger: new StructuredLogger() });
+  // rawBody is required by the Stripe webhook route (billing.controller.ts):
+  // signature verification runs over the exact bytes Stripe sent, not a
+  // re-serialized JSON body. Without this flag req.rawBody is undefined and
+  // every webhook fails verification.
+  const app = await NestFactory.create(AppModule, { logger: new StructuredLogger(), rawBody: true });
 
   app.use(helmet());
   // First in the chain so every downstream log, error envelope, and Sentry
