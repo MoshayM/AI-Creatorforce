@@ -11,7 +11,8 @@
     "db:push": "pnpm --filter @cf/db db:push",
     "db:seed": "pnpm --filter @cf/db db:seed",
     "db:studio": "pnpm --filter @cf/db studio",
-    "changelog": "node scripts/generate-changelog.mjs"
+    "changelog": "node scripts/generate-changelog.mjs",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

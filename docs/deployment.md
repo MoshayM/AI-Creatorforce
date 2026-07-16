@@ -176,7 +176,56 @@ The frontend (`apps/web`) can be deployed to Vercel while the backend (API, work
 
 ---
 
-## 9. Planned / Not Yet Implemented
+## 9. Go-Live Runbook (one-time steps at first production deploy)
+
+These are the readiness-report items that can only be executed against live
+production infrastructure. Everything needed to run them ships in the repo.
+
+### 9.1 Channel OAuth reconnect (readiness item 7)
+
+Channels that authorized before the final OAuth scope set lack
+`youtube.upload` and cannot publish. The app already detects this — channel
+access level is computed from stored scopes (`accessLevelFromScopes`,
+`channels.service.ts`) and `invalid_grant` errors surface a reconnect prompt.
+
+At go-live:
+1. Count affected channels:
+   `SELECT COUNT(*) FROM "Channel" WHERE active AND NOT ('https://www.googleapis.com/auth/youtube.upload' = ANY(scopes));`
+2. Email/notify those users: "Reconnect your channel to enable publishing" —
+   the reconnect button is on the Channels page.
+3. Verify the count trends to zero before enabling auto-publish automations.
+
+### 9.2 Production ZAP baseline scan (readiness item 10)
+
+CI already runs a ZAP baseline against a local production build on every push.
+The one-time production-URL scan (needs Docker + the deployed site):
+
+```sh
+docker run --rm -v "$PWD/.zap:/zap/wrk" ghcr.io/zaproxy/zaproxy:stable \
+  zap-baseline.py -t https://aicreatorforce.net -J zap-prod-summary.json
+node .zap/check-zap-summary.mjs .zap/zap-prod-summary.json   # gates on High-risk findings
+```
+
+Pass criterion: zero High-risk (riskcode 3) findings. Archive the JSON report
+with the release notes.
+
+### 9.3 k6 load baseline (readiness item 15)
+
+Script: `infra/load/k6-baseline.js` (read-only endpoints, no AI spend).
+Run against a production-like environment — never a shared dev box:
+
+```sh
+k6 run infra/load/k6-baseline.js -e BASE_URL=https://api.aicreatorforce.net
+```
+
+Ramps 0 → 500 VUs over 5 minutes, holds 5 minutes. Pass criteria are encoded
+as k6 thresholds: p95 latency < 500 ms, error rate < 1%. A 30-second smoke
+variant for any environment: append `-e SMOKE=1`. Record the summary output
+in the release notes.
+
+---
+
+## 10. Planned / Not Yet Implemented
 
 - Staging environment
 - Database backup automation

@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pre-commit: run the repo's custom Semgrep rules (.semgrep/creatorforce.yml)
+# on staged TypeScript files, so violations surface locally instead of first
+# failing in the CI semgrep job. Skips gracefully when the CLI is not
+# installed (install: pip install semgrep — or brew/scoop).
+#
+# Wired via `git config core.hooksPath .githooks` (root package.json prepare).
+# Bypass for a single commit with: git commit --no-verify
+
+if ! command -v semgrep >/dev/null 2>&1; then
+  echo "pre-commit: semgrep CLI not installed — skipping local SAST (CI still enforces it)."
+  exit 0
+fi
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts' '*.tsx')
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+echo "pre-commit: semgrep (.semgrep/creatorforce.yml) on staged files…"
+# shellcheck disable=SC2086 — word-splitting the file list is intended
+semgrep scan --config .semgrep/creatorforce.yml --error --quiet $staged
+status=$?
+if [ $status -ne 0 ]; then
+  echo "pre-commit: semgrep found blocking findings — fix them or bypass once with --no-verify."
+fi
+exit $status

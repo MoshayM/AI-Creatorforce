@@ -176,6 +176,8 @@ Admin endpoint: `GET /admin/audit-logs` — requires `admin:audit-logs` permissi
 
 Semgrep is configured at `.semgrep/creatorforce.yml` with custom architecture rules specific to this codebase. Rules flagged at `ERROR` severity block CI. The `p/typescript` registry pack is also run (informational, does not gate CI).
 
+The same custom rules also run locally as a pre-commit hook (`.githooks/pre-commit`, wired by the root `prepare` script via `core.hooksPath`) against staged `.ts`/`.tsx` files. The hook skips with a notice when the `semgrep` CLI is not installed — CI remains the enforcement point.
+
 ---
 
 ## DAST (Dynamic Analysis)

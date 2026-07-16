@@ -174,7 +174,20 @@ Status of the checklist above after the follow-up remediation session (shell exe
 | 6. PII in `rbac.spec.ts` | **DONE** (this session) | Gmail addresses replaced with synthetic `@test.example` fixtures. |
 | 9. Dependency audit | **DONE** (this session) | `pnpm audit --audit-level=high` ran: 9 high findings (multer, glob CLI, rollup, picomatch, lodash, tmp — all transitive) remediated via `overrides` in `pnpm-workspace.yaml`. Post-fix: **0 high/critical** (2 low + 11 moderate remain, below the CI gate). Gates re-run green on the updated lockfile. |
 
-Still open from the checklist: 7 (channel OAuth reconnect — user communication task), 8 (Gemini quota-exhausted fallback test), 10 (manual ZAP scan against production URL), and nice-to-haves 11–15.
+Second remediation pass (2026-07-16, later the same day):
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| 7. Channel OAuth reconnect | **RUNBOOK** | Operational task requiring real user re-auth. Detection already ships (`accessLevelFromScopes`, `invalid_grant` → reconnect prompt). Go-live steps + affected-channel SQL codified in `deployment.md` §9.1. |
+| 8. Gemini quota-exhausted fallback test | **DONE** | New specs: `embedding-generation.service.spec.ts` (provider quota error fails fast, persisted chunks survive for resume, self-skip), `pipeline-plan.spec.ts` (EMBEDDING_GENERATION is the only optional stage and runs last — `OPTIONAL_SHORTS_STAGES` moved to `pipeline-plan.ts` for testability), `semantic-search.service.spec.ts` (missing embeddings → `needsEmbeddings` degraded response with zero provider calls/spend). |
+| 10. Production ZAP scan | **RUNBOOK** | Needs Docker + the deployed production URL (unreachable from this session). Exact command + gate criterion in `deployment.md` §9.2. CI ZAP baseline against a local prod build already runs on every push. |
+| 11. `console.warn` in main.ts | **DONE** | Startup messages now go through Nest `Logger` (routed to `StructuredLogger`). |
+| 12. `.env.example` encryption key | **DONE** | All-zeros placeholder replaced with an intentionally blank value + generation command; the startup guard refuses to boot without a real key, so copy-paste can no longer produce a predictable key. |
+| 13. Semgrep pre-commit | **DONE** | `.githooks/pre-commit` runs `.semgrep/creatorforce.yml` on staged `.ts/.tsx`; wired via root `prepare` script (`core.hooksPath`). Skips with a notice when the CLI is absent — CI stays the enforcement point. |
+| 14. Compliance cache → Redis | **DONE** | `ComplianceService` now has a Redis shared layer (Zod-validated on read — corrupted entry is a miss, never a verdict) over the in-memory fallback. Cache is cost-only: `mustPassCompliance()` re-runs on every `enforce()`. 6 new unit tests incl. "cached failing verdict still fails enforce()". |
+| 15. k6 load test | **PREPARED** | `infra/load/k6-baseline.js` (0→500 VU ramp, p95<500ms / error<1% thresholds, read-only endpoints). Execution needs a production-like environment — steps in `deployment.md` §9.3. Not run against this dev box by design. |
+
+Remaining truly-open items are the three **RUNBOOK/PREPARED** rows above — each is now a documented, turnkey step in `deployment.md` §9 awaiting production infrastructure — plus the pre-existing infra list in `deployment.md` §10 (staging environment, IaC, etc.).
 
 ---
 

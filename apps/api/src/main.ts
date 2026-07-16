@@ -2,7 +2,7 @@
 import './instrument';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -109,8 +109,9 @@ async function bootstrap() {
 
   const port = parseInt(process.env['API_PORT'] ?? '4007', 10);
   await app.listen(port);
-  console.warn(`AI CreatorForce API running on http://localhost:${port}/api/v1`);
-  console.warn(`Swagger docs: http://localhost:${port}/api/docs`);
+  const logger = new Logger('Bootstrap');
+  logger.log(`AI CreatorForce API running on http://localhost:${port}/api/v1`);
+  logger.log(`Swagger docs: http://localhost:${port}/api/docs`);
 }
 
 void bootstrap();
