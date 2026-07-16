@@ -1,4 +1,5 @@
-import { planPipeline, partitionResume, batchStages, estimateRemainingSecs } from './pipeline-plan';
+import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, OPTIONAL_SHORTS_STAGES } from './pipeline-plan';
+import { SHORTS_IMPORT_STAGES } from '../modules/shorts-studio/shorts-studio.service';
 
 describe('planPipeline', () => {
   it('FULL scope runs the complete production chain ending in a package', () => {
@@ -101,6 +102,23 @@ describe('batchStages', () => {
   it('keeps sequential stages as single-stage batches', () => {
     const batches = batchStages(planPipeline('VOICE'));
     for (const batch of batches) expect(batch).toHaveLength(1);
+  });
+});
+
+describe('OPTIONAL_SHORTS_STAGES — embedding failure must not block Shorts (readiness item 8)', () => {
+  it('marks EMBEDDING_GENERATION optional so a quota-exhausted provider degrades search instead of failing analysis', () => {
+    expect(OPTIONAL_SHORTS_STAGES.has('EMBEDDING_GENERATION')).toBe(true);
+  });
+
+  it('every other analysis stage stays mandatory', () => {
+    for (const stage of SHORTS_IMPORT_STAGES) {
+      if (stage === 'EMBEDDING_GENERATION') continue;
+      expect(OPTIONAL_SHORTS_STAGES.has(stage)).toBe(false);
+    }
+  });
+
+  it('the optional stage runs last, so it can never starve a mandatory stage', () => {
+    expect(SHORTS_IMPORT_STAGES[SHORTS_IMPORT_STAGES.length - 1]).toBe('EMBEDDING_GENERATION');
   });
 });
 

@@ -33,20 +33,12 @@ import { CaptionGenerationService } from '../modules/shorts-studio/caption-gener
 import { ShortsRenderService } from '../modules/shorts-studio/shorts-render.service';
 import { ShortsExportService } from '../modules/shorts-studio/shorts-export.service';
 import { SHORTS_IMPORT_STAGES } from '../modules/shorts-studio/shorts-studio.service';
-
-/**
- * Analysis stages whose failure must NOT fail the whole SHORTS_ANALYZE job.
- * Embeddings only power semantic search — clips are already produced by the
- * earlier stages, so a missing/slow embedding provider (e.g. quota exhausted)
- * degrades search rather than blocking the user's Shorts.
- */
-const OPTIONAL_SHORTS_STAGES = new Set<string>(['EMBEDDING_GENERATION']);
 import { composeVideo, ffmpegPath, runFfmpegCapture, type ComposeScene } from '../modules/media/adapters/ffmpeg.util';
 import { encodeWhooshWav } from '../modules/media/adapters/codec.util';
 import { checkDurations, analyzeLoudness } from '../modules/media/quality.util';
 import { validateMediaFile, formatIssues } from '../modules/media/media-validation.util';
 import { buildSrt, buildVtt, fitCuesToDuration } from '../modules/media/subtitle.util';
-import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, type PipelineScope, type PipelineStage } from './pipeline-plan';
+import { planPipeline, partitionResume, batchStages, estimateRemainingSecs, OPTIONAL_SHORTS_STAGES, type PipelineScope, type PipelineStage } from './pipeline-plan';
 import { newAccumulator, runWithAiContext } from '../common/ai-usage.context';
 import { runWithCorrelationId } from '../common/correlation.context';
 import { WalletService, billingEnforced, creditsForCost } from '../modules/wallet/wallet.service';

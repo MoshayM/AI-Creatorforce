@@ -72,6 +72,14 @@ export function planPipeline(scope: PipelineScope): PipelineStage[] {
 }
 
 /**
+ * SHORTS_ANALYZE stages whose failure must NOT fail the whole job.
+ * Embeddings only power semantic search — clips are already produced by the
+ * earlier stages, so a missing/slow embedding provider (e.g. quota exhausted)
+ * degrades search rather than blocking the user's Shorts.
+ */
+export const OPTIONAL_SHORTS_STAGES: ReadonlySet<string> = new Set(['EMBEDDING_GENERATION']);
+
+/**
  * Resume support (update.txt: "Support resume … Never regenerate completed
  * assets"): stages whose job type already COMPLETED for this project are
  * skipped unless force is set. Gates are never skipped — a resumed pipeline

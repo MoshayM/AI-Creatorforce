@@ -1,4 +1,13 @@
-import { rankBySimilarity } from './semantic-search.service';
+import type { PrismaService } from '../../common/prisma/prisma.service';
+import type { WalletService } from '../wallet/wallet.service';
+
+jest.mock('@cf/shared', () => ({
+  ...jest.requireActual('@cf/shared'),
+  embedTexts: jest.fn(),
+}));
+
+import { embedTexts } from '@cf/shared';
+import { SemanticSearchService, rankBySimilarity } from './semantic-search.service';
 
 describe('rankBySimilarity', () => {
   const items = [
@@ -28,5 +37,35 @@ describe('rankBySimilarity', () => {
   it('returns empty for an empty query vector or no items', () => {
     expect(rankBySimilarity([], items, 5)).toEqual([]);
     expect(rankBySimilarity([1, 0, 0], [], 5)).toEqual([]);
+  });
+});
+
+describe('SemanticSearchService.search — degraded mode when embeddings are missing (readiness item 8)', () => {
+  const prisma = {
+    importedVideo: { findUnique: jest.fn() },
+    transcriptSegment: { findMany: jest.fn(), count: jest.fn() },
+  };
+  const wallet = { availableCredits: jest.fn(), debit: jest.fn() };
+
+  it('returns needsEmbeddings without any provider call when the embedding stage was skipped (e.g. Gemini quota exhausted)', async () => {
+    const service = new SemanticSearchService(
+      prisma as unknown as PrismaService,
+      wallet as unknown as WalletService,
+    );
+    prisma.importedVideo.findUnique.mockResolvedValue({ id: 'vid-1' });
+    prisma.transcriptSegment.findMany.mockResolvedValue([]); // no segment has a vector
+    prisma.transcriptSegment.count.mockResolvedValue(42);
+
+    await expect(service.search('vid-1', 'the quote about growth')).resolves.toEqual({
+      query: 'the quote about growth',
+      results: [],
+      embeddedSegments: 0,
+      totalSegments: 42,
+      needsEmbeddings: true,
+    });
+    // Degrading must be free: no query embedding, no wallet check, no debit.
+    expect(embedTexts).not.toHaveBeenCalled();
+    expect(wallet.availableCredits).not.toHaveBeenCalled();
+    expect(wallet.debit).not.toHaveBeenCalled();
   });
 });
