@@ -271,6 +271,8 @@ export type MediaBinItem = {
   label: string;
   durationMs: number | null;
   previewPath: string | null;
+  /** Latest asset version — the web preview streams it via /media/versions/:id/file. */
+  versionId: string | null;
 };
 
 @Injectable()
@@ -610,6 +612,7 @@ export class EditorService {
         label: a.label ?? a.kind,
         durationMs: ver?.durationMs ?? null,
         previewPath,
+        versionId: ver?.id ?? null,
       };
     });
 
@@ -631,6 +634,7 @@ export class EditorService {
             label: iv.title,
             durationMs: iv.durationMs,
             previewPath,
+            versionId: ver?.id ?? null,
           });
         }
       }

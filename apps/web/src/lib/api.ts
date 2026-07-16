@@ -570,6 +570,10 @@ export const api = {
       apiClient.get(`/media/exports/${projectId}/${encodeURIComponent(fileName)}`, { responseType: 'blob' }),
     versionFile: (versionId: string) =>
       apiClient.get(`/media/versions/${versionId}/file`, { responseType: 'blob' }),
+    versionSignedUrl: (versionId: string, ttl?: number) =>
+      apiClient.get<{ url: string; expiresAt: string }>(
+        `/media/versions/${versionId}/signed-url${ttl ? `?ttl=${ttl}` : ''}`,
+      ),
   },
   settings: {
     getApiKeys: () =>
@@ -928,8 +932,11 @@ export interface EditProject {
 
 export interface MediaBinEntry {
   id: string;
-  kind: 'VIDEO' | 'IMAGE' | 'AUDIO';
+  /** Asset kinds from the API: VIDEO, IMAGE, VOICE, MUSIC, RENDER_SOURCE, EDIT_RENDER, SHORTS_SOURCE_VIDEO. */
+  kind: string;
   label: string;
-  durationMs: number;
-  path: string;
+  durationMs: number | null;
+  /** Server-side storage path — NOT loadable by the browser; use versionId + signed URL instead. */
+  previewPath: string | null;
+  versionId: string | null;
 }

@@ -58,6 +58,41 @@ function xToMs(px: number, pxPerSec: number): number {
   return (px / pxPerSec) * 1000;
 }
 
+/** Media-bin asset kinds → timeline item kind. VOICE/MUSIC are audio-only. */
+function binKindToItemKind(kind: string): 'VIDEO' | 'IMAGE' | 'AUDIO' {
+  if (kind === 'AUDIO' || kind === 'VOICE' || kind === 'MUSIC') return 'AUDIO';
+  if (kind === 'IMAGE') return 'IMAGE';
+  return 'VIDEO';
+}
+
+// Signed media URLs let the <video> element stream straight from the API
+// without needing an Authorization header. Cached per asset version and
+// refreshed shortly before expiry.
+const signedUrlCache = new Map<string, { url: string; expiresAtMs: number }>();
+
+function useSignedMediaUrl(versionId: string | null): string | null {
+  const [url, setUrl] = useState<string | null>(() => {
+    if (!versionId) return null;
+    const hit = signedUrlCache.get(versionId);
+    return hit && hit.expiresAtMs - Date.now() > 30_000 ? hit.url : null;
+  });
+  useEffect(() => {
+    if (!versionId) { setUrl(null); return; }
+    const hit = signedUrlCache.get(versionId);
+    if (hit && hit.expiresAtMs - Date.now() > 30_000) { setUrl(hit.url); return; }
+    let cancelled = false;
+    void api.media.versionSignedUrl(versionId).then((r) => {
+      // r.data.url is API-relative ("/api/v1/media/..."), prefix the API origin
+      const origin = new URL(apiClient.defaults.baseURL ?? 'http://localhost:4007/api/v1').origin;
+      const abs = `${origin}${r.data.url}`;
+      signedUrlCache.set(versionId, { url: abs, expiresAtMs: new Date(r.data.expiresAt).getTime() });
+      if (!cancelled) setUrl(abs);
+    }).catch(() => { if (!cancelled) setUrl(null); });
+    return () => { cancelled = true; };
+  }, [versionId]);
+  return url;
+}
+
 // ── Render Export Dialog ──────────────────────────────────────────────────────
 
 const PRESETS: { value: RenderPreset; label: string }[] = [
@@ -1139,6 +1174,11 @@ function MediaBin({
     VIDEO: <Film className="w-3.5 h-3.5 text-brand-500" />,
     IMAGE: <Image className="w-3.5 h-3.5 text-amber-500" />,
     AUDIO: <Volume2 className="w-3.5 h-3.5 text-emerald-500" />,
+    VOICE: <Volume2 className="w-3.5 h-3.5 text-emerald-500" />,
+    MUSIC: <Music className="w-3.5 h-3.5 text-emerald-500" />,
+    RENDER_SOURCE: <Film className="w-3.5 h-3.5 text-brand-500" />,
+    EDIT_RENDER: <Clapperboard className="w-3.5 h-3.5 text-purple-500" />,
+    SHORTS_SOURCE_VIDEO: <Clapperboard className="w-3.5 h-3.5 text-brand-500" />,
   };
 
   if (entries.length === 0) {
@@ -1156,7 +1196,7 @@ function MediaBin({
           <span className="shrink-0">{KIND_ICON[e.kind] ?? <Film className="w-3.5 h-3.5 text-gray-400" />}</span>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-gray-800 truncate">{e.label}</p>
-            {e.durationMs > 0 && <p className="text-[10px] text-gray-400">{fmtMs(e.durationMs)}</p>}
+            {(e.durationMs ?? 0) > 0 && <p className="text-[10px] text-gray-400">{fmtMs(e.durationMs!)}</p>}
           </div>
           <button
             onClick={() => onAddToTimeline(e)}
@@ -1308,8 +1348,10 @@ export default function EditorWorkspacePage() {
 
   const handleAddToTimeline = useCallback((entry: MediaBinEntry) => {
     updateTimeline((tl) => {
-      // Find or create a track of matching kind
-      const kind = entry.kind === 'AUDIO' ? 'AUDIO' : 'VIDEO';
+      // Find or create a track of matching kind — VOICE/MUSIC assets are
+      // audio-only and must land on an AUDIO track, not VIDEO.
+      const itemKind = binKindToItemKind(entry.kind);
+      const kind = itemKind === 'AUDIO' ? 'AUDIO' : 'VIDEO';
       const existingTrack = tl.tracks.find((t) => t.kind === kind);
       const trackId = existingTrack?.id ?? `track-${Date.now()}`;
       // Round: asset durations from ffprobe can be fractional, schema wants int ms
@@ -1317,7 +1359,7 @@ export default function EditorWorkspacePage() {
       const newItem: EditItem = {
         id: `item-${Date.now()}`,
         sourceAssetId: entry.id,
-        kind: entry.kind === 'IMAGE' ? 'IMAGE' : entry.kind === 'AUDIO' ? 'AUDIO' : 'VIDEO',
+        kind: itemKind,
         timelineStartMs: startMs,
         timelineEndMs: startMs + Math.max(1, Math.round(entry.durationMs || 5000)),
       };
@@ -1405,7 +1447,9 @@ export default function EditorWorkspacePage() {
   const activeMediaEntry = activeVideoItem?.sourceAssetId
     ? mediaBin.find((e) => e.id === activeVideoItem.sourceAssetId)
     : null;
-  const videoSrc = activeMediaEntry?.path ?? null;
+  // The bin's previewPath is a server disk path the browser can't load —
+  // stream through the media API with an expiring signed URL instead.
+  const videoSrc = useSignedMediaUrl(activeMediaEntry?.versionId ?? null);
 
   // TEXT items overlapping the playhead — overlaid on the preview as a
   // lower-third approximation of the rendered output.
