@@ -5,7 +5,7 @@ const path = require('path');
 const WEB = 'http://localhost:3007';
 const API = 'http://localhost:4007/api/v1';
 const SHOTS = path.join(__dirname, '..', '..', 'logs', 'shots');
-const CREDS = { email: 'scheduler-test@example.com', password: 'SchedTest!2026' };
+const CREDS = { email: 'test@creatorforce.ai', password: 'Test1234!' };
 
 async function main() {
   const loginRes = await fetch(`${API}/auth/login`, {
@@ -24,8 +24,8 @@ async function main() {
   await page.evaluate(([a, r]) => {
     localStorage.setItem('cf_token', a);
     localStorage.setItem('cf.refreshToken', r);
-    localStorage.setItem('cf.autonomy.channelId', 'cmroi6f0m0001ew8cqy8ov5zb');
-    localStorage.setItem('cf.scheduler.channelId', 'cmroi6f0m0001ew8cqy8ov5zb');
+    localStorage.setItem('cf.autonomy.channelId', 'cmr4q5vz40001ew78t7ezyt8r');
+    localStorage.setItem('cf.scheduler.channelId', 'cmr4q5vz40001ew78t7ezyt8r');
   }, [accessToken, refreshToken]);
 
   // Autonomy page
