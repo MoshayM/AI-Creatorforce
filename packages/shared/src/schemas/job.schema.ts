@@ -49,6 +49,8 @@ export const JobTypeSchema = z.enum([
   'AUTOMATION_TICK',
   // Standalone video editor (editor module)
   'EDIT_RENDER',
+  // Phase 6 AI Autonomy: queued calendar generation with credit reservation
+  'CALENDAR_PROPOSAL',
 ]);
 export type JobType = z.infer<typeof JobTypeSchema>;
 

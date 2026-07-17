@@ -183,6 +183,59 @@ export class AutonomyService {
     return this.generateCalendarInternal(channelId, opts);
   }
 
+  /**
+   * M4 — Enqueue a `CALENDAR_PROPOSAL` job and return its id.
+   * The supervisor worker calls `generateCalendarForJob()` once it picks up the
+   * job, so generation runs inside the credit-reservation / audit-log pipeline
+   * exactly like RESEARCH and SCRIPT.
+   */
+  async generateCalendarQueued(
+    channelId: string,
+    userId: string,
+    opts: { weeks?: number; perWeek?: number; dryRun?: boolean },
+  ) {
+    await this.assertChannelOwnership(channelId, userId);
+
+    // Calendar jobs need a projectId row — reuse the AI Content Calendar project
+    // (same project approve() uses) so all calendar work lives together.
+    let project = await this.prisma.project.findFirst({
+      where: { channelId },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    if (!project) {
+      const channel = await this.prisma.channel.findUniqueOrThrow({
+        where: { id: channelId },
+        select: { userId: true, niche: true },
+      });
+      project = await this.prisma.project.create({
+        data: {
+          userId: channel.userId,
+          channelId,
+          title: 'AI Content Calendar',
+          niche: channel.niche,
+        },
+        select: { id: true },
+      });
+    }
+
+    const job = await this.jobs.enqueue(
+      project.id,
+      'CALENDAR_PROPOSAL',
+      { channelId, ...opts },
+      { idempotencyKey: `calendar-proposal:${channelId}:${Date.now()}` },
+    );
+    return { jobId: job.id };
+  }
+
+  /** Public wrapper for the supervisor worker — skips ownership check. */
+  async generateCalendarForJob(
+    channelId: string,
+    opts: { weeks?: number; perWeek?: number; dryRun?: boolean },
+  ) {
+    return this.generateCalendarInternal(channelId, opts);
+  }
+
   /** Ownership-free core — also driven by the automation tick (autoPlan). */
   private async generateCalendarInternal(
     channelId: string,

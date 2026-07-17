@@ -793,6 +793,8 @@ export const api = {
       const qs = sp.toString();
       return apiClient.get<CalendarEntry[]>(`/autonomy/channels/${channelId}/calendar${qs ? `?${qs}` : ''}`);
     },
+    generateCalendarAsync: (channelId: string, body?: { weeks?: number; perWeek?: number; dryRun?: boolean }) =>
+      apiClient.post<{ jobId: string }>(`/autonomy/channels/${channelId}/calendar/generate-async`, body ?? {}),
     approveEntry: (entryId: string) =>
       apiClient.post<CalendarEntry>(`/autonomy/calendar/${entryId}/approve`),
     dismissEntry: (entryId: string) =>

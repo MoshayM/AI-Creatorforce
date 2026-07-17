@@ -229,6 +229,8 @@ enum JobType {
   AUTOMATION_TICK
   // Standalone video editor (editor module)
   EDIT_RENDER
+  // Phase 6 AI Autonomy: queued calendar generation with credit reservation
+  CALENDAR_PROPOSAL
 }
 
 enum JobStatus {

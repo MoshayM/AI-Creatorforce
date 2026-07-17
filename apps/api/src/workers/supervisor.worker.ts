@@ -60,6 +60,7 @@ import { createHash, randomUUID } from 'crypto';
 import { ChannelSyncService } from '../modules/channels/channel-sync.service';
 import { MetricsService } from '../modules/metrics/metrics.service';
 import { AutomationService } from '../modules/automation/automation.service';
+import { AutonomyService } from '../modules/autonomy/autonomy.service';
 import { EditorService } from '../modules/editor/editor.service';
 import { toJobFailure } from '../modules/media/media.errors';
 import { appendVideoImportLog } from '../modules/media/video-import-log.util';
@@ -120,6 +121,7 @@ export class SupervisorWorker extends WorkerHost {
     private readonly channelSync: ChannelSyncService,
     private readonly metrics: MetricsService,
     private readonly automation: AutomationService,
+    private readonly autonomy: AutonomyService,
     private readonly editorSvc: EditorService,
   ) {
     super();
@@ -1501,6 +1503,19 @@ export class SupervisorWorker extends WorkerHost {
           (msg) => this.log(jobId, projectId, msg),
         );
         this.log(jobId, projectId, 'Editor render complete ✓', `assetId=${result.assetId} · ${(result.sizeBytes / 1024 / 1024).toFixed(1)} MB`);
+        return result;
+      }
+
+      case 'CALENDAR_PROPOSAL': {
+        const channelId = payload['channelId'] as string;
+        if (!channelId) throw new Error('CALENDAR_PROPOSAL requires payload.channelId');
+        const weeks = payload['weeks'] as number | undefined;
+        const perWeek = payload['perWeek'] as number | undefined;
+        const dryRun = payload['dryRun'] as boolean | undefined;
+        this.log(jobId, projectId, 'Generating AI content calendar…', `channel=${channelId} weeks=${weeks ?? 2} perWeek=${perWeek ?? 3}`);
+        const result = await this.autonomy.generateCalendarForJob(channelId, { weeks, perWeek, dryRun });
+        this.log(jobId, projectId, 'Calendar generation complete ✓', `${result.entries.length} slot(s) — source: ${result.source}`);
+        this.events.emitJobUpdate(jobId, { step: 'CALENDAR_PROPOSAL', status: 'COMPLETED' }, projectId);
         return result;
       }
 

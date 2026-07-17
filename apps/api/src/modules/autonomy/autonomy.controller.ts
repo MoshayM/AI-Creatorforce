@@ -53,6 +53,16 @@ export class AutonomyController {
     return this.svc.generateCalendar(channelId, user.sub, dto);
   }
 
+  /** Async variant: returns a jobId immediately; poll GET /jobs/:id for completion. */
+  @Post('channels/:channelId/calendar/generate-async')
+  generateAsync(
+    @Param('channelId') channelId: string,
+    @Body() dto: GenerateCalendarDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.svc.generateCalendarQueued(channelId, user.sub, dto);
+  }
+
   @Get('channels/:channelId/calendar')
   list(
     @Param('channelId') channelId: string,

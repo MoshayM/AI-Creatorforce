@@ -27,6 +27,7 @@ import { TrialModule } from '../modules/trial/trial.module';
 import { GatewayModule } from '../gateway/gateway.module';
 import { ChannelsModule } from '../modules/channels/channels.module';
 import { AutomationModule } from '../modules/automation/automation.module';
+import { AutonomyModule } from '../modules/autonomy/autonomy.module';
 import { EditorModule } from '../modules/editor/editor.module';
 
 @Module({
@@ -57,6 +58,7 @@ import { EditorModule } from '../modules/editor/editor.module';
     ChannelsModule,
     MetricsModule,
     AutomationModule,
+    AutonomyModule,
     EditorModule,
   ],
   providers: [SupervisorWorker],

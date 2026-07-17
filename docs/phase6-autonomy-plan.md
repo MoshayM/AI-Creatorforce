@@ -43,17 +43,24 @@ compliance) stays untouched. No autonomous publishing in this phase.
 
 ## Milestone 4 — Testing & hardening
 
-- Extend `apps/e2e/autonomy-smoke.cjs` into a proper Playwright spec.
-- Synthetic-channel alpha per spec §4; heuristic mode doubles as the zero-cost test path.
+| Item | Status | Where |
+|---|---|---|
+| Proper Playwright spec | ✅ | `apps/e2e/src/autonomy.spec.ts` — 12 tests across profile cards, calendar generate, dry-run, critique display, approve/dismiss, Scheduler AI chips, Automation toggles, and guiding-constraint assertion (no publish button). All API calls mocked via route intercepts. |
+| Synthetic-channel alpha (spec §4) | ✅ | `SYNTHETIC_CHANNEL` + `SYNTHETIC_PROFILE` mock data in `autonomy.spec.ts`; heuristic-path sub-suite (`describe('synthetic channel alpha')`) verifies zero-cost generation with `source='heuristic'` and `critique=null`. No real YouTube OAuth or AI API key required. |
+| `CALENDAR_PROPOSAL` job type on queue | ✅ | Added to `JobTypeSchema` + Prisma enum (migration `20260717192741_autonomy_m4_calendar_proposal`). `generateCalendarForJob()` in `AutonomyService` is the supervisor-callable wrapper. `case 'CALENDAR_PROPOSAL'` in `supervisor.worker.ts`. `POST /autonomy/channels/:id/calendar/generate-async` returns `{jobId}`; caller polls `GET /jobs/:id`. `AutonomyModule` imported in `WorkersModule`. |
+| Feed real analytics into profile | ⬜ | Replace `LibraryVideo` proxies with analytics module retention/CTR once snapshots cover enough history. |
+| Vector memory | ⬜ | Profile JSON is deliberate M1-lite; revisit vector store (spec §5) only when reasoning needs recall beyond the snapshot. Local-first: pgvector over Pinecone. |
 
 ## API surface (shipped)
 
 ```
 GET  /api/v1/autonomy/channels/:channelId/profile?refresh=true
-POST /api/v1/autonomy/channels/:channelId/calendar/generate  { weeks?, perWeek?, dryRun? }
+POST /api/v1/autonomy/channels/:channelId/calendar/generate        { weeks?, perWeek?, dryRun? }
+POST /api/v1/autonomy/channels/:channelId/calendar/generate-async  { weeks?, perWeek?, dryRun? } → { jobId }
 GET  /api/v1/autonomy/channels/:channelId/calendar?status=&from=&to=
 POST /api/v1/autonomy/calendar/:entryId/approve
 POST /api/v1/autonomy/calendar/:entryId/dismiss
 ```
 
 Models: `ChannelProfile`, `ContentCalendarEntry` (+ `CalendarFormat`, `CalendarEntryStatus`) — migration `20260717061903_phase6_autonomy_calendar`.
+JobType: `CALENDAR_PROPOSAL` — migration `20260717192741_autonomy_m4_calendar_proposal`.
