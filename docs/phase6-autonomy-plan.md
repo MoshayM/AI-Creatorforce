@@ -34,9 +34,12 @@ compliance) stays untouched. No autonomous publishing in this phase.
 
 ## Milestone 3 — Autonomy core
 
-- Approved entry → auto-enqueue `RESEARCH` for the draft video (opt-in), chaining the existing production pipeline.
-- Escalation protocol: entries older than N days unreviewed → notification via the notifications module.
-- Audit: calendar decisions already persist (`source`, `rationale`, `batchId`); add `AgentLog` rows once generation moves onto the queue.
+| Item | Status | Where |
+|---|---|---|
+| Auto-research on approve (opt-in) | ✅ | `autoResearch` flag on `ChannelAutomation` (migration `20260718_autonomy_m3_auto_research`). `approve()` in `autonomy.service.ts` enqueues `RESEARCH` with `topic=entry.title` when flag is set; best-effort, never blocks the response. Toggle in Automation UI. |
+| Escalation protocol | ✅ | `escalateStale()` in `autonomy.service.ts` — finds `PROPOSED` entries > 3 days old, fires `CALENDAR_STALE` in-app notification (24 h dedupe). Called from `automation.service.ts` step **f** in `tickChannel()` on every heartbeat. |
+| Audit (lightweight) | ✅ | Structured log lines via `AutonomyService.logger` on every approve/escalate/auto-research action — visible in `logs/api.log`. Full `AgentLog` rows deferred to when generation moves to the queue. |
+| Multi-step autonomous planning in Supervisor | 🔨 | Move `generateCalendarInternal()` onto the `AGENT_QUEUE` as a `CALENDAR_PROPOSAL` `JobType` so generation gets credit reservation and AgentJob audit trail like other workers. |
 
 ## Milestone 4 — Testing & hardening
 

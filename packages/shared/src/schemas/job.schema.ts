@@ -88,6 +88,8 @@ export const AutomationSettingsSchema = z.object({
   chapterSyncEnabled: z.boolean(),
   /** Phase 6 M2: autonomous calendar top-up (planning only — never publishes). */
   autoPlan: z.boolean().default(false),
+  /** Phase 6 M3: auto-enqueue RESEARCH job when a calendar entry is approved. */
+  autoResearch: z.boolean().default(false),
   publishIntervalMinutes: z.number().int().min(15).max(1440),
   maxPublishesPerDay: z.number().int().min(1).max(10),
   maxImportsPerDay: z.number().int().min(1).max(10),

@@ -3,6 +3,8 @@ import { randomUUID } from 'crypto';
 import type { CalendarEntryStatus, ContentCalendarEntry, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { TrendService } from '../trend/trend.service';
+import { JobsService } from '../jobs/jobs.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { callAIStructured, type TrendOutput } from '@cf/shared';
 import { z } from 'zod';
 
@@ -82,6 +84,8 @@ export class AutonomyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly trend: TrendService,
+    private readonly jobs: JobsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private async assertChannelOwnership(channelId: string, userId: string) {
@@ -456,6 +460,27 @@ export class AutonomyService {
       },
     });
 
+    // M3: if the channel opted into autoResearch, kick off RESEARCH immediately
+    // so the pipeline can start while the human moves on. Best-effort — never
+    // blocks the approve response.
+    try {
+      const channelAutomation = await this.prisma.channelAutomation.findUnique({
+        where: { channelId: entry.channelId },
+        select: { autoResearch: true },
+      });
+      if (channelAutomation?.autoResearch) {
+        await this.jobs.enqueue(
+          project.id,
+          'RESEARCH',
+          { topic: entry.title },
+          { idempotencyKey: `auto-research:${video.id}` },
+        );
+        this.logger.log(`[AutoResearch] Enqueued RESEARCH for video=${video.id} (calendar entry=${entry.id})`);
+      }
+    } catch (err) {
+      this.logger.warn(`[AutoResearch] Failed to enqueue RESEARCH (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+    }
+
     return this.prisma.contentCalendarEntry.update({
       where: { id: entry.id },
       data: { status: 'APPROVED', videoId: video.id },
@@ -468,5 +493,43 @@ export class AutonomyService {
       where: { id: entry.id },
       data: { status: 'DISMISSED' },
     });
+  }
+
+  /**
+   * M3 — Escalation: called from the automation tick.
+   * Finds PROPOSED entries that have been waiting > STALE_DAYS without review
+   * and fires an in-app notification to the channel owner so they don't miss them.
+   * Safe to call every tick — the NotificationsService dedupes within 24 h.
+   */
+  async escalateStale(channelId: string, log: (msg: string) => void): Promise<void> {
+    const STALE_DAYS = 3;
+    const cutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
+
+    const stale = await this.prisma.contentCalendarEntry.findMany({
+      where: { channelId, status: 'PROPOSED', createdAt: { lte: cutoff } },
+      include: { channel: { select: { userId: true, title: true } } },
+      orderBy: { plannedAt: 'asc' },
+      take: 10,
+    });
+
+    if (!stale.length) {
+      log(`[Escalation] channel=${channelId} no stale proposals`);
+      return;
+    }
+
+    const userId = stale[0]!.channel.userId;
+    const channelTitle = stale[0]!.channel.title ?? 'your channel';
+    const count = stale.length;
+    const oldest = stale[0]!;
+
+    await this.notifications.notify(
+      userId,
+      'CALENDAR_STALE',
+      `${count} content proposal${count > 1 ? 's' : ''} awaiting review`,
+      `"${oldest.title}" and ${count - 1} other${count > 1 ? 's' : ''} for ${channelTitle} have been waiting more than ${STALE_DAYS} days. Visit Autonomy to approve or dismiss.`,
+      { channelId, count, oldestEntryId: oldest.id },
+    );
+
+    log(`[Escalation] channel=${channelId} notified userId=${userId} — ${count} stale proposal(s)`);
   }
 }

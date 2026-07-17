@@ -14,6 +14,7 @@ const DEFAULTS: AutomationSettings = {
   autoPublish: false,
   chapterSyncEnabled: false,
   autoPlan: false,
+  autoResearch: false,
   publishIntervalMinutes: 240,
   maxPublishesPerDay: 2,
   maxImportsPerDay: 3,
@@ -28,6 +29,7 @@ interface ChannelAutomationRow {
   autoPublish: boolean;
   chapterSyncEnabled: boolean;
   autoPlan: boolean;
+  autoResearch: boolean;
   publishIntervalMinutes: number;
   maxPublishesPerDay: number;
   maxImportsPerDay: number;
@@ -76,6 +78,7 @@ export class AutomationService {
       autoPublish: row.autoPublish,
       chapterSyncEnabled: row.chapterSyncEnabled,
       autoPlan: row.autoPlan,
+      autoResearch: row.autoResearch,
       publishIntervalMinutes: row.publishIntervalMinutes,
       maxPublishesPerDay: row.maxPublishesPerDay,
       maxImportsPerDay: row.maxImportsPerDay,
@@ -100,6 +103,7 @@ export class AutomationService {
       autoPublish: row.autoPublish,
       chapterSyncEnabled: row.chapterSyncEnabled,
       autoPlan: row.autoPlan,
+      autoResearch: row.autoResearch,
       publishIntervalMinutes: row.publishIntervalMinutes,
       maxPublishesPerDay: row.maxPublishesPerDay,
       maxImportsPerDay: row.maxImportsPerDay,
@@ -127,6 +131,7 @@ export class AutomationService {
       autoPublish: false,
       chapterSyncEnabled: false,
       autoPlan: false,
+      autoResearch: false,
       publishIntervalMinutes: Math.max(
         120,
         Math.min(720, Math.round(1440 / Math.max(1, Math.round((uploadsPerWeek / 7) * 2)))),
@@ -163,6 +168,7 @@ Return a JSON object with these exact fields:
 - autoPublish (boolean, false)
 - chapterSyncEnabled (boolean, false)
 - autoPlan (boolean, false)
+- autoResearch (boolean, false)
 - publishIntervalMinutes (integer 15-1440): minutes between auto-publishes
 - maxPublishesPerDay (integer 1-10): max clips published per day
 - maxImportsPerDay (integer 1-10): max videos imported per day
@@ -483,6 +489,18 @@ Return a JSON object with these exact fields:
           );
         }
       }
+    }
+
+    // ── f. escalateStale (Phase 6 M3) ────────────────────────────────────────
+    // Notify the channel owner about PROPOSED entries that have been waiting
+    // more than 3 days without review. Runs every tick; NotificationsService
+    // dedupes within 24 h so we never spam the user.
+    try {
+      await this.autonomy.escalateStale(channelId, log);
+    } catch (err) {
+      this.logger.error(
+        `[AutomationTick] channel=${channelId} escalation error: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     // Update lastTickAt

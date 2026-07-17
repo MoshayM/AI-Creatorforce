@@ -2001,6 +2001,8 @@ model ChannelAutomation {
   /// Phase 6 M2: nightly profile refresh + calendar top-up (plans only; publishing gates untouched)
   autoPlan               Boolean   @default(false)
   lastPlanAt             DateTime?
+  /// Phase 6 M3: auto-enqueue RESEARCH for the draft video when a calendar entry is approved
+  autoResearch           Boolean   @default(false)
   lastTickAt             DateTime?
   aiSuggestion           Json?
   createdAt              DateTime  @default(now())

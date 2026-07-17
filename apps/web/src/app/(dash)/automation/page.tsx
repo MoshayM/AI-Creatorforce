@@ -92,6 +92,7 @@ const DEFAULT_FORM: Omit<ChannelAutomation, 'aiSuggestion' | 'lastTickAt'> = {
   autoPublish: false,
   chapterSyncEnabled: false,
   autoPlan: false,
+  autoResearch: false,
   publishIntervalMinutes: 60,
   maxPublishesPerDay: 3,
   maxImportsPerDay: 5,
@@ -139,6 +140,7 @@ export default function AutomationPage() {
       autoPublish: automationData.autoPublish,
       chapterSyncEnabled: automationData.chapterSyncEnabled,
       autoPlan: automationData.autoPlan,
+      autoResearch: automationData.autoResearch,
       publishIntervalMinutes: automationData.publishIntervalMinutes,
       maxPublishesPerDay: automationData.maxPublishesPerDay,
       maxImportsPerDay: automationData.maxImportsPerDay,
@@ -168,6 +170,7 @@ export default function AutomationPage() {
         autoPublish: suggestion.autoPublish,
         chapterSyncEnabled: suggestion.chapterSyncEnabled,
         autoPlan: suggestion.autoPlan,
+        autoResearch: suggestion.autoResearch,
         publishIntervalMinutes: clamp(suggestion.publishIntervalMinutes, PUBLISH_INTERVAL_MIN, PUBLISH_INTERVAL_MAX),
         maxPublishesPerDay: clamp(suggestion.maxPublishesPerDay, PUBLISHES_PER_DAY_MIN, PUBLISHES_PER_DAY_MAX),
         maxImportsPerDay: clamp(suggestion.maxImportsPerDay, IMPORTS_PER_DAY_MIN, IMPORTS_PER_DAY_MAX),
@@ -186,7 +189,7 @@ export default function AutomationPage() {
   }
 
   const featureToggles: Array<{
-    key: keyof Pick<typeof form, 'autoImport' | 'autoAnalyze' | 'autoPublish' | 'chapterSyncEnabled' | 'autoPlan'>;
+    key: keyof Pick<typeof form, 'autoImport' | 'autoAnalyze' | 'autoPublish' | 'chapterSyncEnabled' | 'autoPlan' | 'autoResearch'>;
     label: string;
     description: string;
   }> = [
@@ -214,6 +217,11 @@ export default function AutomationPage() {
       key: 'autoPlan',
       label: 'Auto-plan content calendar',
       description: 'Once a day, refreshes the channel profile and tops up the AI content calendar when future slots run low. Proposals only — you still approve every slot in Autonomy.',
+    },
+    {
+      key: 'autoResearch',
+      label: 'Auto-research on approve',
+      description: 'When you approve a calendar slot, automatically starts a RESEARCH job for the draft video so the pipeline is ready when you open it.',
     },
   ];
 

@@ -417,6 +417,7 @@ export interface ChannelAutomation {
   autoPublish: boolean;
   chapterSyncEnabled: boolean;
   autoPlan: boolean;
+  autoResearch: boolean;
   publishIntervalMinutes: number;
   maxPublishesPerDay: number;
   maxImportsPerDay: number;
