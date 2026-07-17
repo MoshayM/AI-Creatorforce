@@ -41,6 +41,7 @@ import { BiModule } from './modules/bi/bi.module';
 import { DevPortalModule } from './modules/dev-portal/dev-portal.module';
 import { FlagsModule } from './modules/flags/flags.module';
 import { AutomationModule } from './modules/automation/automation.module';
+import { AutonomyModule } from './modules/autonomy/autonomy.module';
 import { EditorModule } from './modules/editor/editor.module';
 
 @Module({
@@ -98,6 +99,7 @@ import { EditorModule } from './modules/editor/editor.module';
     DevPortalModule,
     FlagsModule,
     AutomationModule,
+    AutonomyModule,
     EditorModule,
     MetricsModule,
     HealthModule,

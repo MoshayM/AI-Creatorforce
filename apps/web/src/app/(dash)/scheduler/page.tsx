@@ -30,7 +30,7 @@ import {
   startOfWeek,
   subMonths,
 } from 'date-fns';
-import { api, type TrackedVideo, type TrackedVideoStatus, type PublishTrackingSummary } from '@/lib/api';
+import { api, type TrackedVideo, type TrackedVideoStatus, type PublishTrackingSummary, type CalendarEntry } from '@/lib/api';
 import { StatCard } from '@/components/stat-card';
 
 // ── Types & constants ────────────────────────────────────────────────────────
@@ -231,6 +231,27 @@ function MonthView({ channelId, onSelect }: { channelId: string; onSelect: (v: T
         .then((r) => r.data.data),
   });
 
+  // AI-planned slots (Autonomy) — channel-scoped, so only when one channel is selected
+  const { data: planned = [] } = useQuery<CalendarEntry[]>({
+    queryKey: ['scheduler-planned', channelId, format(month, 'yyyy-MM')],
+    queryFn: () =>
+      api.autonomy
+        .listCalendar(channelId, { from: gridStart.toISOString(), to: gridEnd.toISOString() })
+        .then((r) => r.data.filter((e) => e.status === 'PROPOSED' || e.status === 'APPROVED')),
+    enabled: !!channelId,
+  });
+
+  const plannedByDay = useMemo(() => {
+    const map = new Map<string, CalendarEntry[]>();
+    for (const e of planned) {
+      const key = format(new Date(e.plannedAt), 'yyyy-MM-dd');
+      const arr = map.get(key) ?? [];
+      arr.push(e);
+      map.set(key, arr);
+    }
+    return map;
+  }, [planned]);
+
   const byDay = useMemo(() => {
     const map = new Map<string, TrackedVideo[]>();
     for (const v of videos) {
@@ -273,6 +294,9 @@ function MonthView({ channelId, onSelect }: { channelId: string; onSelect: (v: T
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400" /> Scheduled</span>
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500" /> Published</span>
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Failed</span>
+            {planned.length > 0 && (
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full border-2 border-dashed border-indigo-400" /> AI planned</span>
+            )}
           </div>
           <button
             type="button"
@@ -332,6 +356,15 @@ function MonthView({ channelId, onSelect }: { channelId: string; onSelect: (v: T
                   {dayVideos.length > 3 && (
                     <span className="text-[10px] text-gray-500 px-1.5">+{dayVideos.length - 3} more</span>
                   )}
+                  {(plannedByDay.get(key) ?? []).slice(0, Math.max(0, 3 - dayVideos.length)).map((e) => (
+                    <span
+                      key={e.id}
+                      title={`AI planned (${e.status.toLowerCase()}): ${e.title}`}
+                      className="text-left text-[11px] leading-tight px-1.5 py-1 rounded border border-dashed truncate bg-indigo-50/60 text-indigo-800 border-indigo-300"
+                    >
+                      {e.title}
+                    </span>
+                  ))}
                 </div>
               );
             })}

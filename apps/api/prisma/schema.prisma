@@ -106,6 +106,8 @@ model Channel {
   libraryVideos      LibraryVideo[]
   libraryPlaylists   LibraryPlaylist[]
   automation         ChannelAutomation?
+  profile            ChannelProfile?
+  calendarEntries    ContentCalendarEntry[]
 
   @@map("channels")
 }
@@ -2002,4 +2004,57 @@ model ChannelAutomation {
   updatedAt              DateTime  @updatedAt
 
   @@map("channel_automations")
+}
+
+// ── Phase 6: AI Autonomy ──────────────────────────────────────────────────────
+
+/// Long-term channel memory: aggregated performance/cadence facts the
+/// autonomy layer reasons over. Rebuilt on demand; `profile` is the JSON
+/// snapshot (cadence, best slots, format mix, top titles, niche summary).
+model ChannelProfile {
+  id         String   @id @default(cuid())
+  channelId  String   @unique
+  channel    Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  profile    Json
+  computedAt DateTime @default(now())
+
+  @@map("channel_profiles")
+}
+
+/// One AI-proposed slot on the autonomous content calendar. Approving an
+/// entry creates a DRAFT Video (human approval gates stay untouched —
+/// autonomy plans, humans still green-light everything that publishes).
+model ContentCalendarEntry {
+  id        String                   @id @default(cuid())
+  channelId String
+  channel   Channel                  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  batchId   String
+  title     String
+  angle     String?
+  format    CalendarFormat           @default(VIDEO)
+  plannedAt DateTime
+  priority  Int                      @default(50)
+  keywords  String[]                 @default([])
+  rationale String?
+  source    String                   @default("ai")
+  status    CalendarEntryStatus      @default(PROPOSED)
+  videoId   String?
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  @@index([channelId, status])
+  @@index([channelId, plannedAt])
+  @@map("content_calendar_entries")
+}
+
+enum CalendarFormat {
+  VIDEO
+  SHORT
+}
+
+enum CalendarEntryStatus {
+  PROPOSED
+  APPROVED
+  DISMISSED
+  SCHEDULED
 }

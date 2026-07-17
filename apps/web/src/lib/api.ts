@@ -428,6 +428,56 @@ export interface AutomationSuggestion {
   source: 'ai' | 'heuristic';
 }
 
+// ── Autonomy (Phase 6): channel profile + AI content calendar ────────────────
+
+export type CalendarEntryStatus = 'PROPOSED' | 'APPROVED' | 'DISMISSED' | 'SCHEDULED';
+export type CalendarFormat = 'VIDEO' | 'SHORT';
+
+export interface CalendarEntry {
+  id: string;
+  channelId: string;
+  batchId: string;
+  title: string;
+  angle: string | null;
+  format: CalendarFormat;
+  plannedAt: string;
+  priority: number;
+  keywords: string[];
+  rationale: string | null;
+  source: string;
+  status: CalendarEntryStatus;
+  videoId: string | null;
+  createdAt: string;
+}
+
+export interface ChannelProfileData {
+  niche: string;
+  subscriberCount: number;
+  totalUploads: number;
+  uploadsPerWeek90d: number;
+  avgViews90d: number;
+  bestWeekdays: string[];
+  bestHourUtc: number;
+  formatMix: { videos: number; shorts: number };
+  topTitles: string[];
+  pipeline: Record<string, number>;
+}
+
+export interface ChannelProfileRow {
+  id: string;
+  channelId: string;
+  profile: ChannelProfileData;
+  computedAt: string;
+}
+
+export interface GenerateCalendarResult {
+  batchId: string | null;
+  source: 'ai' | 'heuristic';
+  dryRun: boolean;
+  profile: ChannelProfileData;
+  entries: Array<Omit<CalendarEntry, 'id' | 'status' | 'createdAt'> & Partial<Pick<CalendarEntry, 'id' | 'status' | 'createdAt'>>>;
+}
+
 // ── Scheduler / publish tracking ─────────────────────────────────────────────
 
 export type TrackedVideoStatus = 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
@@ -725,6 +775,24 @@ export const api = {
       ),
     reorderPlaylist: (channelId: string, playlistId: string, itemIds: string[]) =>
       apiClient.patch(`/channels/${channelId}/playlists/${playlistId}/order`, { itemIds }),
+  },
+  autonomy: {
+    profile: (channelId: string, refresh = false) =>
+      apiClient.get<ChannelProfileRow>(`/autonomy/channels/${channelId}/profile${refresh ? '?refresh=true' : ''}`),
+    generateCalendar: (channelId: string, body?: { weeks?: number; perWeek?: number; dryRun?: boolean }) =>
+      apiClient.post<GenerateCalendarResult>(`/autonomy/channels/${channelId}/calendar/generate`, body ?? {}),
+    listCalendar: (channelId: string, params?: { status?: CalendarEntryStatus; from?: string; to?: string }) => {
+      const sp = new URLSearchParams();
+      if (params?.status) sp.set('status', params.status);
+      if (params?.from) sp.set('from', params.from);
+      if (params?.to) sp.set('to', params.to);
+      const qs = sp.toString();
+      return apiClient.get<CalendarEntry[]>(`/autonomy/channels/${channelId}/calendar${qs ? `?${qs}` : ''}`);
+    },
+    approveEntry: (entryId: string) =>
+      apiClient.post<CalendarEntry>(`/autonomy/calendar/${entryId}/approve`),
+    dismissEntry: (entryId: string) =>
+      apiClient.post<CalendarEntry>(`/autonomy/calendar/${entryId}/dismiss`),
   },
   publishing: {
     listVideos: (params?: {
