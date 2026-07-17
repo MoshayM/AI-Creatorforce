@@ -59,12 +59,12 @@ export class ChannelsController {
     // Handle user denying access on Google's consent screen
     if (oauthError) {
       this.logger.warn(`[OAuth] Access denied by user — error=${oauthError}`);
-      return { url: `${WEB_URL}/settings?error=${encodeURIComponent(oauthError)}` };
+      return { url: `${WEB_URL}/channel-access?error=${encodeURIComponent(oauthError)}` };
     }
 
     if (!code || !state) {
       this.logger.error(`[OAuth] Callback missing code or state`);
-      return { url: `${WEB_URL}/settings?error=missing_params` };
+      return { url: `${WEB_URL}/channel-access?error=missing_params` };
     }
 
     this.logger.log(`[OAuth] Callback received — exchanging code`);
@@ -80,7 +80,7 @@ export class ChannelsController {
       const redirectUri = `${API_URL}/api/v1/channels/oauth/callback`;
       await this.svc.connectChannel(userId, code, redirectUri);
       this.logger.log(`[OAuth] Connection successful — redirecting to settings`);
-      return { url: `${WEB_URL}/settings?connected=true` };
+      return { url: `${WEB_URL}/channel-access?connected=true` };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown_error';
       this.logger.error(`[OAuth] Connection failed — ${message}`);
@@ -92,7 +92,7 @@ export class ChannelsController {
       else if (message.includes('redirect_uri_mismatch')) code = 'redirect_mismatch';
       else if (message.includes('invalid_client')) code = 'invalid_client';
 
-      return { url: `${WEB_URL}/settings?error=${code}` };
+      return { url: `${WEB_URL}/channel-access?error=${code}` };
     }
   }
 

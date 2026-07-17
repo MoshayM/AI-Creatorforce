@@ -25,8 +25,8 @@ const NAV: NavItem[] = [
     icon: Settings,
     label: 'Settings',
     children: [
-      { href: '/library', icon: ListVideo, label: 'Library' },
-      { href: '/settings#channels', icon: Youtube, label: 'YouTube channel access' },
+      { href: '/library', icon: ListVideo, label: 'Media Control' },
+      { href: '/channel-access', icon: Youtube, label: 'Channel access' },
       { href: '/wallet', icon: Wallet, label: 'Wallet' },
       { href: '/orgs', icon: Building2, label: 'Organization' },
       { href: '/growth', icon: Gift, label: 'Growth' },

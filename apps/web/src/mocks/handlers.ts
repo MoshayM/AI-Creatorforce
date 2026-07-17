@@ -572,7 +572,7 @@ export const handlers = [
       dynamicChannels.push(dynCh);
       saveChannelToSession(dynCh);
     }
-    return HttpResponse.json({ url: 'http://localhost:3007/settings?connected=true' });
+    return HttpResponse.json({ url: 'http://localhost:3007/channel-access?connected=true' });
   }),
 
   // Simulate OAuth error callback — used in E2E tests by navigating to

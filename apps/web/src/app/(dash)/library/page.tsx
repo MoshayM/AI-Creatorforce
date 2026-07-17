@@ -139,7 +139,7 @@ function LibraryPageInner() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <ListVideo className="w-6 h-6 text-brand-600" />
-            Library
+            Media Control
           </h1>
           <p className="text-gray-500 mt-1 text-sm">All videos, shorts and playlists for your channel</p>
         </div>
