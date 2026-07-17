@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
@@ -128,7 +128,49 @@ export class AuthService {
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
-    return { id: user.id, email: user.email, name: user.name, role: user.role };
+    return { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone ?? null };
+  }
+
+  async registerPasswordless(
+    email: string,
+    name?: string,
+    signals: { ip?: string; device?: string } = {},
+  ): Promise<AuthTokens> {
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) throw new ConflictException('Email already registered');
+
+    const isFirst = (await this.prisma.user.count()) === 0;
+    const user = await this.prisma.user.create({
+      data: { email, name, passwordHash: null, role: isFirst ? 'OWNER' : 'MEMBER', emailVerified: new Date() },
+    });
+
+    await this.trial
+      .grantTrial(user.id, user.email, { ...signals, verificationMethod: 'otp' })
+      .catch(() => undefined);
+
+    const tokens = await this.issueSessionTokens(user.id, user.email, {
+      device: signals.device,
+      ip: signals.ip,
+    });
+
+    await this.audit(user.id, 'auth.register_otp', { email: user.email });
+
+    return tokens;
+  }
+
+  async updatePhone(userId: string, phone: string | null): Promise<void> {
+    if (phone) {
+      const normalized = phone.trim();
+      const existing = await this.prisma.user.findFirst({
+        where: { phone: normalized, NOT: { id: userId } },
+        select: { id: true },
+      });
+      if (existing) throw new ConflictException('Phone number already in use');
+      await this.prisma.user.update({ where: { id: userId }, data: { phone: normalized } });
+    } else {
+      await this.prisma.user.update({ where: { id: userId }, data: { phone: null } });
+    }
+    await this.audit(userId, 'auth.phone_update', { phone: phone ? 'set' : 'removed' });
   }
 
   async validateJwt(payload: JwtPayload): Promise<JwtPayload> {

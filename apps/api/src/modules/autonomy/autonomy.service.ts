@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { CalendarEntryStatus, ContentCalendarEntry, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -24,7 +24,7 @@ const CalendarProposalSchema = z.object({
     .array(
       z.object({
         title: z.string().min(4),
-        angle: z.string().optional(),
+        angle: z.string().optional().describe('A compelling hook or angle — one punchy sentence that would stop a viewer mid-scroll'),
         format: z.enum(['VIDEO', 'SHORT']).default('VIDEO'),
         dayOffset: z.number().int().min(0).max(27),
         timeOfDay: z
@@ -546,6 +546,92 @@ export class AutonomyService {
       where: { id: entry.id },
       data: { status: 'DISMISSED' },
     });
+  }
+
+  // ── Calendar lifecycle ────────────────────────────────────────────────────
+
+  /**
+   * M5 — Auto-expire: called from the automation tick.
+   * Finds PROPOSED entries whose plannedAt has passed by more than 1 day
+   * (grace window avoids racing with same-day approval) and dismisses them.
+   * Triggers autoPlanTick() afterwards so the pipeline stays filled.
+   */
+  async expireOverdue(channelId: string, log: (msg: string) => void): Promise<void> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const overdue = await this.prisma.contentCalendarEntry.findMany({
+      where: { channelId, status: 'PROPOSED', plannedAt: { lt: cutoff } },
+      select: { id: true, title: true },
+    });
+
+    if (!overdue.length) return;
+
+    await this.prisma.contentCalendarEntry.updateMany({
+      where: { id: { in: overdue.map((e) => e.id) } },
+      data: { status: 'DISMISSED' },
+    });
+
+    log(`[autonomy] Expired ${overdue.length} overdue PROPOSED slot(s): ${overdue.map((e) => e.title).join(', ')}`);
+    this.logger.log(`expireOverdue: channel=${channelId} expired=${overdue.length}`);
+
+    try {
+      await this.autoPlanTick(channelId, (msg) => this.logger.log(msg));
+    } catch (err) {
+      this.logger.warn(`expireOverdue: autoPlanTick failed after expiry — ${String(err)}`);
+    }
+  }
+
+  /**
+   * M5 — Calendar stats: aggregate counts and derived metrics for the UI.
+   * Verifies channel ownership before querying.
+   */
+  async getCalendarStats(channelId: string, userId: string) {
+    const channel = await this.prisma.channel.findFirst({
+      where: { id: channelId, userId },
+      select: { id: true },
+    });
+    if (!channel) throw new ForbiddenException('Channel not found');
+
+    const now = new Date();
+    const next7d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const [statusGroups, upcoming7d, avgPriorityAgg] = await Promise.all([
+      this.prisma.contentCalendarEntry.groupBy({
+        by: ['status'],
+        where: { channelId },
+        _count: { id: true },
+      }),
+      this.prisma.contentCalendarEntry.count({
+        where: { channelId, status: { in: ['PROPOSED', 'APPROVED'] }, plannedAt: { gte: now, lte: next7d } },
+      }),
+      this.prisma.contentCalendarEntry.aggregate({
+        where: { channelId, status: { in: ['PROPOSED', 'APPROVED'] } },
+        _avg: { priority: true },
+      }),
+    ]);
+
+    const counts: Record<string, number> = {};
+    for (const g of statusGroups) {
+      counts[g.status] = g._count.id;
+    }
+
+    const total = Object.values(counts).reduce((s, n) => s + n, 0);
+    const approved = counts['APPROVED'] ?? 0;
+    const dismissed = counts['DISMISSED'] ?? 0;
+    const proposed = counts['PROPOSED'] ?? 0;
+    const scheduled = counts['SCHEDULED'] ?? 0;
+    const reviewed = approved + dismissed;
+    const approvalRate = reviewed > 0 ? Math.round((approved / reviewed) * 100) : null;
+
+    return {
+      total,
+      proposed,
+      approved,
+      dismissed,
+      scheduled,
+      upcoming7d,
+      approvalRate,
+      avgPriority: avgPriorityAgg._avg.priority != null ? Math.round(avgPriorityAgg._avg.priority) : null,
+    };
   }
 
   /**

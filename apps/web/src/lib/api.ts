@@ -524,7 +524,7 @@ export const api = {
     register: (email: string, password: string, name?: string) =>
       apiClient.post<{ accessToken: string; refreshToken: string; user: { id: string; email: string; name: string } }>('/auth/register', { email, password, name }),
     me: () =>
-      apiClient.get<{ id: string; email: string; name: string; role: string }>('/auth/me'),
+      apiClient.get<{ id: string; email: string; name: string; role: string; phone: string | null }>('/auth/me'),
     // OAuth / social auth
     providers: () =>
       apiClient.get<OAuthProviders>('/auth/providers'),
@@ -546,6 +546,16 @@ export const api = {
       apiClient.get<AuthLinksResponse>('/auth/links'),
     unlinkProvider: (provider: OAuthProvider) =>
       apiClient.delete(`/auth/link/${provider}`),
+    otpSend: (identifier: string) =>
+      apiClient.post('/auth/otp/send', { identifier }),
+    otpVerify: (identifier: string, code: string) =>
+      apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/otp/verify', { identifier, code }),
+    updatePhone: (phone: string | null) =>
+      apiClient.patch('/auth/me/phone', { phone }),
+    otpRegisterSend: (email: string) =>
+      apiClient.post('/auth/otp/register/send', { email }),
+    otpRegisterVerify: (email: string, code: string, name?: string) =>
+      apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/otp/register/verify', { email, code, ...(name ? { name } : {}) }),
   },
   channels: {
     list: () => apiClient.get('/channels'),
@@ -799,6 +809,8 @@ export const api = {
       apiClient.post<CalendarEntry>(`/autonomy/calendar/${entryId}/approve`),
     dismissEntry: (entryId: string) =>
       apiClient.post<CalendarEntry>(`/autonomy/calendar/${entryId}/dismiss`),
+    calendarStats: (channelId: string) =>
+      apiClient.get<{ total: number; proposed: number; approved: number; dismissed: number; scheduled: number; upcoming7d: number; approvalRate: number | null; avgPriority: number | null }>(`/autonomy/channels/${channelId}/calendar/stats`),
   },
   publishing: {
     listVideos: (params?: {

@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   Loader2, CheckCircle,
   LogOut, XCircle, Eye,
-  Key, Save, EyeOff, Shield, Monitor, Unlink, Link2,
+  Key, Save, EyeOff, Shield, Monitor, Unlink, Link2, Phone,
 } from 'lucide-react';
 import { api, type OAuthProvider, type AuthSession, type LinkedAccount, type OAuthProviders, type AuthLinksResponse } from '@/lib/api';
 import { Banner, type BannerState } from '@/components/banner';
@@ -26,6 +26,8 @@ function SettingsContent() {
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [apiKeyDrafts, setApiKeyDrafts] = useState<Record<string, string>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [phone, setPhone] = useState('');
+  const [phoneSaved, setPhoneSaved] = useState(false);
 
   const { data: me } = useQuery({
     queryKey: ['me'],
@@ -33,6 +35,10 @@ function SettingsContent() {
   });
 
   const isOwner = me?.role === 'OWNER' || me?.role === 'SUPER_ADMIN';
+
+  useEffect(() => {
+    if (me?.phone) setPhone(me.phone);
+  }, [me?.phone]);
 
   // ── Sign-in & security queries ──────────────────────────────────────────────
 
@@ -130,6 +136,24 @@ function SettingsContent() {
       void refetchLinks();
     }
   }, [justLinkedProvider]);
+
+  const updatePhoneMutation = useMutation({
+    mutationFn: (value: string | null) => api.auth.updatePhone(value),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me'] });
+      setPhoneSaved(true);
+      setBanner({ type: 'success', message: phone.trim() ? 'Phone number saved.' : 'Phone number removed.' });
+      setTimeout(() => setPhoneSaved(false), 3000);
+    },
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        setBanner({ type: 'error', message: 'That phone number is already linked to another account.' });
+      } else {
+        setBanner({ type: 'error', message: 'Failed to update phone number.' });
+      }
+    },
+  });
 
   const saveApiKeysMutation = useMutation({
     mutationFn: () => api.settings.updateApiKeys(apiKeyDrafts),
@@ -229,6 +253,38 @@ function SettingsContent() {
               </div>
             );
           })}
+        </div>
+
+        {/* Phone number */}
+        <div className="bg-white border border-gray-200 rounded-xl mb-4">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <p className="text-sm font-medium text-gray-800 flex items-center gap-1.5">
+              <Phone className="w-4 h-4 text-gray-500" />
+              Phone number
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">Optional. Add a phone number to sign in with OTP codes.</p>
+          </div>
+          <div className="px-4 py-3 flex items-center gap-3">
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+1 555 000 0000 (optional)"
+              className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <button
+              onClick={() => updatePhoneMutation.mutate(phone.trim() || null)}
+              disabled={updatePhoneMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white text-xs rounded-lg hover:bg-brand-700 disabled:opacity-50 shrink-0"
+            >
+              {updatePhoneMutation.isPending
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : phoneSaved
+                ? <CheckCircle className="w-3 h-3" />
+                : <Save className="w-3 h-3" />}
+              {phone.trim() ? 'Save' : 'Remove'}
+            </button>
+          </div>
         </div>
 
         {/* Active sessions */}

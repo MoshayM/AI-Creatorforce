@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Delete,
+  Patch,
   Body,
   HttpCode,
   HttpStatus,
@@ -16,6 +17,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsString, MinLength, IsOptional, IsIn } from 'class-validator';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
+import { OtpService } from './otp.service';
 import { SessionsService } from './sessions.service';
 import { OAuthService } from './oauth.service';
 import { ProviderRegistry } from './providers/provider.registry';
@@ -61,11 +63,35 @@ class AppleReturnDto {
   @IsString() state!: string;
 }
 
+class OtpSendDto {
+  @IsString() identifier!: string;
+}
+
+class OtpRegisterSendDto {
+  @IsEmail() email!: string;
+}
+
+class OtpRegisterVerifyDto {
+  @IsEmail() email!: string;
+  @IsString() code!: string;
+  @IsString() @IsOptional() name?: string;
+}
+
+class OtpVerifyDto {
+  @IsString() identifier!: string;
+  @IsString() code!: string;
+}
+
+class UpdatePhoneDto {
+  @IsString() @IsOptional() phone?: string | null;
+}
+
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
+    private readonly otp: OtpService,
     private readonly sessions: SessionsService,
     private readonly oauth: OAuthService,
     private readonly registry: ProviderRegistry,
@@ -226,5 +252,56 @@ export class AuthController {
     @Param('provider') provider: string,
   ): Promise<void> {
     await this.oauth.unlink(user.sub, provider);
+  }
+
+  // ── OTP sign-in endpoints ─────────────────────────────────────────────────────
+
+  /** POST /auth/otp/send — send a 6-digit sign-in code to email or phone. */
+  @Post('otp/send')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RateLimit({ bucket: 'auth-otp-send', limit: 5, windowSecs: 600 })
+  async otpSend(@Body() dto: OtpSendDto): Promise<void> {
+    await this.otp.send(dto.identifier);
+  }
+
+  /** POST /auth/otp/verify — verify code and return session tokens. */
+  @Post('otp/verify')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit({ bucket: 'auth-otp-verify', limit: 10, windowSecs: 60 })
+  otpVerify(@Body() dto: OtpVerifyDto, @Req() req: Request) {
+    return this.otp.verify(dto.identifier, dto.code, {
+      ip: req.ip,
+      device: req.headers['user-agent'],
+    });
+  }
+
+  /** POST /auth/otp/register/send — send code to unregistered email to begin OTP signup. */
+  @Post('otp/register/send')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RateLimit({ bucket: 'auth-otp-reg-send', limit: 5, windowSecs: 600 })
+  async otpRegisterSend(@Body() dto: OtpRegisterSendDto): Promise<void> {
+    await this.otp.registerSend(dto.email);
+  }
+
+  /** POST /auth/otp/register/verify — verify code and create a passwordless account. */
+  @Post('otp/register/verify')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit({ bucket: 'auth-otp-reg-verify', limit: 10, windowSecs: 60 })
+  otpRegisterVerify(@Body() dto: OtpRegisterVerifyDto, @Req() req: Request) {
+    return this.otp.registerVerify(dto.email, dto.code, dto.name, {
+      ip: req.ip,
+      device: req.headers['user-agent'],
+    });
+  }
+
+  /** PATCH /auth/me/phone — add or update the authenticated user's phone number. */
+  @Patch('me/phone')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async updatePhone(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdatePhoneDto,
+  ): Promise<void> {
+    await this.auth.updatePhone(user.sub, dto.phone ?? null);
   }
 }

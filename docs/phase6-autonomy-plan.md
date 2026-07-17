@@ -51,6 +51,16 @@ compliance) stays untouched. No autonomous publishing in this phase.
 | Feed real analytics into profile | ⬜ | Replace `LibraryVideo` proxies with analytics module retention/CTR once snapshots cover enough history. |
 | Vector memory | ⬜ | Profile JSON is deliberate M1-lite; revisit vector store (spec §5) only when reasoning needs recall beyond the snapshot. Local-first: pgvector over Pinecone. |
 
+## Milestone 5 — Calendar lifecycle management
+
+| Item | Status | Where |
+|---|---|---|
+| Auto-expire overdue proposals | ✅ | `expireOverdue()` in `autonomy.service.ts` — PROPOSED entries past `plannedAt` by > 1 day auto-dismissed; triggers `autoPlanTick()` replan. Called from `automation.service.ts` step **g** in `tickChannel()`. |
+| Calendar stats endpoint | ✅ | `getCalendarStats()` in `autonomy.service.ts` + `GET /autonomy/channels/:id/calendar/stats` — returns total/proposed/approved/dismissed/scheduled counts, upcoming7d count, approvalRate%, avgPriority. |
+| Hook-focused angle prompt | ✅ | `CalendarProposalSchema.angle` description updated to prompt the AI for a punchy one-sentence scroll-stopper hook rather than a generic description. |
+| Title variants per entry | ⬜ | Schema migration needed: `titleVariants String[] @default([])` on `ContentCalendarEntry`; generate 2-3 alternatives in AI call; surface in proposal cards. |
+| Performance feedback loop | ⬜ | Feed actual view/like counts from `LibraryVideo`/`AnalyticsSnapshot` back into profile scoring after videos publish. |
+
 ## API surface (shipped)
 
 ```
@@ -58,6 +68,7 @@ GET  /api/v1/autonomy/channels/:channelId/profile?refresh=true
 POST /api/v1/autonomy/channels/:channelId/calendar/generate        { weeks?, perWeek?, dryRun? }
 POST /api/v1/autonomy/channels/:channelId/calendar/generate-async  { weeks?, perWeek?, dryRun? } → { jobId }
 GET  /api/v1/autonomy/channels/:channelId/calendar?status=&from=&to=
+GET  /api/v1/autonomy/channels/:channelId/calendar/stats
 POST /api/v1/autonomy/calendar/:entryId/approve
 POST /api/v1/autonomy/calendar/:entryId/dismiss
 ```

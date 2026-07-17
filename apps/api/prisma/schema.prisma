@@ -27,6 +27,7 @@ model User {
   avatarUrl     String?
   passwordHash  String?
   emailVerified DateTime?
+  phone         String?   @unique
   role          UserRole  @default(OWNER)
   /** §7: set by dispute webhooks — blocks new recharges pending fraud review. */
   rechargesFrozen Boolean @default(false)
@@ -1698,6 +1699,26 @@ model OAuthState {
   usedAt       DateTime?
 
   @@map("oauth_states")
+}
+
+// ── OTP Codes ─────────────────────────────────────────────────────────────────
+
+enum OtpType {
+  EMAIL
+  PHONE
+}
+
+model OtpCode {
+  id         String    @id @default(cuid())
+  identifier String
+  codeHash   String
+  type       OtpType
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([identifier, usedAt, expiresAt])
+  @@map("otp_codes")
 }
 
 // ── Channel Library (spec §08) ────────────────────────────────────────────────

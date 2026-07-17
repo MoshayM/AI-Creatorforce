@@ -503,6 +503,16 @@ Return a JSON object with these exact fields:
       );
     }
 
+    // ── g. expireOverdue (Phase 6 M5) ────────────────────────────────────────
+    // Auto-dismiss PROPOSED entries whose plannedAt has passed by > 1 day and
+    // refill the pipeline via autoPlanTick(). Safe every tick — no-ops quickly
+    // when nothing is overdue.
+    try {
+      await this.autonomy.expireOverdue(channelId, log);
+    } catch (err) {
+      log(`[warn] expireOverdue failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
     // Update lastTickAt
     await this.prisma.channelAutomation.update({
       where: { channelId },

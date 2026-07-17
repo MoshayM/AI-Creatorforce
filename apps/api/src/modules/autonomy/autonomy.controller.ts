@@ -63,6 +63,14 @@ export class AutonomyController {
     return this.svc.generateCalendarQueued(channelId, user.sub, dto);
   }
 
+  @Get('channels/:channelId/calendar/stats')
+  calendarStats(
+    @Param('channelId') channelId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.svc.getCalendarStats(channelId, user.sub);
+  }
+
   @Get('channels/:channelId/calendar')
   list(
     @Param('channelId') channelId: string,
