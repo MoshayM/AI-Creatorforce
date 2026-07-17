@@ -91,6 +91,7 @@ const DEFAULT_FORM: Omit<ChannelAutomation, 'aiSuggestion' | 'lastTickAt'> = {
   autoAnalyze: false,
   autoPublish: false,
   chapterSyncEnabled: false,
+  autoPlan: false,
   publishIntervalMinutes: 60,
   maxPublishesPerDay: 3,
   maxImportsPerDay: 5,
@@ -137,6 +138,7 @@ export default function AutomationPage() {
       autoAnalyze: automationData.autoAnalyze,
       autoPublish: automationData.autoPublish,
       chapterSyncEnabled: automationData.chapterSyncEnabled,
+      autoPlan: automationData.autoPlan,
       publishIntervalMinutes: automationData.publishIntervalMinutes,
       maxPublishesPerDay: automationData.maxPublishesPerDay,
       maxImportsPerDay: automationData.maxImportsPerDay,
@@ -165,6 +167,7 @@ export default function AutomationPage() {
         autoAnalyze: suggestion.autoAnalyze,
         autoPublish: suggestion.autoPublish,
         chapterSyncEnabled: suggestion.chapterSyncEnabled,
+        autoPlan: suggestion.autoPlan,
         publishIntervalMinutes: clamp(suggestion.publishIntervalMinutes, PUBLISH_INTERVAL_MIN, PUBLISH_INTERVAL_MAX),
         maxPublishesPerDay: clamp(suggestion.maxPublishesPerDay, PUBLISHES_PER_DAY_MIN, PUBLISHES_PER_DAY_MAX),
         maxImportsPerDay: clamp(suggestion.maxImportsPerDay, IMPORTS_PER_DAY_MIN, IMPORTS_PER_DAY_MAX),
@@ -183,7 +186,7 @@ export default function AutomationPage() {
   }
 
   const featureToggles: Array<{
-    key: keyof Pick<typeof form, 'autoImport' | 'autoAnalyze' | 'autoPublish' | 'chapterSyncEnabled'>;
+    key: keyof Pick<typeof form, 'autoImport' | 'autoAnalyze' | 'autoPublish' | 'chapterSyncEnabled' | 'autoPlan'>;
     label: string;
     description: string;
   }> = [
@@ -206,6 +209,11 @@ export default function AutomationPage() {
       key: 'chapterSyncEnabled',
       label: 'Keep chapters synced',
       description: 'Automatically syncs YouTube chapter markers from source videos.',
+    },
+    {
+      key: 'autoPlan',
+      label: 'Auto-plan content calendar',
+      description: 'Once a day, refreshes the channel profile and tops up the AI content calendar when future slots run low. Proposals only — you still approve every slot in Autonomy.',
     },
   ];
 

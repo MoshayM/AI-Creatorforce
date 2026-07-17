@@ -23,9 +23,14 @@ compliance) stays untouched. No autonomous publishing in this phase.
 
 ## Milestone 2 — Intelligence layer
 
-- Nightly `AUTOMATION_TICK` extension: refresh stale `ChannelProfile`s and top up calendars for channels that opt in (`ChannelAutomation` gets an `autoPlan` flag).
-- Feed real analytics into the profile: replace `LibraryVideo` proxies with the analytics module's retention/CTR once its snapshots cover enough history.
-- Self-critique pass: second `callAIStructured()` round that scores the proposed calendar against the profile before returning (spec §3.3).
+| Item | Status | Where |
+|---|---|---|
+| `autoPlan` flag on `ChannelAutomation` | ✅ | `schema.prisma` → migration `20260717104947_automation_auto_plan`. `AutomationSettingsSchema` updated with `autoPlan: z.boolean().default(false)`. |
+| Auto-plan tick in Supervisor | ✅ | `automation.service.ts` step **e**: every 20 h per channel (guard via `lastPlanAt`), stamps before AI call to prevent retry storms, calls `autonomy.autoPlanTick()`. |
+| `autoPlanTick()` | ✅ | `autonomy.service.ts` — counts upcoming `PROPOSED`+`APPROVED` slots; tops up via `generateCalendarInternal({weeks:2})` when < 3 future slots remain. |
+| Self-critique pass | ✅ | `CritiqueSchema` + `critiqueProposal()` in `autonomy.service.ts` — second `callAIStructured` judges first draft, drops `keep=false` entries, re-scores priorities. Critique summary surfaced in UI (`/autonomy` page) and returned in `GenerateCalendarResult.critique`. |
+| Auto-plan toggle in Automation UI | ✅ | `automation/page.tsx` — "Auto-plan content calendar" toggle with description; wired to `autoPlan` field. |
+| Feed real analytics into profile | ⬜ | Replace `LibraryVideo` proxies with analytics module retention/CTR once snapshots cover enough history. |
 
 ## Milestone 3 — Autonomy core
 

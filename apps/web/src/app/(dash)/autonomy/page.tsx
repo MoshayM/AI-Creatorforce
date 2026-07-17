@@ -37,6 +37,7 @@ export default function AutonomyPage() {
   const [weeks, setWeeks] = useState(2);
   const [perWeek, setPerWeek] = useState(3);
   const [preview, setPreview] = useState<GenerateCalendarResult | null>(null);
+  const [critique, setCritique] = useState<string | null>(null);
 
   // Start empty on both server and client, then hydrate from localStorage —
   // reading localStorage in the initializer causes a hydration mismatch.
@@ -81,6 +82,7 @@ export default function AutonomyPage() {
     mutationFn: (dryRun: boolean) =>
       api.autonomy.generateCalendar(channelId, { weeks, perWeek, dryRun }).then((r) => r.data),
     onSuccess: (result) => {
+      setCritique(result.critique);
       if (result.dryRun) {
         setPreview(result);
         setBanner({ type: 'info', message: `Dry run: ${result.entries.length} slots simulated (${result.source}). Nothing was saved.` });
@@ -116,6 +118,7 @@ export default function AutonomyPage() {
   function handleChannelChange(id: string) {
     setChannelId(id);
     setPreview(null);
+    setCritique(null);
     localStorage.setItem(CHANNEL_LS_KEY, id);
   }
 
@@ -267,6 +270,14 @@ export default function AutonomyPage() {
                   : <><Sparkles className="w-4 h-4" /> Generate calendar</>}
               </button>
             </div>
+
+            {/* Self-critique summary from the second reasoning pass */}
+            {critique && (
+              <div className="mt-4 flex items-start gap-2 text-sm text-gray-600 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
+                <Sparkles className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
+                <p><span className="font-medium text-gray-700">Self-critique:</span> {critique}</p>
+              </div>
+            )}
 
             {/* Dry-run preview */}
             {preview && (

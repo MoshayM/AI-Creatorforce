@@ -1998,6 +1998,9 @@ model ChannelAutomation {
   publishIntervalMinutes Int       @default(240)
   maxPublishesPerDay     Int       @default(2)
   maxImportsPerDay       Int       @default(3)
+  /// Phase 6 M2: nightly profile refresh + calendar top-up (plans only; publishing gates untouched)
+  autoPlan               Boolean   @default(false)
+  lastPlanAt             DateTime?
   lastTickAt             DateTime?
   aiSuggestion           Json?
   createdAt              DateTime  @default(now())

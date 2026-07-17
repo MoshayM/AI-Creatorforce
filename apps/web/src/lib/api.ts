@@ -416,6 +416,7 @@ export interface ChannelAutomation {
   autoAnalyze: boolean;
   autoPublish: boolean;
   chapterSyncEnabled: boolean;
+  autoPlan: boolean;
   publishIntervalMinutes: number;
   maxPublishesPerDay: number;
   maxImportsPerDay: number;
@@ -474,6 +475,8 @@ export interface GenerateCalendarResult {
   batchId: string | null;
   source: 'ai' | 'heuristic';
   dryRun: boolean;
+  /** Self-critique summary from the second reasoning pass (null when skipped). */
+  critique: string | null;
   profile: ChannelProfileData;
   entries: Array<Omit<CalendarEntry, 'id' | 'status' | 'createdAt'> & Partial<Pick<CalendarEntry, 'id' | 'status' | 'createdAt'>>>;
 }

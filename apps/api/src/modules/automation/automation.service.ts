@@ -4,6 +4,7 @@ import { JobsService } from '../jobs/jobs.service';
 import { VideoImportService } from '../shorts-studio/video-import.service';
 import { AutomationSettingsSchema, type AutomationSettings, callAIStructured } from '@cf/shared';
 import { z } from 'zod';
+import { AutonomyService } from '../autonomy/autonomy.service';
 
 /** Default settings returned when no ChannelAutomation row exists yet */
 const DEFAULTS: AutomationSettings = {
@@ -12,6 +13,7 @@ const DEFAULTS: AutomationSettings = {
   autoAnalyze: false,
   autoPublish: false,
   chapterSyncEnabled: false,
+  autoPlan: false,
   publishIntervalMinutes: 240,
   maxPublishesPerDay: 2,
   maxImportsPerDay: 3,
@@ -25,9 +27,11 @@ interface ChannelAutomationRow {
   autoAnalyze: boolean;
   autoPublish: boolean;
   chapterSyncEnabled: boolean;
+  autoPlan: boolean;
   publishIntervalMinutes: number;
   maxPublishesPerDay: number;
   maxImportsPerDay: number;
+  lastPlanAt: Date | null;
   lastTickAt: Date | null;
   aiSuggestion: unknown;
   channel?: { userId: string };
@@ -41,6 +45,7 @@ export class AutomationService {
     private readonly prisma: PrismaService,
     private readonly jobs: JobsService,
     private readonly videoImport: VideoImportService,
+    private readonly autonomy: AutonomyService,
   ) {}
 
   private async assertChannelOwnership(channelId: string, userId: string): Promise<void> {
@@ -70,6 +75,7 @@ export class AutomationService {
       autoAnalyze: row.autoAnalyze,
       autoPublish: row.autoPublish,
       chapterSyncEnabled: row.chapterSyncEnabled,
+      autoPlan: row.autoPlan,
       publishIntervalMinutes: row.publishIntervalMinutes,
       maxPublishesPerDay: row.maxPublishesPerDay,
       maxImportsPerDay: row.maxImportsPerDay,
@@ -93,6 +99,7 @@ export class AutomationService {
       autoAnalyze: row.autoAnalyze,
       autoPublish: row.autoPublish,
       chapterSyncEnabled: row.chapterSyncEnabled,
+      autoPlan: row.autoPlan,
       publishIntervalMinutes: row.publishIntervalMinutes,
       maxPublishesPerDay: row.maxPublishesPerDay,
       maxImportsPerDay: row.maxImportsPerDay,
@@ -119,6 +126,7 @@ export class AutomationService {
       autoAnalyze: false,
       autoPublish: false,
       chapterSyncEnabled: false,
+      autoPlan: false,
       publishIntervalMinutes: Math.max(
         120,
         Math.min(720, Math.round(1440 / Math.max(1, Math.round((uploadsPerWeek / 7) * 2)))),
@@ -154,6 +162,7 @@ Return a JSON object with these exact fields:
 - autoAnalyze (boolean, false)
 - autoPublish (boolean, false)
 - chapterSyncEnabled (boolean, false)
+- autoPlan (boolean, false)
 - publishIntervalMinutes (integer 15-1440): minutes between auto-publishes
 - maxPublishesPerDay (integer 1-10): max clips published per day
 - maxImportsPerDay (integer 1-10): max videos imported per day
@@ -164,7 +173,6 @@ Return a JSON object with these exact fields:
         { systemPrompt: 'You are a YouTube automation advisor. Respond only with valid JSON.' },
       );
       // Strip the optional rationale field â€” not part of AutomationSettings
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { rationale: _rationale, ...settings } = result;
       suggestion = settings;
       source = 'ai';
@@ -451,6 +459,29 @@ Return a JSON object with these exact fields:
         this.logger.error(
           `[AutomationTick] channel=${channelId} chapterSync error: ${err instanceof Error ? err.message : String(err)}`,
         );
+      }
+    }
+
+    // ── e. autoPlan (Phase 6 M2) ─────────────────────────────────────────────
+    // Once per ~day: refresh the profile and top up the AI calendar when the
+    // channel is low on future slots. Plans only — publishing gates untouched.
+    if (automation.autoPlan) {
+      const PLAN_INTERVAL_MS = 20 * 60 * 60 * 1000;
+      const due =
+        !automation.lastPlanAt || Date.now() - automation.lastPlanAt.getTime() >= PLAN_INTERVAL_MS;
+      if (due) {
+        // Stamp before running so a failing AI call can't retry every 15 min.
+        await this.prisma.channelAutomation.update({
+          where: { channelId },
+          data: { lastPlanAt: new Date() },
+        });
+        try {
+          await this.autonomy.autoPlanTick(channelId, log);
+        } catch (err) {
+          this.logger.error(
+            `[AutomationTick] channel=${channelId} autoPlan error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
     }
 

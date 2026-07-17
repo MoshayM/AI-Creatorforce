@@ -40,6 +40,20 @@ const CalendarProposalSchema = z.object({
 
 type CalendarProposal = z.infer<typeof CalendarProposalSchema>;
 
+// Self-critique verdicts (M2, spec §3.3): a second reasoning pass that
+// scores the first draft against the channel profile before anything lands.
+const CritiqueSchema = z.object({
+  verdicts: z.array(
+    z.object({
+      index: z.number().int().min(0),
+      keep: z.boolean(),
+      priority: z.number().int().min(0).max(100).optional(),
+      reason: z.string().optional(),
+    }),
+  ),
+  summary: z.string(),
+});
+
 export interface ChannelProfileSnapshot {
   niche: string;
   subscriberCount: number;
@@ -161,7 +175,19 @@ export class AutonomyService {
     userId: string,
     opts: { weeks?: number; perWeek?: number; dryRun?: boolean },
   ) {
-    const channel = await this.assertChannelOwnership(channelId, userId);
+    await this.assertChannelOwnership(channelId, userId);
+    return this.generateCalendarInternal(channelId, opts);
+  }
+
+  /** Ownership-free core — also driven by the automation tick (autoPlan). */
+  private async generateCalendarInternal(
+    channelId: string,
+    opts: { weeks?: number; perWeek?: number; dryRun?: boolean },
+  ) {
+    const channel = await this.prisma.channel.findUniqueOrThrow({
+      where: { id: channelId },
+      select: { id: true, title: true },
+    });
     const weeks = Math.min(Math.max(opts.weeks ?? 2, 1), 4);
     const perWeek = Math.min(Math.max(opts.perWeek ?? 3, 1), 7);
     const total = weeks * perWeek;
@@ -209,6 +235,19 @@ export class AutonomyService {
       source = 'heuristic';
     }
 
+    // Self-critique (M2): a second pass judges the draft against the profile.
+    // Best-effort — the original draft ships if the critic is unavailable.
+    let critique: string | null = null;
+    if (source === 'ai') {
+      try {
+        const result = await this.critiqueProposal(proposal, profile);
+        proposal = result.proposal;
+        critique = result.summary;
+      } catch (err) {
+        this.logger.warn(`Self-critique skipped: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
     // Anchor dayOffset 0 to tomorrow so the whole plan is in the future.
     const anchor = new Date();
     anchor.setUTCDate(anchor.getUTCDate() + 1);
@@ -235,7 +274,7 @@ export class AutonomyService {
     });
 
     if (opts.dryRun) {
-      return { batchId: null, source, dryRun: true, profile, entries: rows };
+      return { batchId: null, source, dryRun: true, critique, profile, entries: rows };
     }
 
     await this.prisma.contentCalendarEntry.createMany({ data: rows });
@@ -243,7 +282,78 @@ export class AutonomyService {
       where: { batchId },
       orderBy: { plannedAt: 'asc' },
     });
-    return { batchId, source, dryRun: false, profile, entries };
+    return { batchId, source, dryRun: false, critique, profile, entries };
+  }
+
+  /** Second reasoning pass: drop weak slots, re-score the rest. */
+  private async critiqueProposal(
+    proposal: CalendarProposal,
+    profile: ChannelProfileSnapshot,
+  ): Promise<{ proposal: CalendarProposal; summary: string }> {
+    const critique = await callAIStructured(
+      [
+        {
+          role: 'user',
+          content:
+            `You are reviewing a colleague's proposed YouTube content calendar. Judge every entry against the channel profile: ` +
+            `is the topic specific and on-niche, is the slot consistent with the channel's cadence and best publish times, ` +
+            `is the priority honest?\n\n` +
+            `CHANNEL PROFILE:\n${JSON.stringify(profile, null, 2)}\n\n` +
+            `PROPOSED ENTRIES (judge by array index):\n${JSON.stringify(proposal.entries, null, 2)}\n\n` +
+            `For each index return keep=true/false, optionally a corrected priority (0-100) and a one-line reason. ` +
+            `Drop generic, off-niche, or unrealistic entries. Then give a one-paragraph summary of the calendar's quality.\n\n` +
+            `Respond with EXACTLY this JSON structure (no extra text):\n` +
+            `{"verdicts":[{"index":0,"keep":true,"priority":75,"reason":"..."}],"summary":"..."}`,
+        },
+      ],
+      CritiqueSchema,
+      { systemPrompt: CALENDAR_SYSTEM, maxTokens: 2000 },
+    );
+
+    const byIndex = new Map(critique.verdicts.map((v) => [v.index, v]));
+    const kept = proposal.entries
+      .map((entry, i) => ({ entry, verdict: byIndex.get(i) }))
+      .filter(({ verdict }) => verdict?.keep !== false)
+      .map(({ entry, verdict }) => ({
+        ...entry,
+        priority: verdict?.priority ?? entry.priority,
+        rationale: verdict?.reason ? `${entry.rationale ?? ''} [critic: ${verdict.reason}]`.trim() : entry.rationale,
+      }));
+
+    // A critic that rejects everything is judging itself — keep the draft.
+    if (kept.length === 0) {
+      return { proposal, summary: `${critique.summary} (all entries rejected — original draft kept)` };
+    }
+    return { proposal: { entries: kept }, summary: critique.summary };
+  }
+
+  /**
+   * Automation-tick hook (M2): refresh the profile and top up the calendar
+   * when a channel opted into autoPlan and is running low on future slots.
+   * Returns true when a generation ran. Once-per-day pacing is the caller's
+   * job (ChannelAutomation.lastPlanAt).
+   */
+  async autoPlanTick(channelId: string, log: (msg: string) => void): Promise<boolean> {
+    const MIN_UPCOMING = 3;
+    const upcoming = await this.prisma.contentCalendarEntry.count({
+      where: {
+        channelId,
+        status: { in: ['PROPOSED', 'APPROVED'] },
+        plannedAt: { gte: new Date() },
+      },
+    });
+    if (upcoming >= MIN_UPCOMING) {
+      log(`[AutoPlan] channel=${channelId} has ${upcoming} upcoming slots — no top-up needed`);
+      return false;
+    }
+
+    const profileRow = await this.buildProfile(channelId);
+    const profile = profileRow.profile as unknown as ChannelProfileSnapshot;
+    const perWeek = Math.min(Math.max(Math.round(profile.uploadsPerWeek90d) || 2, 1), 7);
+
+    const result = await this.generateCalendarInternal(channelId, { weeks: 2, perWeek });
+    log(`[AutoPlan] channel=${channelId} topped up ${result.entries.length} slot(s) (${result.source})`);
+    return true;
   }
 
   /** Cadence-based fallback when no AI provider is reachable. */
