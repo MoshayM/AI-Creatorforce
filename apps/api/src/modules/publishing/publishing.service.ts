@@ -1,6 +1,7 @@
 import { Injectable, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { createReadStream } from 'fs';
 import type { youtube_v3 } from 'googleapis';
+import type { Prisma, VideoStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ChannelsService } from '../channels/channels.service';
 
@@ -113,6 +114,108 @@ export class PublishingService {
     });
 
     return youtubeVideoId;
+  }
+
+  /**
+   * Scheduler tracking list: videos that have entered the publish pipeline
+   * (SCHEDULED / PUBLISHED / FAILED), scoped to the requesting user via
+   * channel ownership. A video's effective date is publishedAt when set,
+   * otherwise scheduledAt — the from/to range filters on that.
+   */
+  async listTracked(
+    userId: string,
+    opts: {
+      channelId?: string;
+      status?: VideoStatus[];
+      from?: Date;
+      to?: Date;
+      q?: string;
+      take?: number;
+      skip?: number;
+    },
+  ) {
+    const take = Math.min(Math.max(opts.take ?? 50, 1), 200);
+    const skip = Math.max(opts.skip ?? 0, 0);
+
+    const dateRange: Prisma.DateTimeNullableFilter | undefined =
+      opts.from || opts.to
+        ? { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lte: opts.to } : {}) }
+        : undefined;
+
+    const where: Prisma.VideoWhereInput = {
+      channel: { userId },
+      status: { in: opts.status?.length ? opts.status : ['SCHEDULED', 'PUBLISHED', 'FAILED'] },
+      ...(opts.channelId ? { channelId: opts.channelId } : {}),
+      ...(opts.q ? { title: { contains: opts.q, mode: 'insensitive' } } : {}),
+      ...(dateRange
+        ? {
+            OR: [
+              { publishedAt: dateRange },
+              { publishedAt: null, scheduledAt: dateRange },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, data] = await this.prisma.$transaction([
+      this.prisma.video.count({ where }),
+      this.prisma.video.findMany({
+        where,
+        orderBy: [
+          { publishedAt: { sort: 'desc', nulls: 'first' } },
+          { scheduledAt: 'desc' },
+          { updatedAt: 'desc' },
+        ],
+        take,
+        skip,
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          youtubeVideoId: true,
+          thumbnailUrl: true,
+          scheduledAt: true,
+          publishedAt: true,
+          viewCount: true,
+          likeCount: true,
+          commentCount: true,
+          createdAt: true,
+          channel: { select: { id: true, title: true } },
+          project: { select: { id: true, title: true } },
+        },
+      }),
+    ]);
+
+    return { data, total, take, skip };
+  }
+
+  /** Headline counts for the scheduler page, scoped like listTracked. */
+  async trackingSummary(userId: string, channelId?: string) {
+    const base: Prisma.VideoWhereInput = {
+      channel: { userId },
+      ...(channelId ? { channelId } : {}),
+    };
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [scheduled, upcoming7d, published, publishedThisMonth, failed] =
+      await this.prisma.$transaction([
+        this.prisma.video.count({ where: { ...base, status: 'SCHEDULED' } }),
+        this.prisma.video.count({
+          where: {
+            ...base,
+            status: 'SCHEDULED',
+            scheduledAt: { gte: now, lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) },
+          },
+        }),
+        this.prisma.video.count({ where: { ...base, status: 'PUBLISHED' } }),
+        this.prisma.video.count({
+          where: { ...base, status: 'PUBLISHED', publishedAt: { gte: monthStart } },
+        }),
+        this.prisma.video.count({ where: { ...base, status: 'FAILED' } }),
+      ]);
+
+    return { scheduled, upcoming7d, published, publishedThisMonth, failed };
   }
 
   async getVideoStats(channelId: string, youtubeVideoId: string) {

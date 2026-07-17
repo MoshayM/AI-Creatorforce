@@ -428,6 +428,41 @@ export interface AutomationSuggestion {
   source: 'ai' | 'heuristic';
 }
 
+// ── Scheduler / publish tracking ─────────────────────────────────────────────
+
+export type TrackedVideoStatus = 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
+
+export interface TrackedVideo {
+  id: string;
+  title: string;
+  status: TrackedVideoStatus;
+  youtubeVideoId: string | null;
+  thumbnailUrl: string | null;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  viewCount: number;
+  likeCount: number;
+  commentCount: number;
+  createdAt: string;
+  channel: { id: string; title: string };
+  project: { id: string; title: string };
+}
+
+export interface TrackedVideosPage {
+  data: TrackedVideo[];
+  total: number;
+  take: number;
+  skip: number;
+}
+
+export interface PublishTrackingSummary {
+  scheduled: number;
+  upcoming7d: number;
+  published: number;
+  publishedThisMonth: number;
+  failed: number;
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -690,6 +725,32 @@ export const api = {
       ),
     reorderPlaylist: (channelId: string, playlistId: string, itemIds: string[]) =>
       apiClient.patch(`/channels/${channelId}/playlists/${playlistId}/order`, { itemIds }),
+  },
+  publishing: {
+    listVideos: (params?: {
+      channelId?: string;
+      status?: TrackedVideoStatus[];
+      from?: string;
+      to?: string;
+      q?: string;
+      take?: number;
+      skip?: number;
+    }) => {
+      const sp = new URLSearchParams();
+      if (params?.channelId) sp.set('channelId', params.channelId);
+      if (params?.status?.length) sp.set('status', params.status.join(','));
+      if (params?.from) sp.set('from', params.from);
+      if (params?.to) sp.set('to', params.to);
+      if (params?.q) sp.set('q', params.q);
+      if (params?.take !== undefined) sp.set('take', String(params.take));
+      if (params?.skip !== undefined) sp.set('skip', String(params.skip));
+      const qs = sp.toString();
+      return apiClient.get<TrackedVideosPage>(`/publishing/videos${qs ? `?${qs}` : ''}`);
+    },
+    summary: (channelId?: string) =>
+      apiClient.get<PublishTrackingSummary>(
+        `/publishing/videos/summary${channelId ? `?channelId=${encodeURIComponent(channelId)}` : ''}`,
+      ),
   },
   trial: {
     status: () => apiClient.get<TrialStatusResponse>('/trial/status'),
