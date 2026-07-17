@@ -12,6 +12,7 @@ import {
   Clapperboard,
   Film,
   BarChart3,
+  ListChecks,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import {
@@ -73,6 +74,12 @@ export default function AutonomyPage() {
     enabled: !!channelId,
   });
 
+  const { data: stats } = useQuery({
+    queryKey: ['autonomy-stats', channelId],
+    queryFn: () => api.autonomy.calendarStats(channelId).then((r) => r.data),
+    enabled: !!channelId,
+  });
+
   const refreshProfile = useMutation({
     mutationFn: () => api.autonomy.profile(channelId, true),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['autonomy-profile', channelId] }); },
@@ -89,6 +96,7 @@ export default function AutonomyPage() {
       } else {
         setPreview(null);
         void qc.invalidateQueries({ queryKey: ['autonomy-calendar', channelId] });
+        void qc.invalidateQueries({ queryKey: ['autonomy-stats', channelId] });
         setBanner({
           type: result.source === 'ai' ? 'success' : 'warning',
           message: result.source === 'ai'
@@ -104,6 +112,7 @@ export default function AutonomyPage() {
     mutationFn: (entryId: string) => api.autonomy.approveEntry(entryId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['autonomy-calendar', channelId] });
+      void qc.invalidateQueries({ queryKey: ['autonomy-stats', channelId] });
       setBanner({ type: 'success', message: 'Slot approved — a draft video was created and parked at the planned time.' });
     },
     onError: (err: unknown) => { setBanner({ type: 'error', message: getErrorMessage(err) }); },
@@ -111,7 +120,10 @@ export default function AutonomyPage() {
 
   const dismiss = useMutation({
     mutationFn: (entryId: string) => api.autonomy.dismissEntry(entryId),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['autonomy-calendar', channelId] }); },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['autonomy-calendar', channelId] });
+      void qc.invalidateQueries({ queryKey: ['autonomy-stats', channelId] });
+    },
     onError: (err: unknown) => { setBanner({ type: 'error', message: getErrorMessage(err) }); },
   });
 
@@ -220,6 +232,48 @@ export default function AutonomyPage() {
               </div>
             )}
           </section>
+
+          {/* Calendar stats bar */}
+          {stats && stats.total > 0 && (
+            <section className="bg-white border border-gray-200 rounded-2xl px-5 py-4">
+              <div className="flex items-center gap-2 mb-3">
+                <ListChecks className="w-4 h-4 text-brand-600" />
+                <span className="text-sm font-semibold text-gray-800">Calendar overview</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {stats.proposed > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                    <span className="font-bold">{stats.proposed}</span> pending review
+                  </span>
+                )}
+                {stats.approved > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100">
+                    <Check className="w-3 h-3" /><span className="font-bold">{stats.approved}</span> approved
+                  </span>
+                )}
+                {stats.dismissed > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">
+                    <X className="w-3 h-3" /><span className="font-bold">{stats.dismissed}</span> dismissed
+                  </span>
+                )}
+                {stats.upcoming7d > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700 border border-violet-100">
+                    <CalendarClock className="w-3 h-3" /><span className="font-bold">{stats.upcoming7d}</span> due this week
+                  </span>
+                )}
+                {stats.approvalRate !== null && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-100">
+                    <TrendingUp className="w-3 h-3" /><span className="font-bold">{stats.approvalRate}%</span> approval rate
+                  </span>
+                )}
+                {stats.avgPriority !== null && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-100">
+                    <BarChart3 className="w-3 h-3" />avg priority <span className="font-bold">{stats.avgPriority}</span>
+                  </span>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* Generation controls */}
           <section className="bg-white border border-gray-200 rounded-2xl p-5">
