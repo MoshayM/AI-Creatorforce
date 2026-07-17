@@ -1,22 +1,14 @@
 'use client';
 import React, { Suspense, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import {
-  CreditCard, Loader2, CheckCircle, PlusCircle,
+  Loader2, CheckCircle,
   LogOut, XCircle, Eye,
   Key, Save, EyeOff, Shield, Monitor, Unlink, Link2,
 } from 'lucide-react';
 import { api, type OAuthProvider, type AuthSession, type LinkedAccount, type OAuthProviders, type AuthLinksResponse } from '@/lib/api';
-import { getErrorMessage } from '@/lib/getErrorMessage';
 import { Banner, type BannerState } from '@/components/banner';
-
-interface Subscription {
-  plan: string;
-  status: string;
-  currentPeriodEnd: string;
-}
 
 interface ApiKeyEntry {
   key: string;
@@ -24,12 +16,6 @@ interface ApiKeyEntry {
   masked: string;
   set: boolean;
 }
-
-const PLANS = [
-  { id: 'STARTER', name: 'Starter', price: '$29/mo', features: ['5 videos/mo', '3 AI agents', 'Basic analytics'] },
-  { id: 'PRO', name: 'Pro', price: '$79/mo', features: ['Unlimited videos', 'All 15 agents', 'Priority support', 'Analytics'] },
-  { id: 'AGENCY', name: 'Agency', price: '$199/mo', features: ['Unlimited everything', 'Team seats', 'White-label', 'Dedicated support'] },
-];
 
 function SettingsContent() {
   const qc = useQueryClient();
@@ -40,28 +26,6 @@ function SettingsContent() {
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [apiKeyDrafts, setApiKeyDrafts] = useState<Record<string, string>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-
-  const { data: sub } = useQuery<Subscription>({
-    queryKey: ['subscription'],
-    queryFn: () => api.billing.getSubscription().then((r) => r.data as Subscription),
-  });
-
-  const { data: walletBalance } = useQuery<{
-    balanceCredits: number;
-    buckets: { trialCredits: number; promotionalCredits: number; bonusCredits: number; referralCredits: number; purchasedCredits: number };
-    lifetimeUsed: number;
-  }>({
-    queryKey: ['wallet-balance'],
-    queryFn: () => api.wallet.balance().then((r) => r.data),
-  });
-  const [rechargeUsd, setRechargeUsd] = useState(10);
-  const rechargeMutation = useMutation({
-    mutationFn: (amountUsd: number) => api.wallet.recharge(amountUsd),
-    onSuccess: (res) => {
-      const data = res.data as { checkoutUrl: string | null };
-      if (data.checkoutUrl) window.location.href = data.checkoutUrl;
-    },
-  });
 
   const { data: me } = useQuery({
     queryKey: ['me'],
@@ -166,14 +130,6 @@ function SettingsContent() {
       void refetchLinks();
     }
   }, [justLinkedProvider]);
-
-  const upgradeMutation = useMutation({
-    mutationFn: (plan: string) => api.billing.createCheckout(plan),
-    onSuccess: (res) => {
-      const data = res.data as { url: string };
-      if (data.url) window.location.href = data.url;
-    },
-  });
 
   const saveApiKeysMutation = useMutation({
     mutationFn: () => api.settings.updateApiKeys(apiKeyDrafts),
@@ -435,86 +391,6 @@ function SettingsContent() {
         </section>
       )}
 
-      {/* ── Billing ───────────────────────────────────────── */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <CreditCard className="w-5 h-5 text-brand-600" />
-          Billing
-        </h2>
-
-        {/* Wallet (credits are platform-agnostic; recharge via Stripe on web) */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 flex flex-wrap items-center gap-4">
-          <div className="flex-1 min-w-[200px]">
-            <p className="text-xs text-gray-500">Credit balance</p>
-            <p className="text-2xl font-bold text-gray-900">{(walletBalance?.balanceCredits ?? 0).toLocaleString()}</p>
-            {walletBalance && walletBalance.balanceCredits > 0 && (
-              <p className="text-[11px] text-gray-500 mt-0.5">
-                {walletBalance.buckets.purchasedCredits.toLocaleString()} purchased
-                {(walletBalance.buckets.trialCredits ?? 0) > 0 && <> · {walletBalance.buckets.trialCredits.toLocaleString()} trial</>}
-                {walletBalance.buckets.bonusCredits > 0 && <> · {walletBalance.buckets.bonusCredits.toLocaleString()} bonus</>}
-                {walletBalance.buckets.promotionalCredits > 0 && <> · {walletBalance.buckets.promotionalCredits.toLocaleString()} promo</>}
-                {walletBalance.buckets.referralCredits > 0 && <> · {walletBalance.buckets.referralCredits.toLocaleString()} referral</>}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              aria-label="Recharge amount"
-              value={rechargeUsd}
-              onChange={(e) => setRechargeUsd(Number(e.target.value))}
-              className="text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white"
-            >
-              {[5, 10, 25, 50, 100].map((usd) => (
-                <option key={usd} value={usd}>${usd}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => rechargeMutation.mutate(rechargeUsd)}
-              disabled={rechargeMutation.isPending}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
-            >
-              {rechargeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
-              Add credits
-            </button>
-          </div>
-          {rechargeMutation.isError && (
-            <p className="w-full text-xs text-red-500">{getErrorMessage(rechargeMutation.error) || 'Recharge failed'}</p>
-          )}
-          <div className="w-full text-right">
-            <Link href="/wallet" className="text-xs text-brand-600 hover:underline">
-              Open full wallet →
-            </Link>
-          </div>
-        </div>
-        {sub && (
-          <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-4">
-            <p className="font-medium text-brand-900">Current plan: {sub.plan}</p>
-            <p className="text-sm text-brand-700">Renews {new Date(sub.currentPeriodEnd).toLocaleDateString()}</p>
-          </div>
-        )}
-        <div className="grid grid-cols-3 gap-4">
-          {PLANS.map((plan) => (
-            <div key={plan.id} className="bg-white border border-gray-200 rounded-xl p-5">
-              <h3 className="font-semibold text-gray-900">{plan.name}</h3>
-              <p className="text-2xl font-bold text-brand-600 my-2">{plan.price}</p>
-              <ul className="space-y-1 mb-4">
-                {plan.features.map((f) => (
-                  <li key={f} className="text-sm text-gray-600 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3 text-green-500" /> {f}
-                  </li>
-                ))}
-              </ul>
-              <button
-                onClick={() => upgradeMutation.mutate(plan.id)}
-                disabled={upgradeMutation.isPending || sub?.plan === plan.id}
-                className="w-full px-3 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
-              >
-                {sub?.plan === plan.id ? 'Current' : 'Upgrade'}
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }

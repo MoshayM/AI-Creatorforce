@@ -167,7 +167,7 @@ function UpgradeNudges() {
             </p>
           </div>
           <a
-            href="/settings"
+            href="/wallet"
             className="shrink-0 text-xs font-semibold text-brand-700 hover:underline px-2 py-1 rounded"
           >
             Upgrade

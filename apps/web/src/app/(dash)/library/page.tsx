@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { VirtualVideoGrid } from '@/components/library/VirtualVideoGrid';
 import { PlaylistsTab } from '@/components/library/PlaylistsTab';
 import { SyncBadge } from '@/components/library/SyncBadge';
+import { ChannelAccessPanel } from '@/components/channel-access-panel';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,7 +16,7 @@ interface Channel {
   title: string;
 }
 
-type TabId = 'videos' | 'playlists';
+type TabId = 'videos' | 'playlists' | 'channels';
 type VideoType = 'all' | 'video' | 'short';
 type VideoSort = 'recent' | 'title';
 
@@ -143,50 +144,59 @@ function LibraryPageInner() {
           </h1>
           <p className="text-gray-500 mt-1 text-sm">All videos, shorts and playlists for your channel</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Channel selector */}
-          <select
-            value={channelId}
-            onChange={(e) => { handleChannelChange(e.target.value); }}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
-            aria-label="Select channel"
-          >
-            <option value="">Select a channel…</option>
-            {channels.map((c) => (
-              <option key={c.id} value={c.id}>{c.title}</option>
-            ))}
-          </select>
-          {/* Sync controls */}
-          {channelId && <SyncBadge channelId={channelId} />}
-        </div>
+        {tab !== 'channels' && (
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Channel selector */}
+            <select
+              value={channelId}
+              onChange={(e) => { handleChannelChange(e.target.value); }}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+              aria-label="Select channel"
+            >
+              <option value="">Select a channel…</option>
+              {channels.map((c) => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
+            </select>
+            {/* Sync controls */}
+            {channelId && <SyncBadge channelId={channelId} />}
+          </div>
+        )}
       </div>
 
-      {!channelId && (
+      {/* Tabs — Channel Access works without a selected channel */}
+      <div className="flex gap-1 mb-5 border-b border-gray-100">
+        {([['videos', 'Videos'], ['playlists', 'Playlists'], ['channels', 'Channel Access']] as Array<[TabId, string]>).map(([t, label]) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => { setTab(t); }}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              tab === t
+                ? 'bg-white border border-b-white border-gray-100 text-gray-900 shadow-sm -mb-px'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'channels' && (
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <ChannelAccessPanel />
+        </div>
+      )}
+
+      {tab !== 'channels' && !channelId && (
         <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
           <ListVideo className="w-12 h-12 mb-3 opacity-30" />
           <p>Select a channel above to browse its library.</p>
         </div>
       )}
 
-      {channelId && (
+      {tab !== 'channels' && channelId && (
         <>
-          {/* Tabs */}
-          <div className="flex gap-1 mb-5 border-b border-gray-100">
-            {(['videos', 'playlists'] as TabId[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => { setTab(t); }}
-                className={`px-4 py-2 text-sm font-medium rounded-t-lg capitalize transition-colors ${
-                  tab === t
-                    ? 'bg-white border border-b-white border-gray-100 text-gray-900 shadow-sm -mb-px'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
 
           {/* Videos tab */}
           {tab === 'videos' && (

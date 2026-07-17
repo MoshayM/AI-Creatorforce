@@ -594,8 +594,8 @@ export const api = {
     createCheckout: (plan: string) =>
       apiClient.post('/billing/checkout', {
         plan,
-        successUrl: `${window.location.origin}/settings?upgraded=true`,
-        cancelUrl: `${window.location.origin}/settings`,
+        successUrl: `${window.location.origin}/wallet?upgraded=true`,
+        cancelUrl: `${window.location.origin}/wallet`,
       }),
   },
   wallet: {
@@ -605,14 +605,14 @@ export const api = {
     recharge: (amountUsd: number) =>
       apiClient.post('/wallet/recharge', {
         amountUsd,
-        successUrl: `${window.location.origin}/settings?recharged=true`,
-        cancelUrl: `${window.location.origin}/settings`,
+        successUrl: `${window.location.origin}/wallet?recharged=true`,
+        cancelUrl: `${window.location.origin}/wallet`,
       }, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
     rechargePack: (packId: string) =>
       apiClient.post('/wallet/recharge', {
         packId,
-        successUrl: `${window.location.origin}/settings?recharged=true`,
-        cancelUrl: `${window.location.origin}/settings`,
+        successUrl: `${window.location.origin}/wallet?recharged=true`,
+        cancelUrl: `${window.location.origin}/wallet`,
       }, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
     budget: {
       get: () => apiClient.get<BudgetState>('/wallet/budget'),

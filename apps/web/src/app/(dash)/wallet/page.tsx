@@ -588,6 +588,71 @@ function CreditPacksCard() {
   );
 }
 
+// ── Subscription & plans (moved from Settings) ────────────────────────────────
+
+const PLANS = [
+  { id: 'STARTER', name: 'Starter', price: '$29/mo', features: ['5 videos/mo', '3 AI agents', 'Basic analytics'] },
+  { id: 'PRO', name: 'Pro', price: '$79/mo', features: ['Unlimited videos', 'All 15 agents', 'Priority support', 'Analytics'] },
+  { id: 'AGENCY', name: 'Agency', price: '$199/mo', features: ['Unlimited everything', 'Team seats', 'White-label', 'Dedicated support'] },
+];
+
+interface Subscription {
+  plan: string;
+  status: string;
+  currentPeriodEnd: string;
+}
+
+function SubscriptionCard() {
+  const { data: sub } = useQuery<Subscription>({
+    queryKey: ['subscription'],
+    queryFn: () => api.billing.getSubscription().then((r) => r.data as Subscription),
+  });
+
+  const upgradeMutation = useMutation({
+    mutationFn: (plan: string) => api.billing.createCheckout(plan),
+    onSuccess: (res) => {
+      const data = res.data as { url: string };
+      if (data.url) window.location.href = data.url;
+    },
+  });
+
+  return (
+    <div>
+      {sub && (
+        <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-4">
+          <p className="font-medium text-brand-900">Current plan: {sub.plan}</p>
+          <p className="text-sm text-brand-700">Renews {new Date(sub.currentPeriodEnd).toLocaleDateString()}</p>
+        </div>
+      )}
+      <div className="grid grid-cols-3 gap-4">
+        {PLANS.map((plan) => (
+          <div key={plan.id} className="bg-white border border-gray-200 rounded-xl p-5">
+            <h3 className="font-semibold text-gray-900">{plan.name}</h3>
+            <p className="text-2xl font-bold text-brand-600 my-2">{plan.price}</p>
+            <ul className="space-y-1 mb-4">
+              {plan.features.map((f) => (
+                <li key={f} className="text-sm text-gray-600 flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3 text-green-500" /> {f}
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={() => upgradeMutation.mutate(plan.id)}
+              disabled={upgradeMutation.isPending || sub?.plan === plan.id}
+              className="w-full px-3 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+            >
+              {sub?.plan === plan.id ? 'Current' : 'Upgrade'}
+            </button>
+          </div>
+        ))}
+      </div>
+      {upgradeMutation.isError && (
+        <p className="text-xs text-red-500 mt-2">{getErrorMessage(upgradeMutation.error) || 'Checkout failed'}</p>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function WalletPage() {
@@ -595,13 +660,19 @@ export default function WalletPage() {
     <div className="p-8 max-w-4xl mx-auto space-y-10">
       <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
         <Wallet className="w-6 h-6 text-brand-600" />
-        Wallet
+        Billing &amp; Wallet
       </h1>
 
       {/* Balance */}
       <section>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Credit Balance</h2>
         <BalanceCard />
+      </section>
+
+      {/* Subscription & plans (moved from Settings) */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Subscription &amp; Plans</h2>
+        <SubscriptionCard />
       </section>
 
       {/* Expiry timeline (Phase 6 §11) */}
