@@ -524,7 +524,9 @@ export const api = {
     register: (email: string, password: string, name?: string) =>
       apiClient.post<{ accessToken: string; refreshToken: string; user: { id: string; email: string; name: string } }>('/auth/register', { email, password, name }),
     me: () =>
-      apiClient.get<{ id: string; email: string; name: string; role: string; phone: string | null }>('/auth/me'),
+      apiClient.get<{ id: string; email: string; name: string | null; role: string; phone: string | null; avatarUrl: string | null }>('/auth/me'),
+    updateProfile: (data: { name?: string; avatarUrl?: string }) =>
+      apiClient.patch('/auth/me/profile', data),
     // OAuth / social auth
     providers: () =>
       apiClient.get<OAuthProviders>('/auth/providers'),
@@ -556,6 +558,10 @@ export const api = {
       apiClient.post('/auth/otp/register/send', { email }),
     otpRegisterVerify: (email: string, code: string, name?: string) =>
       apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/otp/register/verify', { email, code, ...(name ? { name } : {}) }),
+    forgotPassword: (email: string) =>
+      apiClient.post('/auth/forgot-password', { email }),
+    resetPassword: (token: string, password: string) =>
+      apiClient.post('/auth/reset-password', { token, password }),
   },
   channels: {
     list: () => apiClient.get('/channels'),

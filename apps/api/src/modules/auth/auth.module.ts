@@ -9,6 +9,7 @@ import { GoogleStrategy } from './google.strategy';
 import { SessionsService } from './sessions.service';
 import { OAuthService } from './oauth.service';
 import { OtpService } from './otp.service';
+import { PasswordResetService } from './password-reset.service';
 import { ProviderRegistry } from './providers/provider.registry';
 import { GoogleAdapter } from './providers/google.adapter';
 import { AppleAdapter } from './providers/apple.adapter';
@@ -37,12 +38,13 @@ import { TrialModule } from '../trial/trial.module';
     SessionsService,
     OAuthService,
     OtpService,
+    PasswordResetService,
     ProviderRegistry,
     GoogleAdapter,
     AppleAdapter,
     FacebookAdapter,
   ],
   controllers: [AuthController],
-  exports: [AuthService, JwtModule, SessionsService, OAuthService, OtpService],
+  exports: [AuthService, JwtModule, SessionsService, OAuthService, OtpService, PasswordResetService],
 })
 export class AuthModule {}

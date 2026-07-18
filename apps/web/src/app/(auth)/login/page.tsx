@@ -46,7 +46,7 @@ export default function LoginPage() {
     if (MOCK_MODE) {
       if (email && password) {
         localStorage.setItem('cf_token', MOCK_TOKEN);
-        router.push('/projects');
+        router.push('/');
       } else {
         setError('Invalid email or password');
         setLoading(false);
@@ -57,7 +57,7 @@ export default function LoginPage() {
     try {
       const { data } = await api.auth.login(email, password);
       setTokens(data.accessToken, data.refreshToken);
-      router.push('/projects');
+      router.push('/');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       setError(status === 401 ? 'Invalid email or password' : 'Unable to connect. Please try again.');
@@ -95,7 +95,7 @@ export default function LoginPage() {
     try {
       const { data } = await api.auth.otpVerify(otpIdentifier.trim(), otpCode.trim());
       setTokens(data.accessToken, data.refreshToken);
-      router.push('/projects');
+      router.push('/');
     } catch {
       setError('Invalid or expired code. Please try again.');
     } finally {
@@ -189,7 +189,7 @@ export default function LoginPage() {
           <div className="text-right">
             <button
               type="button"
-              onClick={() => setInfo('Password reset is coming soon — contact support to reset your password.')}
+              onClick={() => router.push('/forgot-password')}
               className="text-xs text-[#7b5ec7] hover:underline"
             >
               Forgot Password?

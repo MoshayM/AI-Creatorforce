@@ -18,6 +18,7 @@ import { IsEmail, IsString, MinLength, IsOptional, IsIn } from 'class-validator'
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { OtpService } from './otp.service';
+import { PasswordResetService } from './password-reset.service';
 import { SessionsService } from './sessions.service';
 import { OAuthService } from './oauth.service';
 import { ProviderRegistry } from './providers/provider.registry';
@@ -86,12 +87,27 @@ class UpdatePhoneDto {
   @IsString() @IsOptional() phone?: string | null;
 }
 
+class ForgotPasswordDto {
+  @IsEmail() email!: string;
+}
+
+class ResetPasswordDto {
+  @IsString() token!: string;
+  @IsString() @MinLength(8) password!: string;
+}
+
+class UpdateProfileDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() avatarUrl?: string;
+}
+
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly otp: OtpService,
+    private readonly passwordReset: PasswordResetService,
     private readonly sessions: SessionsService,
     private readonly oauth: OAuthService,
     private readonly registry: ProviderRegistry,
@@ -303,5 +319,32 @@ export class AuthController {
     @Body() dto: UpdatePhoneDto,
   ): Promise<void> {
     await this.auth.updatePhone(user.sub, dto.phone ?? null);
+  }
+
+  /** PATCH /auth/me/profile — update display name and/or avatar URL. */
+  @Patch('me/profile')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async updateProfile(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<void> {
+    await this.auth.updateProfile(user.sub, dto);
+  }
+
+  /** POST /auth/forgot-password — send a password reset link to email. */
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RateLimit({ bucket: 'auth-forgot-pw', limit: 3, windowSecs: 600 })
+  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<void> {
+    await this.passwordReset.sendResetEmail(dto.email);
+  }
+
+  /** POST /auth/reset-password — set a new password using the emailed token. */
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RateLimit({ bucket: 'auth-reset-pw', limit: 5, windowSecs: 60 })
+  async resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {
+    await this.passwordReset.resetPassword(dto.token, dto.password);
   }
 }

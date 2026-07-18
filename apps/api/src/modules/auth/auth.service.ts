@@ -128,7 +128,7 @@ export class AuthService {
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
-    return { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone ?? null };
+    return { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone ?? null, avatarUrl: user.avatarUrl ?? null };
   }
 
   async registerPasswordless(
@@ -156,6 +156,15 @@ export class AuthService {
     await this.audit(user.id, 'auth.register_otp', { email: user.email });
 
     return tokens;
+  }
+
+  async updateProfile(userId: string, dto: { name?: string; avatarUrl?: string }): Promise<void> {
+    const data: Record<string, string | null> = {};
+    if (dto.name !== undefined) data['name'] = dto.name.trim() || null;
+    if (dto.avatarUrl !== undefined) data['avatarUrl'] = dto.avatarUrl.trim() || null;
+    if (Object.keys(data).length === 0) return;
+    await this.prisma.user.update({ where: { id: userId }, data });
+    await this.audit(userId, 'auth.profile_update', {});
   }
 
   async updatePhone(userId: string, phone: string | null): Promise<void> {

@@ -2,7 +2,8 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles, Home } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -15,6 +16,7 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
+  { href: '/', icon: Home, label: 'Home' },
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
   { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
   { href: '/editor', icon: Film, label: 'Video Editor' },
@@ -81,6 +83,14 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
   const router = useRouter();
   const [userName, setUserName] = useState('Creator');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+
+  const { data: meData } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.auth.me().then((r) => r.data),
+    staleTime: 60_000,
+    enabled: !!token,
+  });
   /** Explicit expand/collapse choices per nav group; unset falls back to route-based auto-open. */
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   /** Mobile off-canvas sidebar (below lg the sidebar is a drawer). */
@@ -106,12 +116,13 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
   }, []);
 
   useEffect(() => {
-    if (!localStorage.getItem('cf_token')) {
+    const tok = localStorage.getItem('cf_token');
+    if (!tok) {
       router.push('/login');
       return;
     }
+    setToken(tok);
     setUserName(nameFromToken());
-    // admin:revenue holders (ROLE_PERMISSIONS in the API): OWNER + SUPER_ADMIN
     setIsAdmin(['OWNER', 'SUPER_ADMIN'].includes(roleFromToken()));
     void fetchNotifications();
     pollRef.current = setInterval(() => { void fetchNotifications(); }, BELL_POLL_MS);
@@ -354,11 +365,19 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
 
             {/* ── User chip ────────────────────────────────────────────────────── */}
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-b from-[#cbbcf2] to-[#a48fe0] flex items-center justify-center text-white text-sm font-bold uppercase">
-                {userName.charAt(0)}
-              </div>
+              {meData?.avatarUrl ? (
+                <img
+                  src={meData.avatarUrl}
+                  alt={meData.name ?? 'Avatar'}
+                  className="w-9 h-9 rounded-full object-cover border-2 border-gray-200 shrink-0"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-gradient-to-b from-[#cbbcf2] to-[#a48fe0] flex items-center justify-center text-white text-sm font-bold uppercase shrink-0">
+                  {(meData?.name ?? userName).charAt(0)}
+                </div>
+              )}
               <div className="leading-tight">
-                <p className="text-sm font-semibold text-gray-800">{userName}</p>
+                <p className="text-sm font-semibold text-gray-800">{meData?.name ?? userName}</p>
                 <p className="text-[11px] text-gray-500">Creator</p>
               </div>
             </div>

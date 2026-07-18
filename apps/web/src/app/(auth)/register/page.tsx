@@ -57,7 +57,7 @@ function RegisterInner() {
         return;
       }
       localStorage.setItem('cf_token', MOCK_TOKEN);
-      router.push('/projects');
+      router.push('/');
       return;
     }
 
@@ -69,7 +69,7 @@ function RegisterInner() {
         api.referral.redeem(pending).catch(() => {});
         localStorage.removeItem('cf.pendingReferralCode');
       }
-      router.push('/projects');
+      router.push('/');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 409) {
@@ -118,7 +118,7 @@ function RegisterInner() {
         api.referral.redeem(pending).catch(() => {});
         localStorage.removeItem('cf.pendingReferralCode');
       }
-      router.push('/projects');
+      router.push('/');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 409) {
