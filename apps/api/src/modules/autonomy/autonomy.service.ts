@@ -68,6 +68,8 @@ export interface ChannelProfileSnapshot {
   formatMix: { videos: number; shorts: number };
   topTitles: string[];
   pipeline: Record<string, number>;
+  avgCtr?: number | null;
+  avgRetentionSecs?: number | null;
 }
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -144,6 +146,28 @@ export class AutonomyService {
       .map((d) => WEEKDAYS[d.day]!) ;
     const bestHourUtc = hourCounts.indexOf(Math.max(...hourCounts));
 
+    // Real analytics feed (M2/M5): pull AnalyticsSnapshot CTR + retention when available.
+    const snapshots = await (this.prisma as any).analyticsSnapshot.findMany({
+      where: { channelId, capturedAt: { gte: since }, ytVideoId: { not: null } },
+      select: { metrics: true },
+      orderBy: { capturedAt: 'desc' },
+      take: 100,
+    }) as Array<{ metrics: unknown }>;
+
+    type MetricsShape = { ctr?: number; avgViewDurationSecs?: number; likeCount?: number; views?: number };
+    const validMetrics = snapshots
+      .map((s) => s.metrics as MetricsShape)
+      .filter((m) => m && typeof m === 'object');
+
+    const ctrItems = validMetrics.filter((m) => typeof m.ctr === 'number');
+    const retItems = validMetrics.filter((m) => typeof m.avgViewDurationSecs === 'number');
+    const avgCtr = ctrItems.length > 0
+      ? ctrItems.reduce((acc, m) => acc + (m.ctr ?? 0), 0) / ctrItems.length
+      : null;
+    const avgRetentionSecs = retItems.length > 0
+      ? retItems.reduce((acc, m) => acc + (m.avgViewDurationSecs ?? 0), 0) / retItems.length
+      : null;
+
     const pipelineGroups = await this.prisma.video.groupBy({
       by: ['status'],
       where: { channelId },
@@ -164,6 +188,8 @@ export class AutonomyService {
       },
       topTitles: recent.slice(0, 5).map((v) => v.title),
       pipeline: Object.fromEntries(pipelineGroups.map((g) => [g.status, g._count])),
+      avgCtr,
+      avgRetentionSecs,
     };
 
     return this.prisma.channelProfile.upsert({
@@ -702,5 +728,112 @@ export class AutonomyService {
     });
     if (!entry || entry.channel.userId !== userId) throw new ForbiddenException('Entry not found');
     await this.prisma.contentCalendarEntry.update({ where: { id: entryId }, data: { title } });
+  }
+
+  /**
+   * Performance feedback loop (spec M2/M5): record actual video performance
+   * so the next profile refresh incorporates real outcome data.
+   */
+  async recordPerformanceFeedback(
+    channelId: string,
+    userId: string,
+    data: {
+      ytVideoId: string;
+      views: number;
+      likeCount?: number;
+      ctr?: number;
+      avgViewDurationSecs?: number;
+    },
+  ) {
+    await this.assertChannelOwnership(channelId, userId);
+    await (this.prisma as any).analyticsSnapshot.create({
+      data: {
+        channelId,
+        ytVideoId: data.ytVideoId,
+        metrics: {
+          views: data.views,
+          likeCount: data.likeCount ?? 0,
+          ctr: data.ctr ?? null,
+          avgViewDurationSecs: data.avgViewDurationSecs ?? null,
+          source: 'manual_feedback',
+        } as any,
+      },
+    });
+    await this.buildProfile(channelId);
+    this.logger.log(`[feedback] channelId=${channelId} ytVideoId=${data.ytVideoId} views=${data.views}`);
+    return { ok: true };
+  }
+
+  /**
+   * Cross-channel optimization engine (spec §2 Scope): analyzes all channels
+   * belonging to the user and returns AI-generated cross-channel recommendations.
+   */
+  async getCrossChannelInsights(userId: string) {
+    const channels = await this.prisma.channel.findMany({
+      where: { userId },
+      select: { id: true, title: true, niche: true, subscriberCount: true, videoCount: true },
+    });
+
+    if (channels.length === 0) return { insights: [], summary: 'No channels found.', channelCount: 0 };
+
+    const profiles = await Promise.all(
+      channels.map(async (ch) => {
+        const profile = await this.prisma.channelProfile.findUnique({ where: { channelId: ch.id } });
+        return {
+          channelId: ch.id,
+          title: ch.title,
+          niche: ch.niche ?? 'General',
+          subscriberCount: ch.subscriberCount,
+          profile: profile?.profile ?? null,
+        };
+      }),
+    );
+
+    if (channels.length === 1) {
+      return {
+        insights: [
+          {
+            category: 'single_channel',
+            recommendation: 'Add more channels to unlock cross-channel optimization insights.',
+            priority: 'info',
+          },
+        ],
+        summary: 'Only one channel found. Cross-channel analysis requires multiple channels.',
+        channelCount: 1,
+      };
+    }
+
+    const CrossChannelSchema = z.object({
+      insights: z
+        .array(
+          z.object({
+            category: z.enum(['timing', 'format', 'topic', 'cadence', 'synergy', 'gap']),
+            recommendation: z.string(),
+            channels: z.array(z.string()).optional(),
+            priority: z.enum(['high', 'medium', 'low']),
+          }),
+        )
+        .min(1)
+        .max(8),
+      summary: z.string(),
+    });
+
+    const result = await callAIStructured(
+      [
+        {
+          role: 'user',
+          content:
+            `Analyze these YouTube channels for cross-channel optimization:\n${JSON.stringify(profiles, null, 2)}\n\n` +
+            `Focus on: timing synergies, format gaps, topic overlaps/gaps, cadence mismatches, collaboration opportunities. Be specific and actionable.`,
+        },
+      ],
+      CrossChannelSchema,
+      {
+        systemPrompt: 'You are a YouTube growth strategist analyzing multiple channels for cross-channel optimization.',
+        maxTokens: 2000,
+      },
+    );
+
+    return { ...result, channelCount: channels.length };
   }
 }

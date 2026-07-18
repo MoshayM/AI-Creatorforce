@@ -120,4 +120,18 @@ export class AutonomyController {
   ) {
     return this.svc.updateEntryTitle(entryId, user.sub, body.title);
   }
+
+  @Post('channels/:channelId/profile/feedback')
+  recordFeedback(
+    @Param('channelId') channelId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { ytVideoId: string; views: number; likeCount?: number; ctr?: number; avgViewDurationSecs?: number },
+  ) {
+    return this.svc.recordPerformanceFeedback(channelId, user.sub, body);
+  }
+
+  @Get('insights/cross-channel')
+  crossChannelInsights(@CurrentUser() user: JwtPayload) {
+    return this.svc.getCrossChannelInsights(user.sub);
+  }
 }

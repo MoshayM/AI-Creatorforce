@@ -14,10 +14,12 @@ import {
   Film,
   BarChart3,
   ListChecks,
+  Target,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   api,
+  apiClient,
   type CalendarEntry,
   type ChannelProfileRow,
   type GenerateCalendarResult,
@@ -29,6 +31,16 @@ import { StatCard } from '@/components/stat-card';
 interface Channel {
   id: string;
   title: string;
+}
+
+interface CrossChannelInsight {
+  category: string;
+  recommendation: string;
+  priority: 'high' | 'medium' | 'low';
+}
+interface CrossChannelData {
+  insights: CrossChannelInsight[];
+  summary?: string;
 }
 
 const CHANNEL_LS_KEY = 'cf.autonomy.channelId';
@@ -46,6 +58,13 @@ export default function AutonomyPage() {
   const [channelId, setChannelId] = useState('');
   const [hydrated, setHydrated] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [insightsTab, setInsightsTab] = useState<'planner' | 'insights'>('planner');
+  const [feedbackVideoId, setFeedbackVideoId] = useState('');
+  const [feedbackViews, setFeedbackViews] = useState('');
+  const [feedbackLikes, setFeedbackLikes] = useState('');
+  const [feedbackCtr, setFeedbackCtr] = useState('');
+  const [feedbackDuration, setFeedbackDuration] = useState('');
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
   useEffect(() => {
     setChannelId(localStorage.getItem(CHANNEL_LS_KEY) ?? '');
     setHydrated(true);
@@ -80,6 +99,12 @@ export default function AutonomyPage() {
     queryKey: ['autonomy-stats', channelId],
     queryFn: () => api.autonomy.calendarStats(channelId).then((r) => r.data),
     enabled: !!channelId,
+  });
+
+  const { data: crossChannel } = useQuery<CrossChannelData>({
+    queryKey: ['cross-channel-insights'],
+    queryFn: () => apiClient.get('/autonomy/insights/cross-channel').then((r) => r.data as CrossChannelData),
+    enabled: channels.length > 1 && insightsTab === 'insights',
   });
 
   const refreshProfile = useMutation({
@@ -168,6 +193,26 @@ export default function AutonomyPage() {
     localStorage.setItem(CHANNEL_LS_KEY, id);
   }
 
+  async function submitFeedback() {
+    if (!feedbackVideoId || !feedbackViews || !channelId) return;
+    setFeedbackLoading(true);
+    try {
+      await apiClient.post(`/autonomy/channels/${channelId}/profile/feedback`, {
+        ytVideoId: feedbackVideoId,
+        views: Number(feedbackViews),
+        likeCount: feedbackLikes ? Number(feedbackLikes) : undefined,
+        ctr: feedbackCtr ? Number(feedbackCtr) / 100 : undefined,
+        avgViewDurationSecs: feedbackDuration ? Number(feedbackDuration) : undefined,
+      });
+      setBanner({ type: 'success', message: 'Performance recorded! Profile will improve on next generation.' });
+      setFeedbackVideoId(''); setFeedbackViews(''); setFeedbackLikes(''); setFeedbackCtr(''); setFeedbackDuration('');
+    } catch {
+      setBanner({ type: 'error', message: 'Failed to record feedback.' });
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }
+
   const proposed = entries.filter((e) => e.status === 'PROPOSED');
   const approved = entries.filter((e) => e.status === 'APPROVED');
 
@@ -199,6 +244,25 @@ export default function AutonomyPage() {
 
       {banner && <Banner type={banner.type} message={banner.message} onDismiss={() => setBanner(null)} />}
 
+      {channelId && (
+        <div className="flex bg-gray-100 rounded-xl p-1">
+          <button
+            type="button"
+            onClick={() => setInsightsTab('planner')}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${insightsTab === 'planner' ? 'bg-white shadow text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <Sparkles className="w-4 h-4 inline mr-1.5" />Planner
+          </button>
+          <button
+            type="button"
+            onClick={() => setInsightsTab('insights')}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${insightsTab === 'insights' ? 'bg-white shadow text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <BarChart3 className="w-4 h-4 inline mr-1.5" />Insights
+          </button>
+        </div>
+      )}
+
       {!channelId && (
         <div className="flex flex-col items-center justify-center text-gray-500 py-20">
           <Sparkles className="w-12 h-12 mb-3 opacity-30" />
@@ -206,7 +270,7 @@ export default function AutonomyPage() {
         </div>
       )}
 
-      {channelId && (
+      {channelId && insightsTab === 'planner' && (
         <>
           {/* Channel profile — the planner's long-term memory */}
           <section>
@@ -518,6 +582,174 @@ export default function AutonomyPage() {
             )}
           </section>
         </>
+      )}
+
+      {/* Insights tab */}
+      {channelId && insightsTab === 'insights' && (
+        <div className="space-y-6">
+          {/* Section A: Calendar Health Metrics */}
+          {stats && (
+            <section className="bg-white border border-gray-200 rounded-2xl p-5">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                <ListChecks className="w-5 h-5 text-brand-600" />
+                Calendar Health Metrics
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {[
+                  { label: 'Approval Rate', value: `${stats.approvalRate ?? 0}%`, color: (stats.approvalRate ?? 0) >= 60 ? 'text-green-700 bg-green-50' : (stats.approvalRate ?? 0) >= 30 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50' },
+                  { label: 'Upcoming (7d)', value: stats.upcoming7d, color: 'text-blue-700 bg-blue-50' },
+                  { label: 'Total Proposals', value: stats.total, color: 'text-gray-700 bg-gray-50' },
+                  { label: 'Approved', value: stats.approved, color: 'text-green-700 bg-green-50' },
+                  { label: 'Dismissed', value: stats.dismissed, color: 'text-red-700 bg-red-50' },
+                  { label: 'Scheduled', value: stats.scheduled, color: 'text-violet-700 bg-violet-50' },
+                ].map((m) => (
+                  <div key={m.label} className={`rounded-xl p-3 ${m.color}`}>
+                    <p className="text-xs font-medium opacity-70">{m.label}</p>
+                    <p className="text-2xl font-bold mt-0.5">{m.value}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Section B: Autonomy Health Score */}
+          {stats && (() => {
+            const score = Math.round(((stats.approvalRate ?? 0) / 100 * 0.5 + Math.min((stats.upcoming7d ?? 0) / 7, 1) * 0.3 + Math.min((stats.total ?? 0) / 10, 1) * 0.2) * 100);
+            const scoreColor = score >= 70 ? 'text-green-600' : score >= 40 ? 'text-amber-600' : 'text-red-600';
+            const barColor = score >= 70 ? 'bg-green-500' : score >= 40 ? 'bg-amber-500' : 'bg-red-500';
+            const interpretation = score >= 70 ? 'Good — your channel\'s AI workflow is running smoothly.' : score >= 40 ? 'Fair — consider approving more proposals or generating new ones.' : 'Needs attention — generate proposals and review pending slots.';
+            return (
+              <section className="bg-white border border-gray-200 rounded-2xl p-5">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                  <Target className="w-5 h-5 text-brand-600" />
+                  Autonomy Health Score
+                </h2>
+                <div className="flex items-end gap-2 mb-2">
+                  <span className={`text-5xl font-bold ${scoreColor}`}>{score}</span>
+                  <span className="text-gray-400 text-xl mb-1">/ 100</span>
+                </div>
+                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+                  <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${score}%` }} />
+                </div>
+                <p className="text-sm text-gray-600">{interpretation}</p>
+              </section>
+            );
+          })()}
+
+          {/* Section C: Cross-Channel Insights */}
+          <section className="bg-white border border-gray-200 rounded-2xl p-5">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-4">
+              <TrendingUp className="w-5 h-5 text-brand-600" />
+              Cross-Channel Insights
+            </h2>
+            {channels.length <= 1 ? (
+              <div className="text-center py-6 text-gray-500">
+                <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Connect more channels to unlock cross-channel optimization recommendations.</p>
+              </div>
+            ) : crossChannel?.insights?.length ? (
+              <div className="space-y-3">
+                {crossChannel.summary && (
+                  <p className="text-sm text-gray-600 mb-3">{crossChannel.summary}</p>
+                )}
+                {crossChannel.insights.map((insight, i) => (
+                  <div key={i} className={`flex items-start gap-3 p-4 rounded-xl border ${
+                    insight.priority === 'high' ? 'border-violet-200 bg-violet-50' :
+                    insight.priority === 'medium' ? 'border-blue-200 bg-blue-50' :
+                    'border-gray-200 bg-gray-50'
+                  }`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 mt-0.5 ${
+                      insight.priority === 'high' ? 'bg-violet-200 text-violet-800' :
+                      insight.priority === 'medium' ? 'bg-blue-200 text-blue-800' :
+                      'bg-gray-200 text-gray-700'
+                    }`}>{insight.category}</span>
+                    <p className="text-sm text-gray-700">{insight.recommendation}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-gray-500 text-sm py-4">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading cross-channel analysis…
+              </div>
+            )}
+          </section>
+
+          {/* Section D: Performance Feedback Form */}
+          <section className="bg-white border border-gray-200 rounded-2xl p-5">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1">
+              <BarChart3 className="w-5 h-5 text-brand-600" />
+              Record Video Performance
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">Improve future AI predictions by reporting actual video results. This feeds the performance feedback loop.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">YouTube Video ID *</label>
+                <input
+                  type="text"
+                  value={feedbackVideoId}
+                  onChange={(e) => setFeedbackVideoId(e.target.value)}
+                  placeholder="e.g. dQw4w9WgXcQ"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Views *</label>
+                <input
+                  type="number"
+                  value={feedbackViews}
+                  onChange={(e) => setFeedbackViews(e.target.value)}
+                  placeholder="e.g. 12500"
+                  min="0"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Likes (optional)</label>
+                <input
+                  type="number"
+                  value={feedbackLikes}
+                  onChange={(e) => setFeedbackLikes(e.target.value)}
+                  placeholder="e.g. 430"
+                  min="0"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">CTR % (optional)</label>
+                <input
+                  type="number"
+                  value={feedbackCtr}
+                  onChange={(e) => setFeedbackCtr(e.target.value)}
+                  placeholder="e.g. 4.2"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Avg Watch Duration (secs, optional)</label>
+                <input
+                  type="number"
+                  value={feedbackDuration}
+                  onChange={(e) => setFeedbackDuration(e.target.value)}
+                  placeholder="e.g. 180"
+                  min="0"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => { void submitFeedback(); }}
+              disabled={feedbackLoading || !feedbackVideoId || !feedbackViews}
+              className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-[#9d6ff0] to-[#7c4fd8] text-white text-sm font-medium rounded-lg hover:opacity-90 disabled:opacity-50"
+            >
+              {feedbackLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Submit Feedback
+            </button>
+          </section>
+        </div>
       )}
 
       {/* Floating bulk action bar */}

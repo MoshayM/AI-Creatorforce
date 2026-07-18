@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BarChart2, TrendingUp, TrendingDown, Minus, Lightbulb, RefreshCw, ChevronRight, Gauge, Video, AlertTriangle, MousePointerClick } from 'lucide-react';
 import { ResultActions } from '@/components/result-actions';
 import { AiWorkingCard, formatDuration } from '@/components/ai-activity';
@@ -77,6 +77,12 @@ export default function AnalyticsPage() {
   const [analyticsDurationMs, setAnalyticsDurationMs] = useState<number | null>(null);
   const [growthDurationMs, setGrowthDurationMs] = useState<number | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsageSummary | null | 'unavailable'>(null);
+  const [activeView, setActiveView] = useState<'scorecard' | 'analytics' | 'usage'>('scorecard');
+  const [scorecard, setScorecard] = useState<{
+    publishing: { scheduled: number; published: number; failed: number; totalVideos: number } | null;
+    calendar: { total: number; proposed: number; approved: number; upcoming7d: number; approvalRate: number } | null;
+  } | null>(null);
+  const [scorecardLoading, setScorecardLoading] = useState(false);
 
   useState(() => {
     callApi<Array<{ id: string; title: string }>>('/channels')
@@ -102,6 +108,24 @@ export default function AnalyticsPage() {
       setLoadingAnalytics(false);
     }
   }
+
+  async function loadScorecard(cid: string) {
+    setScorecardLoading(true);
+    try {
+      const [publishing, calendar] = await Promise.all([
+        callApi<{ scheduled: number; published: number; failed: number; totalVideos: number }>(`/publishing/videos/summary?channelId=${cid}`).catch(() => null),
+        callApi<{ total: number; proposed: number; approved: number; upcoming7d: number; approvalRate: number }>(`/autonomy/channels/${cid}/calendar/stats`).catch(() => null),
+      ]);
+      setScorecard({ publishing: publishing ?? null, calendar: calendar ?? null });
+    } finally {
+      setScorecardLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (channelId) { void loadScorecard(channelId); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId]);
 
   async function runGrowth() {
     if (!analytics) return;
@@ -133,7 +157,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* AI Usage card */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+      {activeView === 'usage' && <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
         <h2 className="font-semibold text-gray-900 mb-3">AI Usage (30 days)</h2>
         {tokenUsage === 'unavailable' ? (
           <p className="text-sm text-gray-500">unavailable</p>
@@ -192,9 +216,9 @@ export default function AnalyticsPage() {
             </table>
           </div>
         )}
-      </div>
+      </div>}
 
-      {/* Channel selector + run */}
+      {/* Channel selector + run — only show run button on analytics tab */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 no-print">
         <label htmlFor="analytics-channel" className="block text-sm font-medium text-gray-700 mb-2">Select Channel</label>
         <div className="flex gap-3">
@@ -220,19 +244,103 @@ export default function AnalyticsPage() {
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
             />
           )}
-          <button
-            onClick={runAnalytics}
-            disabled={!channelId || loadingAnalytics}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
-          >
-            {loadingAnalytics ? <RefreshCw className="w-4 h-4 animate-spin" /> : <BarChart2 className="w-4 h-4" />}
-            {loadingAnalytics ? 'Analyzing…' : 'Run Analytics'}
-          </button>
+          {activeView === 'analytics' && (
+            <button
+              onClick={runAnalytics}
+              disabled={!channelId || loadingAnalytics}
+              className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
+            >
+              {loadingAnalytics ? <RefreshCw className="w-4 h-4 animate-spin" /> : <BarChart2 className="w-4 h-4" />}
+              {loadingAnalytics ? 'Analyzing…' : 'Run Analytics'}
+            </button>
+          )}
         </div>
         {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
       </div>
 
-      {loadingAnalytics && (
+      {/* Tab bar */}
+      <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
+        {(['scorecard', 'analytics', 'usage'] as const).map(v => (
+          <button
+            key={v}
+            onClick={() => setActiveView(v)}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${
+              activeView === v ? 'bg-white shadow text-violet-700' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {v === 'scorecard' ? 'Scorecard' : v === 'analytics' ? 'AI Analysis' : 'AI Usage'}
+          </button>
+        ))}
+      </div>
+
+      {/* Scorecard tab */}
+      {activeView === 'scorecard' && (
+        <div className="space-y-6">
+          {!channelId && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-gray-500 text-sm">
+              Select a channel above to see its performance scorecard.
+            </div>
+          )}
+          {channelId && scorecardLoading && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
+              <RefreshCw className="w-5 h-5 animate-spin text-violet-500 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">Loading scorecard…</p>
+            </div>
+          )}
+          {channelId && !scorecardLoading && scorecard && (
+            <>
+              {/* Publishing KPIs */}
+              <div>
+                <h2 className="font-semibold text-gray-900 mb-3">Publishing</h2>
+                <div className="grid grid-cols-3 gap-4">
+                  <StatCard tone="lilac" icon={<Video className="w-5 h-5" />} label="Published" value={scorecard.publishing?.published ?? '—'} sub="videos uploaded" subClassName="text-gray-500" />
+                  <StatCard tone="cream" icon={<Gauge className="w-5 h-5" />} label="Scheduled" value={scorecard.publishing?.scheduled ?? '—'} sub="queued for publish" subClassName="text-gray-500" />
+                  <StatCard tone="pink" icon={<AlertTriangle className="w-5 h-5" />} label="Failed" value={scorecard.publishing?.failed ?? '—'} sub="publish errors" subClassName={scorecard.publishing?.failed ? 'text-red-500' : 'text-gray-500'} />
+                </div>
+              </div>
+
+              {/* Autonomy KPIs */}
+              <div>
+                <h2 className="font-semibold text-gray-900 mb-3">AI Autonomy</h2>
+                <div className="grid grid-cols-3 gap-4">
+                  <StatCard tone="periwinkle" icon={<BarChart2 className="w-5 h-5" />} label="Proposals" value={scorecard.calendar?.total ?? '—'} sub="calendar entries" subClassName="text-gray-500" />
+                  <StatCard tone="lilac" icon={<TrendingUp className="w-5 h-5" />} label="Approval Rate" value={scorecard.calendar ? `${Math.round(scorecard.calendar.approvalRate)}%` : '—'} sub="of proposals approved" subClassName={scorecard.calendar && scorecard.calendar.approvalRate >= 50 ? 'text-green-600' : 'text-amber-500'} />
+                  <StatCard tone="cream" icon={<Gauge className="w-5 h-5" />} label="Upcoming (7d)" value={scorecard.calendar?.upcoming7d ?? '—'} sub="approved slots" subClassName="text-gray-500" />
+                </div>
+              </div>
+
+              {/* Performance Grade */}
+              {scorecard.publishing && scorecard.calendar && (() => {
+                const pub = scorecard.publishing!;
+                const cal = scorecard.calendar!;
+                const failureRate = (pub.failed + pub.published) > 0 ? pub.failed / (pub.failed + pub.published) : 0;
+                const score = (cal.approvalRate * 0.4) + (Math.min(pub.published / 10, 1) * 40) + ((1 - failureRate) * 20);
+                const grade = score >= 80 ? 'A' : score >= 60 ? 'B' : score >= 40 ? 'C' : 'D';
+                const gradeColors = { A: 'bg-green-100 text-green-700', B: 'bg-blue-100 text-blue-700', C: 'bg-amber-100 text-amber-700', D: 'bg-red-100 text-red-700' };
+                const gradeLabels = { A: 'Excellent', B: 'Good', C: 'Developing', D: 'Needs Work' };
+                return (
+                  <div className="bg-white rounded-2xl border border-gray-200 p-5 flex items-center gap-6">
+                    <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black shrink-0 ${gradeColors[grade]}`}>
+                      {grade}
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold text-gray-900">Performance Grade: {gradeLabels[grade]}</p>
+                      <p className="text-sm text-gray-500 mt-1">Composite score based on approval rate, publish volume, and failure rate.</p>
+                      <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                        <span>Autonomy rate: {Math.round(cal.approvalRate)}%</span>
+                        <span>Published: {pub.published}</span>
+                        <span>Failure rate: {(failureRate * 100).toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+          )}
+        </div>
+      )}
+
+      {activeView === 'analytics' && loadingAnalytics && (
         <AiWorkingCard
           title="Analyzing channel performance"
           steps={[
@@ -244,7 +352,7 @@ export default function AnalyticsPage() {
       )}
 
       {/* Analytics report */}
-      {analytics && !loadingAnalytics && (
+      {activeView === 'analytics' && analytics && !loadingAnalytics && (
         <div className="space-y-6 fade-in">
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500">
