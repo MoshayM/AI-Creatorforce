@@ -8,6 +8,7 @@ import { AuthShell, AuthPillInput, SocialRow, type OAuthProviderName } from '@/c
 
 const MOCK_MODE = process.env['NEXT_PUBLIC_USE_MOCK'] === 'true';
 const MOCK_TOKEN = 'mock-jwt-token-for-testing';
+const IS_DEV = process.env['NODE_ENV'] === 'development';
 
 type Tab = 'password' | 'otp';
 type OtpStep = 'send' | 'verify';
@@ -275,6 +276,24 @@ export default function LoginPage() {
               >
                 Resend code
               </button>
+              {IS_DEV && (
+                <button
+                  type="button"
+                  disabled={loading}
+                  className="w-full text-xs text-amber-600 hover:underline disabled:opacity-50"
+                  onClick={async () => {
+                    try {
+                      const { data } = await api.auth.otpDevPeek(otpIdentifier.trim());
+                      setOtpCode(data.code);
+                      setInfo(`[Dev] Code auto-filled: ${data.code}`);
+                    } catch {
+                      setError('[Dev] No pending code found. Check API console for the code.');
+                    }
+                  }}
+                >
+                  [Dev] Auto-fill code from server
+                </button>
+              )}
             </form>
           )}
         </div>

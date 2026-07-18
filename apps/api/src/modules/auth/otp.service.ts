@@ -9,6 +9,9 @@ import type { SessionMeta } from './sessions.service';
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
 const OTP_MAX_PER_WINDOW = 5;
 
+/** Dev-only in-memory store so /auth/otp/dev-peek can surface codes without email. */
+const DEV_OTP_STORE = new Map<string, { code: string; expiresAt: number }>();
+
 @Injectable()
 export class OtpService {
   constructor(
@@ -145,29 +148,65 @@ export class OtpService {
     return this.auth.registerPasswordless(normalized, name, meta);
   }
 
+  /**
+   * Returns the last OTP code sent to `identifier` — only works when
+   * NODE_ENV !== 'production'. Used by the /auth/otp/dev-peek endpoint so
+   * developers can sign in without configuring an email provider.
+   */
+  peekLastCode(identifier: string): string | null {
+    if (process.env['NODE_ENV'] === 'production') return null;
+    const entry = DEV_OTP_STORE.get(identifier.trim().toLowerCase());
+    if (!entry || entry.expiresAt < Date.now()) return null;
+    return entry.code;
+  }
+
   private async sendEmail(to: string, code: string): Promise<void> {
-    const host = this.config.get<string>('SMTP_HOST');
-    if (!host) {
-      // Dev fallback: print to console
-      console.log(`\n[OTP DEV] Sign-in code for ${to}: ${code}\n`);
+    const html = `<div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:24px"><h2 style="color:#7b5ec7;margin-top:0">Your sign-in code</h2><p style="font-size:40px;font-weight:700;letter-spacing:10px;color:#1a1a2e;margin:16px 0">${code}</p><p style="color:#555;font-size:14px">Expires in 10 minutes. Never share this code with anyone.</p></div>`;
+    const text = `Your one-time sign-in code is: ${code}\n\nExpires in 10 minutes. Never share this code.`;
+    const subject = 'Your CreatorForce sign-in code';
+    const from = this.config.get<string>('SMTP_FROM') ?? this.config.get<string>('RESEND_FROM') ?? 'noreply@creatorforce.ai';
+
+    // 1. Resend (https://resend.com) — preferred provider, no SMTP setup needed.
+    const resendKey = this.config.get<string>('RESEND_API_KEY');
+    if (resendKey) {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to, subject, html, text }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Resend email failed (${res.status}): ${body}`);
+      }
       return;
     }
-    const transport = nodemailer.createTransport({
-      host,
-      port: Number(this.config.get('SMTP_PORT') ?? 587),
-      secure: false,
-      auth: {
-        user: this.config.get<string>('SMTP_USER'),
-        pass: this.config.get<string>('SMTP_PASS'),
-      },
-    });
-    await transport.sendMail({
-      from: this.config.get<string>('SMTP_FROM') ?? 'noreply@creatorforce.ai',
-      to,
-      subject: 'Your CreatorForce sign-in code',
-      text: `Your one-time sign-in code is: ${code}\n\nExpires in 10 minutes. Never share this code.`,
-      html: `<div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:24px"><h2 style="color:#7b5ec7;margin-top:0">Your sign-in code</h2><p style="font-size:40px;font-weight:700;letter-spacing:10px;color:#1a1a2e;margin:16px 0">${code}</p><p style="color:#555;font-size:14px">Expires in 10 minutes. Never share this code with anyone.</p></div>`,
-    });
+
+    // 2. SMTP (nodemailer) — configured via SMTP_HOST + SMTP_USER + SMTP_PASS.
+    const host = this.config.get<string>('SMTP_HOST');
+    if (host) {
+      const transport = nodemailer.createTransport({
+        host,
+        port: Number(this.config.get('SMTP_PORT') ?? 587),
+        secure: this.config.get('SMTP_SECURE') === 'true',
+        auth: {
+          user: this.config.get<string>('SMTP_USER'),
+          pass: this.config.get<string>('SMTP_PASS'),
+        },
+      });
+      await transport.sendMail({ from, to, subject, text, html });
+      return;
+    }
+
+    // 3. Dev fallback — store in memory for /auth/otp/dev-peek; log to console.
+    DEV_OTP_STORE.set(to, { code, expiresAt: Date.now() + OTP_EXPIRY_MS });
+    console.warn(
+      `\n╔══════════════════════════════════════════════════════╗\n` +
+      `║  [OTP DEV] No email provider configured              ║\n` +
+      `║  To: ${to.padEnd(46)}║\n` +
+      `║  Code: ${code.padEnd(44)}║\n` +
+      `║  → GET /api/v1/auth/otp/dev-peek?identifier=${to.padEnd(9)}║\n` +
+      `╚══════════════════════════════════════════════════════╝\n`,
+    );
   }
 
   private async sendSms(to: string, code: string): Promise<void> {

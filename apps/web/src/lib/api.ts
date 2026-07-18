@@ -561,6 +561,9 @@ export const api = {
       apiClient.post('/auth/otp/send', { identifier }),
     otpVerify: (identifier: string, code: string) =>
       apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/otp/verify', { identifier, code }),
+    /** Dev only — retrieves the last pending OTP code without email (blocked in production). */
+    otpDevPeek: (identifier: string) =>
+      apiClient.get<{ code: string }>(`/auth/otp/dev-peek?identifier=${encodeURIComponent(identifier)}`),
     updatePhone: (phone: string | null) =>
       apiClient.patch('/auth/me/phone', { phone }),
     otpRegisterSend: (email: string) =>

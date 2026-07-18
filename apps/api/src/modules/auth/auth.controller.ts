@@ -11,7 +11,10 @@ import {
   Req,
   Res,
   Param,
+  Query,
   UnauthorizedException,
+  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsString, MinLength, IsOptional, IsIn } from 'class-validator';
@@ -308,6 +311,23 @@ export class AuthController {
       ip: req.ip,
       device: req.headers['user-agent'],
     });
+  }
+
+  /**
+   * GET /auth/otp/dev-peek?identifier=... — returns the last OTP code sent to
+   * the given email/phone WITHOUT consuming it. Only available when
+   * NODE_ENV !== 'production'. Blocked entirely in production.
+   */
+  @Get('otp/dev-peek')
+  @HttpCode(HttpStatus.OK)
+  otpDevPeek(@Query('identifier') identifier: string): { code: string } {
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new ForbiddenException('Dev-peek is not available in production.');
+    }
+    if (!identifier) throw new NotFoundException('Provide ?identifier=<email-or-phone>');
+    const code = this.otp.peekLastCode(identifier);
+    if (!code) throw new NotFoundException('No pending OTP for this identifier (expired or not sent via dev fallback).');
+    return { code };
   }
 
   /** PATCH /auth/me/phone — add or update the authenticated user's phone number. */
