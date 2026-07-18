@@ -91,7 +91,7 @@ function RegisterInner() {
     try {
       await api.auth.otpRegisterSend(otpEmail.trim());
       setOtpStep('verify');
-      setInfo('Code sent! Check your email.');
+      setInfo('OTP sent! Check your email.');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 409) {
@@ -99,7 +99,7 @@ function RegisterInner() {
       } else if (status === 400) {
         setError('Too many requests. Please wait a few minutes.');
       } else {
-        setError('Could not send code. Please try again.');
+        setError('Could not send OTP. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -125,7 +125,7 @@ function RegisterInner() {
       if (status === 409) {
         setError('Email already registered. Please sign in instead.');
       } else {
-        setError('Invalid or expired code. Please try again.');
+        setError('Invalid or expired OTP. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -237,7 +237,7 @@ function RegisterInner() {
         <div className="space-y-4">
           {otpStep === 'send' ? (
             <form onSubmit={(e) => { void handleOtpSend(e); }} className="space-y-4">
-              <p className="text-sm text-gray-500 text-center">Enter your email and we&apos;ll send you a sign-up code. No password needed.</p>
+              <p className="text-sm text-gray-500 text-center">Enter your email and we&apos;ll send you a sign-up OTP. No password needed.</p>
               <AuthPillInput
                 icon={<User className="w-4 h-4" />}
                 type="text"
@@ -262,20 +262,20 @@ function RegisterInner() {
                 className="w-full py-3 bg-[#7a63cb] hover:bg-[#6b54bd] text-white rounded-full font-semibold shadow-lg shadow-[#8b74d8]/40 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {loading ? 'Sending…' : 'Send Code'}
+                {loading ? 'Sending…' : 'Send OTP'}
               </button>
             </form>
           ) : (
             <form onSubmit={(e) => { void handleOtpVerify(e); }} className="space-y-4">
               <p className="text-sm text-gray-500 text-center">
-                Code sent to <span className="font-medium text-gray-700">{otpEmail}</span>.{' '}
+                OTP sent to <span className="font-medium text-gray-700">{otpEmail}</span>.{' '}
                 <button type="button" onClick={() => { setOtpStep('send'); setError(''); setInfo(''); }} className="text-[#7b5ec7] hover:underline text-xs">Change</button>
               </p>
               <AuthPillInput
                 icon={<KeyRound className="w-4 h-4" />}
                 type="text"
-                aria-label="6-digit code"
-                placeholder="6-digit code"
+                aria-label="6-digit OTP"
+                placeholder="6-digit OTP"
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 required

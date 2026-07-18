@@ -75,13 +75,13 @@ export default function LoginPage() {
     try {
       await api.auth.otpSend(otpIdentifier.trim());
       setOtpStep('verify');
-      setInfo('Code sent! Check your email or phone.');
+      setInfo('OTP sent! Check your email or phone.');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 400) {
         setError('Too many requests. Please wait a few minutes.');
       } else {
-        setError('Could not send code. Please try again.');
+        setError('Could not send OTP. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -98,7 +98,7 @@ export default function LoginPage() {
       setTokens(data.accessToken, data.refreshToken);
       router.push('/');
     } catch {
-      setError('Invalid or expired code. Please try again.');
+      setError('Invalid or expired OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -212,7 +212,7 @@ export default function LoginPage() {
           {otpStep === 'send' ? (
             <form onSubmit={(e) => { void handleOtpSend(e); }} className="space-y-4">
               <p className="text-sm text-gray-500 text-center">
-                Enter your registered email or phone number to receive a sign-in code.
+                Enter your registered email or phone number to receive a sign-in OTP.
               </p>
               <AuthPillInput
                 icon={<Phone className="w-4 h-4" />}
@@ -230,13 +230,13 @@ export default function LoginPage() {
                 className="w-full py-3 bg-[#7a63cb] hover:bg-[#6b54bd] text-white rounded-full font-semibold shadow-lg shadow-[#8b74d8]/40 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {loading ? 'Sending…' : 'Send Code'}
+                {loading ? 'Sending…' : 'Send OTP'}
               </button>
             </form>
           ) : (
             <form onSubmit={(e) => { void handleOtpVerify(e); }} className="space-y-4">
               <p className="text-sm text-gray-500 text-center">
-                Code sent to{' '}
+                OTP sent to{' '}
                 <span className="font-medium text-gray-700">{otpIdentifier}</span>.{' '}
                 <button
                   type="button"
@@ -249,8 +249,8 @@ export default function LoginPage() {
               <AuthPillInput
                 icon={<KeyRound className="w-4 h-4" />}
                 type="text"
-                aria-label="6-digit code"
-                placeholder="6-digit code"
+                aria-label="6-digit OTP"
+                placeholder="6-digit OTP"
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 inputMode="numeric"
@@ -274,7 +274,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full text-xs text-[#7b5ec7] hover:underline disabled:opacity-50"
               >
-                Resend code
+                Resend OTP
               </button>
               {IS_DEV && (
                 <button
