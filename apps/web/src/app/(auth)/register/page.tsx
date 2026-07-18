@@ -2,9 +2,10 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { User, Mail, Lock, Eye, EyeOff, Loader2, KeyRound } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, Loader2, KeyRound, Phone } from 'lucide-react';
 import { api, setTokens, type OAuthProviders, type OAuthProvider } from '@/lib/api';
 import { AuthShell, AuthPillInput, SocialRow, type OAuthProviderName } from '@/components/auth-shell';
+import CountryCodeSelect, { COUNTRIES, type Country } from '@/components/country-code-select';
 
 const MOCK_MODE = process.env['NEXT_PUBLIC_USE_MOCK'] === 'true';
 const MOCK_TOKEN = 'mock-jwt-token-for-testing';
@@ -28,6 +29,9 @@ function RegisterInner() {
   const [otpName, setOtpName] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpStep, setOtpStep] = useState<OtpStep>('send');
+
+  // Phone fields (for future phone-based OTP registration — email only for now)
+  const [_otpCountry, setOtpCountry] = useState<Country>(COUNTRIES[0]);
 
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -237,7 +241,9 @@ function RegisterInner() {
         <div className="space-y-4">
           {otpStep === 'send' ? (
             <form onSubmit={(e) => { void handleOtpSend(e); }} className="space-y-4">
-              <p className="text-sm text-gray-500 text-center">Enter your email and we&apos;ll send you a sign-up OTP. No password needed.</p>
+              <p className="text-sm text-gray-500 text-center">
+                Enter your email and we&apos;ll send you a sign-up OTP. No password needed.
+              </p>
               <AuthPillInput
                 icon={<User className="w-4 h-4" />}
                 type="text"
@@ -246,6 +252,7 @@ function RegisterInner() {
                 value={otpName}
                 onChange={(e) => setOtpName(e.target.value)}
               />
+              {/* Email + country code row */}
               <AuthPillInput
                 icon={<Mail className="w-4 h-4" />}
                 type="email"
@@ -255,6 +262,17 @@ function RegisterInner() {
                 onChange={(e) => setOtpEmail(e.target.value)}
                 required
               />
+              {/* Country selector — shown for context / future phone OTP registration */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 shrink-0 flex items-center gap-1">
+                  <Phone className="w-3 h-3" /> Country
+                </span>
+                <CountryCodeSelect
+                  value={_otpCountry}
+                  onChange={setOtpCountry}
+                />
+                <span className="text-xs text-gray-400">for phone OTP sign-in</span>
+              </div>
               {error && <p className="text-red-500 text-sm text-center">{error}</p>}
               <button
                 type="submit"

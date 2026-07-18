@@ -2,9 +2,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { User, Lock, Eye, EyeOff, Loader2, KeyRound, Phone } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, Loader2, KeyRound, Phone, Mail } from 'lucide-react';
 import { api, setTokens, type OAuthProviders, type OAuthProvider } from '@/lib/api';
 import { AuthShell, AuthPillInput, SocialRow, type OAuthProviderName } from '@/components/auth-shell';
+import CountryCodeSelect, { COUNTRIES, type Country } from '@/components/country-code-select';
 
 const MOCK_MODE = process.env['NEXT_PUBLIC_USE_MOCK'] === 'true';
 const MOCK_TOKEN = 'mock-jwt-token-for-testing';
@@ -12,6 +13,7 @@ const IS_DEV = process.env['NODE_ENV'] === 'development';
 
 type Tab = 'password' | 'otp';
 type OtpStep = 'send' | 'verify';
+type OtpMode = 'email' | 'phone';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,7 +25,10 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   // OTP fields
-  const [otpIdentifier, setOtpIdentifier] = useState('');
+  const [otpMode, setOtpMode] = useState<OtpMode>('email');
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpPhone, setOtpPhone] = useState('');
+  const [otpCountry, setOtpCountry] = useState<Country>(COUNTRIES[0]); // India default
   const [otpCode, setOtpCode] = useState('');
   const [otpStep, setOtpStep] = useState<OtpStep>('send');
 
@@ -31,6 +36,12 @@ export default function LoginPage() {
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<OAuthProviders | undefined>(undefined);
+
+  // The full identifier sent to the API
+  const otpIdentifier =
+    otpMode === 'email'
+      ? otpEmail.trim()
+      : `${otpCountry.dialCode}${otpPhone.trim().replace(/^0+/, '')}`;
 
   useEffect(() => {
     if (MOCK_MODE) return;
@@ -69,13 +80,13 @@ export default function LoginPage() {
 
   async function handleOtpSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!otpIdentifier.trim()) return;
+    if (!otpIdentifier) return;
     setLoading(true);
     setError('');
     try {
-      await api.auth.otpSend(otpIdentifier.trim());
+      await api.auth.otpSend(otpIdentifier);
       setOtpStep('verify');
-      setInfo('OTP sent! Check your email or phone.');
+      setInfo('OTP sent! Check your ' + (otpMode === 'email' ? 'email.' : 'phone.'));
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 400) {
@@ -94,7 +105,7 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.auth.otpVerify(otpIdentifier.trim(), otpCode.trim());
+      const { data } = await api.auth.otpVerify(otpIdentifier, otpCode.trim());
       setTokens(data.accessToken, data.refreshToken);
       router.push('/');
     } catch {
@@ -122,6 +133,12 @@ export default function LoginPage() {
     setInfo('');
     setOtpStep('send');
     setOtpCode('');
+  }
+
+  function switchOtpMode(m: OtpMode) {
+    setOtpMode(m);
+    setError('');
+    setInfo('');
   }
 
   return (
@@ -214,19 +231,58 @@ export default function LoginPage() {
               <p className="text-sm text-gray-500 text-center">
                 Enter your registered email or phone number to receive a sign-in OTP.
               </p>
-              <AuthPillInput
-                icon={<Phone className="w-4 h-4" />}
-                type="text"
-                aria-label="Email or phone"
-                placeholder="Email or phone number"
-                value={otpIdentifier}
-                onChange={(e) => setOtpIdentifier(e.target.value)}
-                required
-              />
+
+              {/* Email / Phone toggle */}
+              <div className="flex bg-gray-100 rounded-full p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => switchOtpMode('email')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full transition-colors font-medium ${otpMode === 'email' ? 'bg-white shadow text-[#7b5ec7]' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <Mail className="w-3 h-3" /> Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchOtpMode('phone')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full transition-colors font-medium ${otpMode === 'phone' ? 'bg-white shadow text-[#7b5ec7]' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <Phone className="w-3 h-3" /> Phone
+                </button>
+              </div>
+
+              {otpMode === 'email' ? (
+                <AuthPillInput
+                  icon={<Mail className="w-4 h-4" />}
+                  type="email"
+                  aria-label="Email"
+                  placeholder="Email address"
+                  value={otpEmail}
+                  onChange={(e) => setOtpEmail(e.target.value)}
+                  required
+                />
+              ) : (
+                <div className="flex rounded-full border border-gray-200 bg-white focus-within:ring-2 focus-within:ring-[#7b5ec7]/40 overflow-hidden">
+                  <CountryCodeSelect
+                    value={otpCountry}
+                    onChange={setOtpCountry}
+                  />
+                  <input
+                    type="tel"
+                    aria-label="Phone number"
+                    placeholder="Mobile number"
+                    value={otpPhone}
+                    onChange={(e) => setOtpPhone(e.target.value.replace(/\D/g, ''))}
+                    inputMode="numeric"
+                    required
+                    className="flex-1 px-3 py-2.5 text-sm outline-none bg-transparent text-gray-800 placeholder:text-gray-400"
+                  />
+                </div>
+              )}
+
               {error && <p className="text-red-500 text-sm text-center">{error}</p>}
               <button
                 type="submit"
-                disabled={loading || !otpIdentifier.trim()}
+                disabled={loading || !otpIdentifier}
                 className="w-full py-3 bg-[#7a63cb] hover:bg-[#6b54bd] text-white rounded-full font-semibold shadow-lg shadow-[#8b74d8]/40 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -283,7 +339,7 @@ export default function LoginPage() {
                   className="w-full text-xs text-amber-600 hover:underline disabled:opacity-50"
                   onClick={async () => {
                     try {
-                      const { data } = await api.auth.otpDevPeek(otpIdentifier.trim());
+                      const { data } = await api.auth.otpDevPeek(otpIdentifier);
                       setOtpCode(data.code);
                       setInfo(`[Dev] OTP auto-filled: ${data.code}`);
                     } catch {
