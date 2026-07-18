@@ -566,10 +566,6 @@ export const api = {
       apiClient.get<{ code: string }>(`/auth/otp/dev-peek?identifier=${encodeURIComponent(identifier)}`),
     updatePhone: (phone: string | null) =>
       apiClient.patch('/auth/me/phone', { phone }),
-    otpRegisterSend: (email: string) =>
-      apiClient.post('/auth/otp/register/send', { email }),
-    otpRegisterVerify: (email: string, code: string, name?: string) =>
-      apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/otp/register/verify', { email, code, ...(name ? { name } : {}) }),
     forgotPassword: (email: string) =>
       apiClient.post('/auth/forgot-password', { email }),
     resetPassword: (token: string, password: string) =>

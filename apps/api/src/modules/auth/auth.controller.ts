@@ -71,16 +71,6 @@ class OtpSendDto {
   @IsString() identifier!: string;
 }
 
-class OtpRegisterSendDto {
-  @IsEmail() email!: string;
-}
-
-class OtpRegisterVerifyDto {
-  @IsEmail() email!: string;
-  @IsString() code!: string;
-  @IsString() @IsOptional() name?: string;
-}
-
 class OtpVerifyDto {
   @IsString() identifier!: string;
   @IsString() code!: string;
@@ -289,25 +279,6 @@ export class AuthController {
   @RateLimit({ bucket: 'auth-otp-verify', limit: 10, windowSecs: 60 })
   otpVerify(@Body() dto: OtpVerifyDto, @Req() req: Request) {
     return this.otp.verify(dto.identifier, dto.code, {
-      ip: req.ip,
-      device: req.headers['user-agent'],
-    });
-  }
-
-  /** POST /auth/otp/register/send — send code to unregistered email to begin OTP signup. */
-  @Post('otp/register/send')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @RateLimit({ bucket: 'auth-otp-reg-send', limit: 5, windowSecs: 600 })
-  async otpRegisterSend(@Body() dto: OtpRegisterSendDto): Promise<void> {
-    await this.otp.registerSend(dto.email);
-  }
-
-  /** POST /auth/otp/register/verify — verify code and create a passwordless account. */
-  @Post('otp/register/verify')
-  @HttpCode(HttpStatus.OK)
-  @RateLimit({ bucket: 'auth-otp-reg-verify', limit: 10, windowSecs: 60 })
-  otpRegisterVerify(@Body() dto: OtpRegisterVerifyDto, @Req() req: Request) {
-    return this.otp.registerVerify(dto.email, dto.code, dto.name, {
       ip: req.ip,
       device: req.headers['user-agent'],
     });

@@ -1,9 +1,10 @@
-import { Injectable, BadRequestException, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuthService } from './auth.service';
+import { TrialService } from '../trial/trial.service';
 import type { SessionMeta } from './sessions.service';
 
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
@@ -18,6 +19,7 @@ export class OtpService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly auth: AuthService,
+    private readonly trial: TrialService,
   ) {}
 
   async send(identifier: string): Promise<void> {
@@ -32,12 +34,8 @@ export class OtpService {
       throw new BadRequestException('Too many OTP requests. Please wait a few minutes.');
     }
 
-    const userExists =
-      type === 'EMAIL'
-        ? !!(await this.prisma.user.findUnique({ where: { email: normalized }, select: { id: true } }))
-        : !!(await this.prisma.user.findFirst({ where: { phone: normalized }, select: { id: true } }));
-
-    if (!userExists) return; // silent no-op for security
+    // No userExists gate — OTP sign-in works for new users too.
+    // If the account doesn't exist yet, verify() will auto-create it.
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const codeHash = await bcrypt.hash(code, 10);
@@ -77,7 +75,7 @@ export class OtpService {
       data: { usedAt: new Date() },
     });
 
-    const user =
+    let user =
       type === 'EMAIL'
         ? await this.prisma.user.findUnique({
             where: { email: normalized },
@@ -88,64 +86,53 @@ export class OtpService {
             select: { id: true, email: true },
           });
 
-    if (!user) throw new UnauthorizedException('Account not found');
+    if (!user) {
+      // First-time OTP sign-in — auto-create account using identifier as minimum info.
+      const isFirst = (await this.prisma.user.count()) === 0;
 
-    await this.prisma.auditLog.create({
-      data: { userId: user.id, action: 'auth.otp_login', meta: { identifier: normalized, type } },
-    });
+      if (type === 'EMAIL') {
+        const created = await this.prisma.user.create({
+          data: {
+            email: normalized,
+            passwordHash: null,
+            emailVerified: new Date(),
+            role: isFirst ? 'OWNER' : 'MEMBER',
+          },
+          select: { id: true, email: true },
+        });
+        await this.trial
+          .grantTrial(created.id, created.email, { ...meta, verificationMethod: 'otp' })
+          .catch(() => undefined);
+        user = created;
+      } else {
+        // Phone-only account: synthesise a unique placeholder email so the
+        // NOT-NULL email constraint is satisfied. The user can add a real email later.
+        const placeholderEmail = `phone.${normalized.replace(/\D/g, '')}@placeholder.cf`;
+        const created = await this.prisma.user.create({
+          data: {
+            email: placeholderEmail,
+            phone: normalized,
+            passwordHash: null,
+            role: isFirst ? 'OWNER' : 'MEMBER',
+          },
+          select: { id: true, email: true },
+        });
+        await this.trial
+          .grantTrial(created.id, created.email, { ...meta, verificationMethod: 'otp' })
+          .catch(() => undefined);
+        user = created;
+      }
 
-    return this.auth.issueSessionTokens(user.id, user.email, meta);
-  }
-
-  async registerSend(email: string): Promise<void> {
-    const normalized = email.trim().toLowerCase();
-
-    const existing = await this.prisma.user.findUnique({ where: { email: normalized }, select: { id: true } });
-    if (existing) throw new ConflictException('Email already registered. Please sign in instead.');
-
-    const windowStart = new Date(Date.now() - OTP_EXPIRY_MS);
-    const recentCount = await (this.prisma as any).otpCode.count({
-      where: { identifier: normalized, createdAt: { gte: windowStart } },
-    });
-    if (recentCount >= OTP_MAX_PER_WINDOW) {
-      throw new BadRequestException('Too many OTP requests. Please wait a few minutes.');
+      await this.prisma.auditLog.create({
+        data: { userId: user.id, action: 'auth.otp_register', meta: { identifier: normalized, type } },
+      });
+    } else {
+      await this.prisma.auditLog.create({
+        data: { userId: user.id, action: 'auth.otp_login', meta: { identifier: normalized, type } },
+      });
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const codeHash = await bcrypt.hash(code, 10);
-    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
-
-    await (this.prisma as any).otpCode.create({
-      data: { identifier: normalized, codeHash, type: 'EMAIL', expiresAt },
-    });
-
-    await this.sendEmail(normalized, code);
-  }
-
-  async registerVerify(
-    email: string,
-    code: string,
-    name?: string,
-    meta: SessionMeta = {},
-  ): Promise<{ accessToken: string; refreshToken: string }> {
-    const normalized = email.trim().toLowerCase();
-
-    const otpRow = await (this.prisma as any).otpCode.findFirst({
-      where: { identifier: normalized, usedAt: null, expiresAt: { gt: new Date() } },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!otpRow) throw new UnauthorizedException('Invalid or expired code');
-
-    const valid = await bcrypt.compare(code, otpRow.codeHash);
-    if (!valid) throw new UnauthorizedException('Invalid or expired code');
-
-    await (this.prisma as any).otpCode.update({
-      where: { id: otpRow.id },
-      data: { usedAt: new Date() },
-    });
-
-    return this.auth.registerPasswordless(normalized, name, meta);
+    return this.auth.issueSessionTokens(user.id, user.email, meta);
   }
 
   /**
