@@ -91,6 +91,14 @@ export class AutonomyService {
     private readonly notifications: NotificationsService,
   ) {}
 
+  private async audit(userId: string, action: string, meta: Record<string, unknown>): Promise<void> {
+    try {
+      await this.prisma.auditLog.create({ data: { userId, action, meta: meta as never } });
+    } catch {
+      // Non-fatal — never let audit failure break the operation
+    }
+  }
+
   private async assertChannelOwnership(channelId: string, userId: string) {
     const channel = await this.prisma.channel.findUnique({
       where: { id: channelId },
@@ -207,7 +215,16 @@ export class AutonomyService {
     opts: { weeks?: number; perWeek?: number; dryRun?: boolean },
   ) {
     await this.assertChannelOwnership(channelId, userId);
-    return this.generateCalendarInternal(channelId, opts);
+    const result = await this.generateCalendarInternal(channelId, opts);
+    void this.audit(userId, 'autonomy.calendar.generate', {
+      channelId,
+      weeks: opts.weeks,
+      perWeek: opts.perWeek,
+      source: result.source,
+      entryCount: result.entries.length,
+      dryRun: result.dryRun ?? false,
+    });
+    return result;
   }
 
   /**
@@ -564,18 +581,22 @@ export class AutonomyService {
       this.logger.warn(`[AutoResearch] Failed to enqueue RESEARCH (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    return this.prisma.contentCalendarEntry.update({
+    const updated = await this.prisma.contentCalendarEntry.update({
       where: { id: entry.id },
       data: { status: 'APPROVED', videoId: video.id },
     });
+    void this.audit(userId, 'autonomy.entry.approve', { channelId: entry.channelId, entryId: entry.id, title: entry.title });
+    return updated;
   }
 
   async dismiss(entryId: string, userId: string) {
     const entry = await this.getOwnedEntry(entryId, userId);
-    return this.prisma.contentCalendarEntry.update({
+    const updated = await this.prisma.contentCalendarEntry.update({
       where: { id: entry.id },
       data: { status: 'DISMISSED' },
     });
+    void this.audit(userId, 'autonomy.entry.dismiss', { channelId: entry.channelId, entryId: entry.id, title: entry.title });
+    return updated;
   }
 
   async bulkApprove(channelId: string, userId: string, ids: string[]): Promise<{ updated: number }> {
@@ -584,6 +605,7 @@ export class AutonomyService {
       where: { id: { in: ids }, channelId, status: 'PROPOSED' },
       data: { status: 'APPROVED' },
     });
+    void this.audit(userId, 'autonomy.entry.bulk_approve', { channelId, count: result.count });
     return { updated: result.count };
   }
 
@@ -593,6 +615,7 @@ export class AutonomyService {
       where: { id: { in: ids }, channelId, status: 'PROPOSED' },
       data: { status: 'DISMISSED' },
     });
+    void this.audit(userId, 'autonomy.entry.bulk_dismiss', { channelId, count: result.count });
     return { updated: result.count };
   }
 
@@ -717,6 +740,7 @@ export class AutonomyService {
       { channelId, count, oldestEntryId: oldest.id },
     );
 
+    void this.audit(userId, 'autonomy.escalation.stale', { channelId, count, oldestEntryId: oldest.id });
     log(`[Escalation] channel=${channelId} notified userId=${userId} — ${count} stale proposal(s)`);
   }
 
@@ -760,6 +784,7 @@ export class AutonomyService {
       },
     });
     await this.buildProfile(channelId);
+    void this.audit(userId, 'autonomy.feedback.record', { channelId, ytVideoId: data.ytVideoId, views: data.views });
     this.logger.log(`[feedback] channelId=${channelId} ytVideoId=${data.ytVideoId} views=${data.views}`);
     return { ok: true };
   }
@@ -835,6 +860,63 @@ export class AutonomyService {
     );
 
     return { ...result, channelCount: channels.length };
+  }
+
+  /**
+   * M3 — Exception escalation: called by SupervisorWorker when any pipeline job
+   * fails. Sends an in-app notification to the channel owner so they know what
+   * broke and can intervene.
+   */
+  async escalateJobFailure(
+    projectId: string,
+    jobType: string,
+    errorMessage: string,
+  ): Promise<void> {
+    try {
+      const project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+        include: { channel: { select: { userId: true, title: true } } },
+      });
+      if (!project) return;
+
+      const userId = project.channel.userId;
+      const channelTitle = project.channel.title ?? 'your channel';
+
+      await this.notifications.notify(
+        userId,
+        'JOB_FAILED',
+        `Content pipeline step failed`,
+        `The "${jobType}" step for "${project.title}" on ${channelTitle} could not complete. Error: ${errorMessage.slice(0, 200)}. Please check the project and retry.`,
+        { projectId, jobType, error: errorMessage.slice(0, 500) },
+      );
+
+      await this.audit(userId, 'autonomy.job.failure_escalated', {
+        projectId,
+        jobType,
+        channelId: project.channelId,
+        error: errorMessage.slice(0, 500),
+      });
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  /**
+   * Returns recent autonomy audit log entries for a channel.
+   * Queries the shared AuditLog table for actions prefixed with 'autonomy.'.
+   */
+  async getAuditLog(channelId: string, userId: string, take = 50) {
+    await this.assertChannelOwnership(channelId, userId);
+    const logs = await this.prisma.auditLog.findMany({
+      where: {
+        action: { startsWith: 'autonomy.' },
+        meta: { path: ['channelId'], equals: channelId },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(take, 100),
+      select: { id: true, action: true, meta: true, createdAt: true },
+    });
+    return logs;
   }
 
   async goalDecompose(channelId: string, userId: string, goal: string, timeframeWeeks: number): Promise<GoalPlanOutput> {

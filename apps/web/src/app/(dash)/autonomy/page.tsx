@@ -15,6 +15,7 @@ import {
   BarChart3,
   ListChecks,
   Target,
+  ScrollText,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import {
@@ -31,6 +32,13 @@ import { StatCard } from '@/components/stat-card';
 interface Channel {
   id: string;
   title: string;
+}
+
+interface AuditLogEntry {
+  id: string;
+  action: string;
+  meta: Record<string, unknown>;
+  createdAt: string;
 }
 
 interface CrossChannelInsight {
@@ -58,7 +66,7 @@ export default function AutonomyPage() {
   const [channelId, setChannelId] = useState('');
   const [hydrated, setHydrated] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [insightsTab, setInsightsTab] = useState<'planner' | 'insights'>('planner');
+  const [insightsTab, setInsightsTab] = useState<'planner' | 'insights' | 'log'>('planner');
   const [feedbackVideoId, setFeedbackVideoId] = useState('');
   const [feedbackViews, setFeedbackViews] = useState('');
   const [feedbackLikes, setFeedbackLikes] = useState('');
@@ -105,6 +113,12 @@ export default function AutonomyPage() {
     queryKey: ['cross-channel-insights'],
     queryFn: () => apiClient.get('/autonomy/insights/cross-channel').then((r) => r.data as CrossChannelData),
     enabled: channels.length > 1 && insightsTab === 'insights',
+  });
+
+  const { data: auditLog = [], isFetching: auditLogLoading } = useQuery({
+    queryKey: ['autonomy-audit-log', channelId],
+    queryFn: () => api.autonomy.auditLog(channelId, 30).then((r) => r.data as AuditLogEntry[]),
+    enabled: !!channelId && insightsTab === 'log',
   });
 
   const refreshProfile = useMutation({
@@ -259,6 +273,13 @@ export default function AutonomyPage() {
             className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${insightsTab === 'insights' ? 'bg-white shadow text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
           >
             <BarChart3 className="w-4 h-4 inline mr-1.5" />Insights
+          </button>
+          <button
+            type="button"
+            onClick={() => setInsightsTab('log')}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${insightsTab === 'log' ? 'bg-white shadow text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <ScrollText className="w-4 h-4 inline mr-1.5" />Activity Log
           </button>
         </div>
       )}
@@ -749,6 +770,87 @@ export default function AutonomyPage() {
               Submit Feedback
             </button>
           </section>
+        </div>
+      )}
+
+      {/* Activity Log tab */}
+      {channelId && insightsTab === 'log' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <ScrollText className="w-5 h-5 text-[#7b5ec7]" />
+            <h2 className="text-lg font-semibold text-gray-900">Activity Log</h2>
+            <span className="text-sm text-gray-400">(last 30 autonomy actions)</span>
+          </div>
+          {auditLogLoading ? (
+            <div className="flex items-center gap-2 text-gray-500 text-sm py-8">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading activity…
+            </div>
+          ) : auditLog.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+              <ScrollText className="w-10 h-10 mb-3 opacity-30" />
+              <p className="text-sm">No activity logged yet.</p>
+            </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-2xl divide-y divide-gray-100">
+              {auditLog.map((entry) => {
+                const dotColor =
+                  entry.action.includes('approve') ? 'bg-green-500' :
+                  entry.action.includes('dismiss') || entry.action.includes('failure') ? 'bg-red-500' :
+                  entry.action.includes('generate') || entry.action.includes('calendar') ? 'bg-blue-500' :
+                  entry.action.includes('escalat') ? 'bg-yellow-500' :
+                  'bg-gray-400';
+
+                const actionLabel: Record<string, string> = {
+                  'autonomy.entry.approve': 'Entry approved',
+                  'autonomy.entry.dismiss': 'Entry dismissed',
+                  'autonomy.entry.bulk_approve': 'Bulk approve',
+                  'autonomy.entry.bulk_dismiss': 'Bulk dismiss',
+                  'autonomy.calendar.generate': 'Calendar generated',
+                  'autonomy.feedback.record': 'Performance feedback recorded',
+                  'autonomy.escalation.stale': 'Stale escalation sent',
+                  'autonomy.job.failure_escalated': 'Job failure escalated',
+                };
+
+                const label = actionLabel[entry.action] ?? entry.action;
+
+                const metaDetail = (() => {
+                  const m = entry.meta;
+                  if (entry.action === 'autonomy.entry.approve' || entry.action === 'autonomy.entry.dismiss') {
+                    return typeof m['title'] === 'string' ? m['title'] : null;
+                  }
+                  if (entry.action === 'autonomy.calendar.generate') {
+                    const count = typeof m['entryCount'] === 'number' ? m['entryCount'] : null;
+                    const src = typeof m['source'] === 'string' ? m['source'] : null;
+                    return count !== null ? `${count} entries, source: ${src ?? 'unknown'}` : null;
+                  }
+                  if (entry.action === 'autonomy.entry.bulk_approve' || entry.action === 'autonomy.entry.bulk_dismiss') {
+                    return typeof m['count'] === 'number' ? `${m['count']} entries` : null;
+                  }
+                  if (entry.action === 'autonomy.job.failure_escalated') {
+                    const jt = typeof m['jobType'] === 'string' ? m['jobType'] : '';
+                    const err = typeof m['error'] === 'string' ? m['error'].slice(0, 80) : '';
+                    return jt ? `${jt}: ${err}` : err || null;
+                  }
+                  return null;
+                })();
+
+                return (
+                  <div key={entry.id} className="flex items-start gap-4 px-5 py-4">
+                    <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800">{label}</p>
+                      {metaDetail && (
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">{metaDetail}</p>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-400 shrink-0 tabular-nums">
+                      {format(new Date(entry.createdAt), 'MMM d, HH:mm')}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

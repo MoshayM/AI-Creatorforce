@@ -143,4 +143,13 @@ export class AutonomyController {
   ) {
     return this.svc.goalDecompose(channelId, user.sub, body.goal, body.timeframeWeeks ?? 8);
   }
+
+  @Get('channels/:channelId/audit-log')
+  auditLog(
+    @Param('channelId') channelId: string,
+    @CurrentUser() user: JwtPayload,
+    @Query('take') take?: string,
+  ) {
+    return this.svc.getAuditLog(channelId, user.sub, take ? parseInt(take, 10) : 50);
+  }
 }

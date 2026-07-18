@@ -835,6 +835,8 @@ export const api = {
       apiClient.patch<void>(`/autonomy/calendar/${entryId}/title`, { title }),
     calendarStats: (channelId: string) =>
       apiClient.get<{ total: number; proposed: number; approved: number; dismissed: number; scheduled: number; upcoming7d: number; approvalRate: number | null; avgPriority: number | null }>(`/autonomy/channels/${channelId}/calendar/stats`),
+    auditLog: (channelId: string, take?: number) =>
+      apiClient.get(`/autonomy/channels/${channelId}/audit-log${take ? `?take=${take}` : ''}`),
   },
   publishing: {
     listVideos: (params?: {

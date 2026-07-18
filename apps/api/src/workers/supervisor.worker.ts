@@ -302,6 +302,10 @@ export class SupervisorWorker extends WorkerHost {
       this.events.emitJobLog(jobId, projectId, `Agent error: ${failure.error.slice(0, 120)}`);
       this.events.emitJobFailed(jobId, failure.error, projectId);
       this.metrics.recordJob(type, 'failed', Date.now() - t0);
+      // M3 — escalate pipeline failure to channel owner (best-effort, non-blocking)
+      if (projectId) {
+        void this.autonomy.escalateJobFailure(projectId, type, failure.error);
+      }
       // Do NOT rethrow — state is persisted in PostgreSQL; rethrowing causes BullMQ to
       // re-queue the job (we set attempts:1 but this is the safety valve) and triggers
       // Redis stream errors on old Redis 5.x. Our AI client handles its own retries.
