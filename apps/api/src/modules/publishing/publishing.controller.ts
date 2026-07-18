@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray, IsDateString, IsIn, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsDateString, IsIn, IsInt, Min, Max, IsBoolean } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import type { VideoStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -15,6 +15,8 @@ class PublishDto {
   @IsArray() tags!: string[];
   @IsString() approvalId!: string;
   @IsOptional() @IsDateString() scheduledAt?: string;
+  @IsOptional() @IsString() r2Key?: string;
+  @IsOptional() @IsBoolean() containsSyntheticMedia?: boolean;
 }
 
 const TRACKED_STATUSES = ['SCHEDULED', 'PUBLISHED', 'FAILED'] as const;
@@ -58,8 +60,14 @@ export class PublishingController {
     return this.svc.trackingSummary(user.sub, channelId || undefined);
   }
 
+  /** Returns render readiness, approval status, and existing video record for a project. */
+  @Get('project/:projectId/ready')
+  projectReady(@Param('projectId') projectId: string, @CurrentUser() user: JwtPayload) {
+    return this.svc.getProjectPublishReady(projectId, user.sub);
+  }
+
   @Post('publish')
-  publish(@Body() dto: PublishDto) {
+  publish(@Body() dto: PublishDto, @CurrentUser() user: JwtPayload) {
     return this.svc.publish(
       {
         videoId: dto.videoId,
@@ -68,6 +76,8 @@ export class PublishingController {
         description: dto.description,
         tags: dto.tags,
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : undefined,
+        r2Key: dto.r2Key,
+        containsSyntheticMedia: dto.containsSyntheticMedia,
       },
       dto.approvalId,
     );

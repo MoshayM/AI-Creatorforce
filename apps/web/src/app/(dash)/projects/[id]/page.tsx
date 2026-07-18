@@ -11,7 +11,9 @@ import {
   Check, Copy, Download,
   RotateCcw, ArrowRightLeft, Timer, Trash2,
   FileText, RefreshCw, Film, Search, ShieldCheck, Tag, Image as ImageIcon,
+  Youtube, Send, X,
 } from 'lucide-react';
+import type { ProjectPublishReady } from '@/lib/api';
 
 type PageTab = 'pipeline' | 'script' | 'storyboard' | 'seo' | 'checks';
 
@@ -1509,6 +1511,8 @@ export default function ProjectDetailPage() {
         }
       />
 
+      <PublishFromRenderPanel projectId={id} />
+
       {/* Full Job History — section collapses to one clickable bar */}
       <div className="bg-white border border-gray-200 rounded-xl">
         <div
@@ -1690,6 +1694,181 @@ export default function ProjectDetailPage() {
       </div>
       </> /* end pipeline tab */}
     </div>
+  );
+}
+
+// ─── Publish from Render Panel ────────────────────────────────────────────────
+
+function PublishFromRenderPanel({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [error, setError] = useState('');
+
+  const { data, isLoading } = useQuery<ProjectPublishReady>({
+    queryKey: ['publish-ready', projectId],
+    queryFn: () => api.publishing.projectReady(projectId).then((r) => r.data),
+    refetchInterval: 30_000,
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      if (!data?.render?.r2Key || !data.approval || !data.video) return;
+      setError('');
+      await api.publishing.publish({
+        videoId: data.video.id,
+        channelId: data.project.channel.id,
+        title: data.video.title,
+        description: data.video.description ?? '',
+        tags: data.video.tags,
+        approvalId: data.approval.id,
+        r2Key: data.render.r2Key,
+        scheduledAt: scheduledAt || undefined,
+        containsSyntheticMedia: true,
+      });
+    },
+    onSuccess: () => {
+      setOpen(false);
+      void qc.invalidateQueries({ queryKey: ['publish-ready', projectId] });
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : 'Publish failed'),
+  });
+
+  if (isLoading) return null;
+  if (!data) return null;
+
+  const { render, approval, video, canPublish } = data;
+
+  // Already published
+  if (video?.youtubeVideoId) {
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-xl px-5 py-4 flex items-center gap-3">
+        <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+        <div>
+          <p className="text-sm font-semibold text-green-800">Published to YouTube</p>
+          <a
+            href={`https://youtube.com/watch?v=${video.youtubeVideoId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-green-700 underline"
+          >
+            youtube.com/watch?v={video.youtubeVideoId}
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  // Not ready — show status
+  if (!canPublish) {
+    const missing: string[] = [];
+    if (!render) missing.push('Render not complete');
+    if (!approval) missing.push('No approved approval');
+    if (!video) missing.push('No video metadata (run Metadata step)');
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Youtube className="w-4 h-4 text-gray-400" />
+          <p className="text-sm font-semibold text-gray-700">Publish to YouTube</p>
+        </div>
+        <p className="text-xs text-gray-500">Waiting for: {missing.join(' · ')}</p>
+      </div>
+    );
+  }
+
+  const durationStr = render?.durationMs
+    ? `${Math.floor(render.durationMs / 60000)}m ${Math.round((render.durationMs % 60000) / 1000)}s`
+    : null;
+
+  return (
+    <>
+      <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl px-5 py-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-red-100 rounded-xl flex items-center justify-center shrink-0">
+            <Youtube className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Ready to publish</p>
+            <p className="text-xs text-gray-500">
+              Render complete{durationStr ? ` · ${durationStr}` : ''} · Approval granted · Human-approved ✓
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
+        >
+          <Send className="w-4 h-4" />
+          Publish to YouTube
+        </button>
+      </div>
+
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Youtube className="w-5 h-5 text-red-600" />
+                <h2 className="text-lg font-bold text-gray-900">Confirm Publish</h2>
+              </div>
+              <button onClick={() => { setOpen(false); setError(''); }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-5">
+              <div className="bg-gray-50 rounded-xl p-3">
+                <p className="text-xs text-gray-500 mb-0.5">Title</p>
+                <p className="text-sm font-medium text-gray-900">{video!.title}</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3">
+                <p className="text-xs text-gray-500 mb-0.5">Channel</p>
+                <p className="text-sm font-medium text-gray-900">{data.project.channel.title}</p>
+              </div>
+              {render?.preset && (
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-xs text-gray-500 mb-0.5">Render preset{durationStr ? ` · ${durationStr}` : ''}</p>
+                  <p className="text-sm font-medium text-gray-900">{render.preset}</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Schedule (optional — leave blank to publish now)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400"
+                />
+              </div>
+              <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                This video contains AI-generated media and will be labelled "Altered or synthetic content" per YouTube policy.
+              </p>
+            </div>
+
+            {error && <p className="text-xs text-red-500 mb-3">{error}</p>}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setOpen(false); setError(''); }}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => publishMutation.mutate()}
+                disabled={publishMutation.isPending}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-colors"
+              >
+                {publishMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {publishMutation.isPending ? 'Publishing…' : scheduledAt ? 'Schedule' : 'Publish Now'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

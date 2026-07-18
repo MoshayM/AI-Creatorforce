@@ -240,4 +240,47 @@ export class PublishingService {
     });
     return res.data.items?.[0]?.statistics;
   }
+
+  /**
+   * Returns everything the frontend needs to decide whether a project can be
+   * published from its render output: the latest READY render, the latest
+   * APPROVED approval, and the project's Video record (if one exists).
+   * Returns null for any part that is not yet available.
+   */
+  async getProjectPublishReady(projectId: string, userId: string) {
+    // Verify ownership via channel membership
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, channel: { userId } },
+      include: { channel: { select: { id: true, title: true } } },
+    });
+    if (!project) throw new ForbiddenException('Project not found or access denied');
+
+    const [render, approval, video] = await Promise.all([
+      this.prisma.render.findFirst({
+        where: { projectId, status: 'READY' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, r2Key: true, preset: true, durationMs: true, sizeBytes: true, checksum: true },
+      }),
+      this.prisma.approval.findFirst({
+        where: { projectId, status: 'APPROVED' },
+        orderBy: { reviewedAt: 'desc' },
+        select: { id: true, reviewedAt: true, expiresAt: true },
+      }),
+      this.prisma.video.findFirst({
+        where: { projectId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, title: true, description: true, tags: true, status: true, youtubeVideoId: true },
+      }),
+    ]);
+
+    const approvalValid = approval && approval.expiresAt > new Date();
+
+    return {
+      project: { id: project.id, title: project.title, description: project.description, channel: project.channel },
+      render: render ?? null,
+      approval: approvalValid ? approval : null,
+      video: video ?? null,
+      canPublish: !!(render && approvalValid),
+    };
+  }
 }

@@ -565,6 +565,7 @@ export class SupervisorWorker extends WorkerHost {
         const categoryId = payload['categoryId'] as string | undefined;
         const scheduledAt = payload['scheduledAt'] ? new Date(payload['scheduledAt'] as string) : undefined;
         const videoFilePath = payload['videoFilePath'] as string | undefined;
+        const r2Key = payload['r2Key'] as string | undefined;
 
         // YouTube AI-disclosure policy (support.google.com/youtube/answer/14328491):
         // FULL_PRODUCTION narrates with TTS and generates visuals/music, so the
@@ -582,7 +583,7 @@ export class SupervisorWorker extends WorkerHost {
         this.log(jobId, projectId, 'Publishing to YouTube…', `"${title?.slice(0, 60)}"`);
         const t0 = Date.now();
         const youtubeVideoId = await this.publishing.publish(
-          { videoId, channelId, title, description, tags, categoryId, scheduledAt, videoFilePath, containsSyntheticMedia },
+          { videoId, channelId, title, description, tags, categoryId, scheduledAt, videoFilePath, r2Key, containsSyntheticMedia },
           approvalId,
         );
         this.log(jobId, projectId, 'Published to YouTube ✓', `Video ID: ${youtubeVideoId}`);

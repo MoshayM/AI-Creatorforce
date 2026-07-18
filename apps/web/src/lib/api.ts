@@ -518,6 +518,14 @@ export interface PublishTrackingSummary {
   failed: number;
 }
 
+export interface ProjectPublishReady {
+  project: { id: string; title: string; description: string | null; channel: { id: string; title: string } };
+  render: { id: string; r2Key: string | null; preset: string; durationMs: number | null; sizeBytes: string | null; checksum: string | null } | null;
+  approval: { id: string; reviewedAt: string | null; expiresAt: string } | null;
+  video: { id: string; title: string; description: string | null; tags: string[]; status: string; youtubeVideoId: string | null } | null;
+  canPublish: boolean;
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -850,6 +858,19 @@ export const api = {
       apiClient.get<PublishTrackingSummary>(
         `/publishing/videos/summary${channelId ? `?channelId=${encodeURIComponent(channelId)}` : ''}`,
       ),
+    projectReady: (projectId: string) =>
+      apiClient.get<ProjectPublishReady>(`/publishing/project/${encodeURIComponent(projectId)}/ready`),
+    publish: (payload: {
+      videoId: string;
+      channelId: string;
+      title: string;
+      description: string;
+      tags: string[];
+      approvalId: string;
+      r2Key?: string;
+      scheduledAt?: string;
+      containsSyntheticMedia?: boolean;
+    }) => apiClient.post<{ youtubeVideoId: string }>('/publishing/publish', payload),
   },
   trial: {
     status: () => apiClient.get<TrialStatusResponse>('/trial/status'),
