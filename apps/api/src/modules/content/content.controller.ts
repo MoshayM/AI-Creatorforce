@@ -1,6 +1,6 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsNumber } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ContentService } from './content.service';
 import type { RepurposePlatform } from '@cf/shared';
@@ -23,6 +23,20 @@ class ScoreScriptDto {
   @IsOptional() @IsString() niche?: string;
 }
 
+class ABTestDto {
+  @IsString() title!: string;
+  @IsString() niche!: string;
+  @IsOptional() currentCtr?: number;
+  @IsOptional() @IsString() description?: string;
+}
+
+class SeriesPlanDto {
+  @IsString() topic!: string;
+  @IsString() niche!: string;
+  @IsNumber() episodeCount!: number;
+  @IsOptional() @IsString() targetAudience?: string;
+}
+
 @ApiTags('content')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -43,5 +57,15 @@ export class ContentController {
   @Post('score-script')
   scoreScript(@Body() dto: ScoreScriptDto) {
     return this.svc.scoreScript(dto.scriptText, dto.title, dto.niche);
+  }
+
+  @Post('ab-test')
+  generateABTest(@Body() dto: ABTestDto) {
+    return this.svc.generateABTest(dto.title, dto.niche, dto.currentCtr, dto.description);
+  }
+
+  @Post('series-plan')
+  planSeries(@Body() dto: SeriesPlanDto) {
+    return this.svc.planSeries(dto.topic, dto.episodeCount, dto.niche, dto.targetAudience);
   }
 }

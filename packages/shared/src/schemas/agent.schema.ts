@@ -322,6 +322,36 @@ export type RepurposeOutput = z.infer<typeof RepurposeOutputSchema>;
 
 // ── Goal Decomposition ─────────────────────────────────────────────────────────
 
+// ── A/B Test Planner ───────────────────────────────────────────────────────────
+
+export const ABTestOutputSchema = z.object({
+  originalTitle: z.string(),
+  titleVariants: z.array(z.object({
+    title: z.string(),
+    predictedCtrScore: z.number().min(0).max(100),
+    hookType: z.string(),
+    rationale: z.string(),
+    emotionalTrigger: z.string(),
+  })),
+  thumbnailConcepts: z.array(z.object({
+    concept: z.string(),
+    textOverlay: z.string(),
+    colorMood: z.string(),
+    faceExpression: z.string().optional().default(''),
+    layout: z.string(),
+    predictedCtrScore: z.number().min(0).max(100),
+  })),
+  testingStrategy: z.object({
+    recommendedPair: z.string(),
+    runDurationDays: z.number().int(),
+    minimumViews: z.number().int(),
+    keyMetric: z.string(),
+    notes: z.string(),
+  }),
+  insights: z.array(z.string()),
+});
+export type ABTestOutput = z.infer<typeof ABTestOutputSchema>;
+
 export const GoalPlanOutputSchema = z.object({
   goal: z.string(),
   timeframeWeeks: z.number().int(),
@@ -368,6 +398,30 @@ export const ScriptQualityOutputSchema = z.object({
   estimatedRetentionPct: z.number().min(0).max(100).optional().default(60),
 });
 export type ScriptQualityOutput = z.infer<typeof ScriptQualityOutputSchema>;
+
+export const SeriesEpisodeSchema = z.object({
+  episodeNumber: z.number(),
+  title: z.string(),
+  hook: z.string(),
+  keyPoints: z.array(z.string()),
+  estimatedDurationMins: z.number().min(5).max(60).default(15),
+  format: z.enum(['tutorial', 'story', 'review', 'interview', 'documentary', 'listicle']).default('tutorial'),
+  researchAngles: z.array(z.string()).optional().default([]),
+  thumbnailConcept: z.string().optional().default(''),
+});
+export type SeriesEpisodeOutput = z.infer<typeof SeriesEpisodeSchema>;
+
+export const SeriesPlanOutputSchema = z.object({
+  seriesTitle: z.string(),
+  seriesHook: z.string(),
+  targetAudience: z.string(),
+  estimatedTotalEpisodes: z.number(),
+  episodes: z.array(SeriesEpisodeSchema),
+  seriesArc: z.string(),
+  monetizationTips: z.array(z.string()).optional().default([]),
+  seoStrategy: z.string().optional().default(''),
+});
+export type SeriesPlanOutput = z.infer<typeof SeriesPlanOutputSchema>;
 
 export const GrowthOutputSchema = z.object({
   channelId: z.string().optional(),

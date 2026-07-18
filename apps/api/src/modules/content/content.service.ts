@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { callAIStructured } from '@cf/shared';
 import {
-  ResearchOutputSchema, ScriptOutputSchema, FactCheckOutputSchema, RepurposeOutputSchema, ScriptQualityOutputSchema,
+  ResearchOutputSchema, ScriptOutputSchema, FactCheckOutputSchema, RepurposeOutputSchema, ScriptQualityOutputSchema, ABTestOutputSchema, SeriesPlanOutputSchema,
   type ResearchOutput, type ScriptOutput, type FactCheckOutput, type RepurposeOutput,
-  type RepurposePlatform, type ScriptQualityOutput,
+  type RepurposePlatform, type ScriptQualityOutput, type ABTestOutput, type SeriesPlanOutput,
 } from '@cf/shared';
 
 const RESEARCH_SYSTEM = `You are a professional YouTube content researcher. Research topics thoroughly, find trending angles, and identify trustworthy sources. Always cite sources with URLs.`;
@@ -84,6 +84,39 @@ export class ContentService {
       }],
       ScriptQualityOutputSchema,
       { systemPrompt: `You are an expert YouTube content strategist. Analyze scripts across 6 dimensions: Hook Strength, Audience Retention, SEO Alignment, Brand Voice, Educational Value, and Virality Potential. Be rigorous but constructive.`, maxTokens: 4000 },
+    );
+  }
+
+  async planSeries(topic: string, episodeCount: number, niche: string, targetAudience?: string): Promise<SeriesPlanOutput> {
+    const count = Math.min(Math.max(episodeCount, 3), 12);
+    return callAIStructured(
+      [{
+        role: 'user',
+        content: `Plan a YouTube video series:\nTopic: "${topic}"\nNiche: ${niche}\nTarget Audience: ${targetAudience ?? 'General YouTube viewers'}\nEpisodes: ${count}\n\nCreate a compelling series with a clear narrative arc where each episode builds on the previous one. Return ONLY valid JSON:\n{"seriesTitle":"Series title","seriesHook":"One-sentence series pitch","targetAudience":"Who this is for","estimatedTotalEpisodes":${count},"episodes":[{"episodeNumber":1,"title":"Episode 1 title","hook":"Opening hook","keyPoints":["point 1","point 2","point 3"],"estimatedDurationMins":15,"format":"tutorial","researchAngles":["angle 1"],"thumbnailConcept":"Bright CTA thumbnail with reaction face"}],"seriesArc":"How the story/knowledge arc unfolds across episodes","monetizationTips":["tip 1","tip 2"],"seoStrategy":"How to optimize the series for YouTube search"}`,
+      }],
+      SeriesPlanOutputSchema,
+      {
+        systemPrompt: `You are an expert YouTube series strategist. Design binge-worthy series with clear narrative arcs and audience retention strategies. Each episode should have standalone value while contributing to the overall series.`,
+        maxTokens: 6000,
+      },
+    );
+  }
+
+  async generateABTest(title: string, niche: string, currentCtr?: number, description?: string): Promise<ABTestOutput> {
+    const context = [
+      `Title: ${title}`,
+      `Niche: ${niche}`,
+      currentCtr !== undefined ? `Current CTR: ${(currentCtr * 100).toFixed(1)}%` : null,
+      description ? `Description snippet: ${description.slice(0, 300)}` : null,
+    ].filter(Boolean).join('\n');
+
+    return callAIStructured(
+      [{
+        role: 'user',
+        content: `Generate A/B test variants for this YouTube video:\n\n${context}\n\nCreate 5 title variants and 3 thumbnail concepts optimized for CTR. Score each 0-100 for predicted CTR. Include a testing strategy.\n\nReturn ONLY valid JSON:\n{"originalTitle":"${title}","titleVariants":[{"title":"Variant title 1","predictedCtrScore":82,"hookType":"curiosity gap","rationale":"Why this works","emotionalTrigger":"fear of missing out"},{"title":"Variant title 2","predictedCtrScore":78,"hookType":"number list","rationale":"...","emotionalTrigger":"..."}],"thumbnailConcepts":[{"concept":"Reaction shot + big text","textOverlay":"THE SHOCKING TRUTH","colorMood":"red/black high contrast","faceExpression":"shocked","layout":"face left text right","predictedCtrScore":85}],"testingStrategy":{"recommendedPair":"Test variant 1 vs variant 3","runDurationDays":7,"minimumViews":1000,"keyMetric":"CTR > 5%","notes":"Run simultaneously for 7 days..."},"insights":["insight 1","insight 2"]}`,
+      }],
+      ABTestOutputSchema,
+      { systemPrompt: 'You are a YouTube CTR optimization expert with deep knowledge of what drives clicks — curiosity gaps, numbers, emotional triggers, thumbnail psychology. Provide specific, data-driven recommendations.', maxTokens: 4000 },
     );
   }
 }
