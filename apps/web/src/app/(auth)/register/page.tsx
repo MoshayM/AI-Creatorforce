@@ -299,13 +299,13 @@ function RegisterInner() {
                     try {
                       const { data } = await api.auth.otpDevPeek(otpEmail.trim());
                       setOtpCode(data.code);
-                      setInfo(`[Dev] Code auto-filled: ${data.code}`);
+                      setInfo(`[Dev] OTP auto-filled: ${data.code}`);
                     } catch {
-                      setError('[Dev] No pending code found. Check API console for the code.');
+                      setError('[Dev] No pending OTP found. Check API console for the OTP.');
                     }
                   }}
                 >
-                  [Dev] Auto-fill code from server
+                  [Dev] Auto-fill OTP from server
                 </button>
               )}
             </form>
