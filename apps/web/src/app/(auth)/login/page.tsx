@@ -261,7 +261,7 @@ export default function LoginPage() {
                   required
                 />
               ) : (
-                <div className="flex rounded-full border border-gray-200 bg-white focus-within:ring-2 focus-within:ring-[#7b5ec7]/40 overflow-hidden">
+                <div className="flex rounded-full border border-gray-200 bg-white focus-within:ring-2 focus-within:ring-[#7b5ec7]/40">
                   <CountryCodeSelect
                     value={otpCountry}
                     onChange={setOtpCountry}

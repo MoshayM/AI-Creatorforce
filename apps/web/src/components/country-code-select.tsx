@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Search } from 'lucide-react';
 
 export interface Country {
@@ -77,6 +78,8 @@ export const COUNTRIES: Country[] = [
   { iso: 'FI', name: 'Finland', dialCode: '+358' },
 ];
 
+interface DropdownPos { top: number; left: number; width: number }
+
 interface Props {
   value: Country;
   onChange: (country: Country) => void;
@@ -85,8 +88,13 @@ interface Props {
 export default function CountryCodeSelect({ value, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  const btnRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const filtered = COUNTRIES.filter(
     (c) =>
@@ -100,63 +108,88 @@ export default function CountryCodeSelect({ value, onChange }: Props) {
     setSearch('');
   }, []);
 
+  const openDropdown = useCallback(() => {
+    if (!btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + window.scrollY + 4, left: r.left + window.scrollX, width: 288 });
+    setOpen(true);
+  }, []);
+
+  // Close on outside click or scroll
   useEffect(() => {
     if (!open) return;
-    searchRef.current?.focus();
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) close();
+    // Auto-focus search after state settles
+    const t = setTimeout(() => searchRef.current?.focus(), 50);
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const inBtn = btnRef.current?.contains(target);
+      const inMenu = document.getElementById('cf-country-menu')?.contains(target);
+      if (!inBtn && !inMenu) close();
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const onScroll = () => close();
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('scroll', onScroll, true);
+    };
   }, [open, close]);
 
+  const dropdown = open && pos ? (
+    <div
+      id="cf-country-menu"
+      style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+      className="bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
+    >
+      <div className="p-2 border-b border-gray-100">
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-full">
+          <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <input
+            ref={searchRef}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search country or code…"
+            className="flex-1 bg-transparent text-sm outline-none text-gray-700 placeholder:text-gray-400"
+          />
+        </div>
+      </div>
+      <ul className="max-h-56 overflow-y-auto py-1">
+        {filtered.length === 0 ? (
+          <li className="px-4 py-3 text-sm text-gray-400 text-center">No results</li>
+        ) : (
+          filtered.map((c) => (
+            <li key={c.iso}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()} // keep focus in search
+                onClick={() => { onChange(c); close(); }}
+                className={`w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-purple-50 transition-colors text-left ${c.iso === value.iso ? 'bg-purple-50 text-[#7b5ec7] font-medium' : 'text-gray-700'}`}
+              >
+                <span className="text-lg leading-none">{flag(c.iso)}</span>
+                <span className="flex-1 truncate">{c.name}</span>
+                <span className="text-gray-400 text-xs">{c.dialCode}</span>
+              </button>
+            </li>
+          ))
+        )}
+      </ul>
+    </div>
+  ) : null;
+
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 h-full px-3 py-2.5 bg-white border border-gray-200 rounded-l-full text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#7b5ec7]/40 transition-colors whitespace-nowrap"
+        onClick={() => (open ? close() : openDropdown())}
+        className="flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#7b5ec7]/40 transition-colors whitespace-nowrap rounded-l-full border-r border-gray-200"
       >
         <span className="text-lg leading-none">{flag(value.iso)}</span>
         <span className="text-gray-600">{value.dialCode}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-
-      {open && (
-        <div className="absolute top-full left-0 z-50 mt-1 w-72 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
-          <div className="p-2 border-b border-gray-100">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-full">
-              <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              <input
-                ref={searchRef}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search country or code…"
-                className="flex-1 bg-transparent text-sm outline-none text-gray-700 placeholder:text-gray-400"
-              />
-            </div>
-          </div>
-          <ul className="max-h-56 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <li className="px-4 py-3 text-sm text-gray-400 text-center">No results</li>
-            ) : (
-              filtered.map((c) => (
-                <li key={c.iso}>
-                  <button
-                    type="button"
-                    onClick={() => { onChange(c); close(); }}
-                    className={`w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-purple-50 transition-colors text-left ${c.iso === value.iso ? 'bg-purple-50 text-[#7b5ec7] font-medium' : 'text-gray-700'}`}
-                  >
-                    <span className="text-lg leading-none">{flag(c.iso)}</span>
-                    <span className="flex-1 truncate">{c.name}</span>
-                    <span className="text-gray-400 text-xs">{c.dialCode}</span>
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
+      {mounted && createPortal(dropdown, document.body)}
+    </>
   );
 }
