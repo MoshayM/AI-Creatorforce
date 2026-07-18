@@ -186,8 +186,8 @@ export default function ResearchPage() {
       {/* Loading */}
       {loading && (
         <AiWorkingCard
-          label="Researching topic…"
-          detail="Gathering facts, angles, and expert perspectives (~15–30 seconds)"
+          title="Researching topic…"
+          hint="Gathering facts, angles, and expert perspectives (~15–30 seconds)"
         />
       )}
 
@@ -301,7 +301,7 @@ export default function ResearchPage() {
             </div>
           )}
 
-          <ResultActions content={resultText} filename={`research-${result.topic.slice(0, 30).replace(/\s+/g, '-').toLowerCase()}.md`} />
+          <ResultActions data={resultText} filename={`research-${result.topic.slice(0, 30).replace(/\s+/g, '-').toLowerCase()}`} />
         </div>
       )}
     </div>

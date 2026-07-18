@@ -712,13 +712,6 @@ export default function ProjectDetailPage() {
 
   useProjectJobEvents(id, handleJobEvent, handleLogEvent);
 
-  useEffect(() => {
-    if (project?.title) {
-      setSeoForm((f) => f.title ? f : { ...f, title: project.title });
-      setAudienceForm((f) => f.niche ? f : { niche: project.title });
-    }
-  }, [project?.title]);
-
   async function handleSeoOptimize() {
     setSeoLoading(true);
     setSeoError('');
@@ -762,6 +755,13 @@ export default function ProjectDetailPage() {
     queryFn: () => api.projects.get(id).then((r) => r.data as ProjectDetail),
     refetchInterval: 10_000,
   });
+
+  useEffect(() => {
+    if (project?.title) {
+      setSeoForm((f) => f.title ? f : { ...f, title: project.title });
+      setAudienceForm((f) => f.niche ? f : { niche: project.title });
+    }
+  }, [project?.title]);
 
   function toggle(key: string) {
     setExpandedIds((prev) => {
