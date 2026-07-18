@@ -10,10 +10,10 @@ import {
   ChevronDown, ChevronUp, ArrowLeft,
   Check, Copy, Download,
   RotateCcw, ArrowRightLeft, Timer, Trash2,
-  FileText, RefreshCw, Film, Search,
+  FileText, RefreshCw, Film, Search, ShieldCheck,
 } from 'lucide-react';
 
-type PageTab = 'pipeline' | 'script' | 'storyboard' | 'seo';
+type PageTab = 'pipeline' | 'script' | 'storyboard' | 'seo' | 'checks';
 
 // ─── Storyboard Types ─────────────────────────────────────────────────────────
 
@@ -69,6 +69,34 @@ interface AudienceResult {
   growthTips: string[];
 }
 import { StudioFlow, type PipelineProgress } from '@/components/studio-flow';
+
+// ─── Checks Types ─────────────────────────────────────────────────────────────
+
+interface FactCheckResult {
+  overallScore: number;
+  claims: Array<{
+    claim: string;
+    verdict: 'SUPPORTED' | 'DISPUTED' | 'UNVERIFIABLE';
+    confidence: number;
+    notes?: string;
+  }>;
+  summary: string;
+  sources?: string[];
+}
+
+interface ComplianceResult {
+  passed: boolean;
+  score: number;
+  issues: Array<{
+    severity: 'BLOCKER' | 'WARNING' | 'INFO';
+    category: string;
+    description: string;
+    suggestion?: string;
+  }>;
+  summary: string;
+  youtubeReady: boolean;
+  monetizationSafe: boolean;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -607,6 +635,29 @@ export default function ProjectDetailPage() {
     }
   }
 
+  const [factCheckLoading, setFactCheckLoading] = useState(false);
+  const [complianceLoading, setComplianceLoading] = useState(false);
+
+  async function runFactCheck() {
+    setFactCheckLoading(true);
+    try {
+      await api.jobs.enqueue(id, 'FACT_CHECK', {});
+      void qc.invalidateQueries({ queryKey: ['project', id] });
+    } finally {
+      setFactCheckLoading(false);
+    }
+  }
+
+  async function runComplianceCheck() {
+    setComplianceLoading(true);
+    try {
+      await api.jobs.enqueue(id, 'COMPLIANCE', {});
+      void qc.invalidateQueries({ queryKey: ['project', id] });
+    } finally {
+      setComplianceLoading(false);
+    }
+  }
+
   const handleJobEvent = useCallback((event: Record<string, unknown>) => {
     if (event['pipelineStage'] !== undefined) {
       setPipelineProgress({
@@ -721,6 +772,18 @@ export default function ProjectDetailPage() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
   const storyboardData = latestStoryboardJob?.result as VideoScenePlan | undefined;
 
+  const latestFactCheckJob = [...project.jobs]
+    .filter((j) => j.type === 'FACT_CHECK')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+  const factCheckResult = latestFactCheckJob?.status === 'COMPLETED' ? latestFactCheckJob.result as FactCheckResult | undefined : undefined;
+  const hasDoneFactCheck = !!factCheckResult;
+
+  const latestComplianceJob = [...project.jobs]
+    .filter((j) => j.type === 'COMPLIANCE')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+  const complianceResult = latestComplianceJob?.status === 'COMPLETED' ? latestComplianceJob.result as ComplianceResult | undefined : undefined;
+  const hasDoneCompliance = !!complianceResult;
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
 
@@ -778,6 +841,14 @@ export default function ProjectDetailPage() {
         >
           <Search className="w-3.5 h-3.5" /> SEO &amp; Audience
           {(seoResult ?? audienceResult) && <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('checks')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${activeTab === 'checks' ? 'bg-white shadow text-brand-700' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" /> Checks
+          {(hasDoneFactCheck || hasDoneCompliance) && <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />}
         </button>
       </div>
 
@@ -1175,6 +1246,134 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Checks tab ───────────────────────────────────────────────────── */}
+      {activeTab === 'checks' && (
+        <div className="space-y-6">
+
+          {/* Fact Check */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-blue-500" /> Fact Check
+              </h2>
+              <button
+                type="button"
+                onClick={() => { void runFactCheck(); }}
+                disabled={factCheckLoading || latestFactCheckJob?.status === 'RUNNING' || latestFactCheckJob?.status === 'QUEUED'}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+              >
+                {factCheckLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                {factCheckLoading ? 'Running…' : hasDoneFactCheck ? 'Re-check' : 'Run Fact Check'}
+              </button>
+            </div>
+
+            {latestFactCheckJob && (latestFactCheckJob.status === 'RUNNING' || latestFactCheckJob.status === 'QUEUED') && (
+              <div className="flex items-center gap-2 text-sm text-blue-600 mb-4">
+                <Loader2 className="w-4 h-4 animate-spin" /> Checking facts…
+              </div>
+            )}
+
+            {factCheckResult ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="text-3xl font-bold text-gray-900">{factCheckResult.overallScore}<span className="text-base text-gray-500">/100</span></div>
+                  <p className="text-sm text-gray-600 flex-1">{factCheckResult.summary}</p>
+                </div>
+                <div className="space-y-2">
+                  {factCheckResult.claims.map((c, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 border border-gray-100 rounded-lg">
+                      <span className={`mt-0.5 flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        c.verdict === 'SUPPORTED' ? 'bg-green-100 text-green-700'
+                          : c.verdict === 'DISPUTED' ? 'bg-red-100 text-red-700'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>{c.verdict}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-800">{c.claim}</p>
+                        {c.notes && <p className="text-xs text-gray-500 mt-0.5">{c.notes}</p>}
+                      </div>
+                      <span className="text-xs text-gray-400 flex-shrink-0">{Math.round(c.confidence * 100)}%</span>
+                    </div>
+                  ))}
+                </div>
+                {factCheckResult.sources && factCheckResult.sources.length > 0 && (
+                  <div className="text-xs text-gray-500">
+                    <strong>Sources:</strong> {factCheckResult.sources.join(', ')}
+                  </div>
+                )}
+              </div>
+            ) : !factCheckLoading && (
+              <p className="text-sm text-gray-500 text-center py-4">Run a fact check to verify claims in your script.</p>
+            )}
+          </div>
+
+          {/* Compliance */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500" /> Compliance
+              </h2>
+              <button
+                type="button"
+                onClick={() => { void runComplianceCheck(); }}
+                disabled={complianceLoading || latestComplianceJob?.status === 'RUNNING' || latestComplianceJob?.status === 'QUEUED'}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-full text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
+              >
+                {complianceLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                {complianceLoading ? 'Checking…' : hasDoneCompliance ? 'Re-check' : 'Check Compliance'}
+              </button>
+            </div>
+
+            {latestComplianceJob && (latestComplianceJob.status === 'RUNNING' || latestComplianceJob.status === 'QUEUED') && (
+              <div className="flex items-center gap-2 text-sm text-green-600 mb-4">
+                <Loader2 className="w-4 h-4 animate-spin" /> Checking compliance…
+              </div>
+            )}
+
+            {complianceResult ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-6 flex-wrap">
+                  <div className="text-3xl font-bold text-gray-900">{complianceResult.score}<span className="text-base text-gray-500">/100</span></div>
+                  <div className="flex gap-3">
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${complianceResult.youtubeReady ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {complianceResult.youtubeReady ? 'YouTube Ready' : 'Not YouTube Ready'}
+                    </span>
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${complianceResult.monetizationSafe ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {complianceResult.monetizationSafe ? 'Monetization Safe' : 'Monetization Risk'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 flex-1">{complianceResult.summary}</p>
+                </div>
+                {complianceResult.issues.length > 0 && (
+                  <div className="space-y-2">
+                    {complianceResult.issues.map((issue, i) => (
+                      <div key={i} className={`flex items-start gap-3 p-3 rounded-lg border ${
+                        issue.severity === 'BLOCKER' ? 'border-red-200 bg-red-50'
+                          : issue.severity === 'WARNING' ? 'border-amber-200 bg-amber-50'
+                          : 'border-gray-200 bg-gray-50'
+                      }`}>
+                        <span className={`mt-0.5 flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          issue.severity === 'BLOCKER' ? 'bg-red-200 text-red-800'
+                            : issue.severity === 'WARNING' ? 'bg-amber-200 text-amber-800'
+                            : 'bg-gray-200 text-gray-700'
+                        }`}>{issue.severity}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-700">{issue.category}</p>
+                          <p className="text-sm text-gray-800">{issue.description}</p>
+                          {issue.suggestion && <p className="text-xs text-gray-500 mt-1"><strong>Fix:</strong> {issue.suggestion}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : !complianceLoading && (
+              <p className="text-sm text-gray-500 text-center py-4">Run a compliance check to verify YouTube and monetization readiness.</p>
+            )}
+          </div>
+
         </div>
       )}
 

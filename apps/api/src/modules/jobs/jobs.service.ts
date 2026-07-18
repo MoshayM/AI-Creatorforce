@@ -185,6 +185,35 @@ export class JobsService {
     return { deleted: true };
   }
 
+  async listForUser(
+    userId: string,
+    opts?: { status?: string; type?: string; limit?: number },
+  ) {
+    const where: Record<string, unknown> = { project: { userId } };
+    if (opts?.status && opts.status !== 'ALL') where['status'] = opts.status;
+    if (opts?.type) where['type'] = opts.type;
+
+    const jobs = await this.prisma.agentJob.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: opts?.limit ?? 100,
+      include: { project: { select: { id: true, title: true } } },
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [allCounts, todayCounts] = await Promise.all([
+      this.prisma.agentJob.groupBy({ by: ['status'], where: { project: { userId } }, _count: { _all: true } }),
+      this.prisma.agentJob.groupBy({ by: ['status'], where: { project: { userId }, completedAt: { gte: today } }, _count: { _all: true } }),
+    ]);
+
+    const toMap = (rows: Array<{ status: string; _count: { _all: number } }>) =>
+      Object.fromEntries(rows.map((r) => [r.status, r._count._all]));
+
+    return { jobs, counts: toMap(allCounts), todayCounts: toMap(todayCounts) };
+  }
+
   async logStep(jobId: string, agentName: string, step: string, input: unknown, output: unknown, tokensIn = 0, tokensOut = 0, latencyMs = 0) {
     return this.prisma.agentLog.create({
       data: {

@@ -1,12 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { callAIStructured } from '@cf/shared';
-import { ResearchOutputSchema, ScriptOutputSchema, FactCheckOutputSchema, type ResearchOutput, type ScriptOutput, type FactCheckOutput } from '@cf/shared';
+import {
+  ResearchOutputSchema, ScriptOutputSchema, FactCheckOutputSchema, RepurposeOutputSchema,
+  type ResearchOutput, type ScriptOutput, type FactCheckOutput, type RepurposeOutput,
+  type RepurposePlatform,
+} from '@cf/shared';
 
 const RESEARCH_SYSTEM = `You are a professional YouTube content researcher. Research topics thoroughly, find trending angles, and identify trustworthy sources. Always cite sources with URLs.`;
 
 const SCRIPT_SYSTEM = `You are an expert YouTube scriptwriter. Create engaging, well-structured scripts with a strong hook, clear sections, and a compelling CTA. Scripts must be factually accurate.`;
 
 const FACTCHECK_SYSTEM = `You are a rigorous fact-checker. Verify every factual claim in the script. Flag anything unverified, potentially false, or misleading. Be conservative — when in doubt, flag it.`;
+
+const REPURPOSE_SYSTEM = `You are a cross-platform content strategist. You adapt YouTube video scripts into platform-native content for Shorts, Instagram, TikTok, Twitter/X, LinkedIn, and newsletters. Each adaptation must feel native to its platform — not just a truncation.`;
+
+const PLATFORM_GUIDES: Record<string, string> = {
+  shorts: 'YouTube Shorts (vertical 9:16, max 60s): punchy hook in first 3 words, fast-paced narration, text-on-screen key points, strong CTA to watch the full video.',
+  instagram: 'Instagram Reel: engaging caption (150 chars), 5-8 relevant hashtags, description of the visual opening, swipe/interaction CTA.',
+  tiktok: 'TikTok: trending hook format, text-on-screen breakdown (3-5 frames), trending audio suggestion, duet/stitch CTA.',
+  twitter: 'Twitter/X Thread: 5-7 numbered tweets, each ≤280 chars, first tweet is the hook + promise, last tweet is CTA with link placeholder.',
+  linkedin: 'LinkedIn Post: professional insight angle, 3-4 short paragraphs, storytelling hook, thoughtful question at end to drive comments.',
+  newsletter: 'Email Newsletter teaser: compelling subject line as headline, 2-3 paragraph preview that leaves readers wanting more, CTA button text.',
+};
 
 @Injectable()
 export class ContentService {
@@ -39,6 +54,24 @@ export class ContentService {
       }],
       FactCheckOutputSchema,
       { systemPrompt: FACTCHECK_SYSTEM, maxTokens: 6000 },
+    );
+  }
+
+  async repurpose(
+    scriptText: string,
+    title: string,
+    platforms: RepurposePlatform[],
+  ): Promise<RepurposeOutput> {
+    const platformList = platforms.map((p) => `- ${p}: ${PLATFORM_GUIDES[p] ?? p}`).join('\n');
+    const truncated = scriptText.length > 4000 ? scriptText.slice(0, 4000) + '...[truncated]' : scriptText;
+
+    return callAIStructured(
+      [{
+        role: 'user',
+        content: `Adapt this YouTube video content for the following platforms.\n\nTitle: ${title}\n\nScript:\n${truncated}\n\nTarget platforms:\n${platformList}\n\nFor each platform create a native-feeling adaptation. Return ONLY valid JSON, no markdown, no code fences.\n\nJSON structure:\n{"originalTitle":"${title}","summary":"One sentence about what makes this content repurposable","items":[{"platform":"shorts","headline":"Short punchy headline","content":"Full adapted content text","hashtags":["tag1","tag2"],"callToAction":"Watch the full video","durationNote":"~45 seconds","visualTips":["tip1"],"hook":"Opening line"}]}`,
+      }],
+      RepurposeOutputSchema,
+      { systemPrompt: REPURPOSE_SYSTEM, maxTokens: 8192 },
     );
   }
 }

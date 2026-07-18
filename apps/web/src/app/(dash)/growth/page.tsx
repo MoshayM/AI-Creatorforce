@@ -1,14 +1,21 @@
 'use client';
 import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Gift, Loader2, CheckCircle, AlertCircle, X, Copy, Trophy, Clock, Users, AlertTriangle } from 'lucide-react';
+import {
+  Gift, Loader2, CheckCircle, AlertCircle, X, Copy, Trophy, Clock, Users, AlertTriangle,
+  TrendingUp, Coins, Target, Share2, Flame, Zap, BarChart3, CheckCircle2, ExternalLink,
+} from 'lucide-react';
+import Link from 'next/link';
 import {
   api,
+  apiClient,
   type TrialStatusResponse,
   type Offer,
   type UpgradeRecommendation,
   type ReferralEarnings,
   type LeaderboardEntry,
+  type UsageSummary,
+  type PublishTrackingSummary,
 } from '@/lib/api';
 import { getErrorMessage } from '@/lib/getErrorMessage';
 
@@ -106,7 +113,6 @@ function TrialStatusCard() {
           </span>
         )}
       </div>
-
       {trialCreditsRemaining !== undefined && creditsGranted !== undefined && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs text-gray-500">
@@ -115,16 +121,13 @@ function TrialStatusCard() {
           </div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${
-                pct > 30 ? 'bg-brand-500' : pct > 10 ? 'bg-amber-400' : 'bg-red-400'
-              }`}
+              className={`h-full rounded-full transition-all ${pct > 30 ? 'bg-brand-500' : pct > 10 ? 'bg-amber-400' : 'bg-red-400'}`}
               style={{ width: `${pct}%` }}
             />
           </div>
           <p className="text-xs text-gray-500">{pct}% remaining</p>
         </div>
       )}
-
       {days !== null && expiresAt && (
         <p className={`text-xs font-medium ${expiryColor}`}>
           {days <= 0
@@ -155,10 +158,7 @@ function UpgradeNudges() {
   return (
     <section className="space-y-2">
       {recs.map((rec) => (
-        <div
-          key={rec.id}
-          className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 flex items-center gap-3"
-        >
+        <div key={rec.id} className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 flex items-center gap-3">
           <AlertCircle className="w-4 h-4 text-brand-600 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm text-gray-800">{reasonLabel(rec.reasonCode)}</p>
@@ -166,17 +166,10 @@ function UpgradeNudges() {
               Recommended plan: <span className="font-semibold">{rec.recommendedPlan}</span>
             </p>
           </div>
-          <a
-            href="/wallet"
-            className="shrink-0 text-xs font-semibold text-brand-700 hover:underline px-2 py-1 rounded"
-          >
+          <a href="/wallet" className="shrink-0 text-xs font-semibold text-brand-700 hover:underline px-2 py-1 rounded">
             Upgrade
           </a>
-          <button
-            onClick={() => dismissMutation.mutate(rec.id)}
-            aria-label="Dismiss recommendation"
-            className="shrink-0 text-gray-500 hover:text-gray-600 p-1 rounded"
-          >
+          <button onClick={() => dismissMutation.mutate(rec.id)} aria-label="Dismiss" className="shrink-0 text-gray-500 hover:text-gray-600 p-1 rounded">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -226,14 +219,10 @@ function OfferCenter() {
               </div>
               <p className="text-xs text-green-700 font-semibold">+{fmtCredits(offer.rewardValue)} bonus credits</p>
               {offer.minRechargeMinor !== null && (
-                <p className="text-xs text-gray-500">
-                  Applied automatically on recharge &ge; ${(offer.minRechargeMinor / 100).toFixed(2)}
-                </p>
+                <p className="text-xs text-gray-500">Applied automatically on recharge &ge; ${(offer.minRechargeMinor / 100).toFixed(2)}</p>
               )}
               {offer.validTo && (
-                <p className="text-xs text-gray-500">
-                  Expires {new Date(offer.validTo).toLocaleDateString()}
-                </p>
+                <p className="text-xs text-gray-500">Expires {new Date(offer.validTo).toLocaleDateString()}</p>
               )}
             </div>
             <div className="shrink-0">
@@ -247,9 +236,7 @@ function OfferCenter() {
                   disabled={redeemMutation.isPending && redeemMutation.variables === offer.id}
                   className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 disabled:opacity-50"
                 >
-                  {redeemMutation.isPending && redeemMutation.variables === offer.id
-                    ? <Loader2 className="w-3 h-3 animate-spin" />
-                    : null}
+                  {redeemMutation.isPending && redeemMutation.variables === offer.id && <Loader2 className="w-3 h-3 animate-spin" />}
                   Redeem
                 </button>
               ) : null}
@@ -284,13 +271,11 @@ function ReferralCenter() {
     queryFn: () => api.referral.leaderboard().then((r) => r.data),
   });
 
-  // get-or-create referral code on mount
   const { data: codeData, isLoading: codeLoading } = useQuery<{ code: string }>({
     queryKey: ['referral-code'],
     queryFn: () => api.referral.code().then((r) => r.data),
   });
 
-  // On mount, check localStorage for pending referral code
   useEffect(() => {
     const pending = localStorage.getItem('cf.pendingReferralCode');
     if (pending) setRedeemInput(pending);
@@ -310,7 +295,7 @@ function ReferralCenter() {
     },
   });
 
-  const shareUrl = codeData ? `${window.location.origin}/register?ref=${codeData.code}` : '';
+  const shareUrl = codeData ? `${typeof window !== 'undefined' ? window.location.origin : ''}/register?ref=${codeData.code}` : '';
 
   async function copyCode(text: string) {
     try {
@@ -318,15 +303,18 @@ function ReferralCenter() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      if (inputRef.current) {
-        inputRef.current.select();
-      }
+      if (inputRef.current) inputRef.current.select();
     }
   }
 
+  // Share URLs
+  const shareMsg = encodeURIComponent(`Join me on CreatorForce AI — the best AI platform for YouTube creators! Use my referral link:`);
+  const twitterUrl = codeData ? `https://twitter.com/intent/tweet?text=${shareMsg}&url=${encodeURIComponent(shareUrl)}` : '#';
+  const linkedInUrl = codeData ? `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}` : '#';
+  const whatsAppUrl = codeData ? `https://wa.me/?text=${shareMsg}%20${encodeURIComponent(shareUrl)}` : '#';
+
   return (
     <div className="space-y-4">
-      {/* Share section */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-brand-600" />
@@ -370,10 +358,25 @@ function ReferralCenter() {
                 </button>
               </div>
             </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Share via:</span>
+              <a href={twitterUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-black text-white hover:bg-gray-800 transition-colors">
+                <Share2 className="w-3 h-3" /> X / Twitter
+              </a>
+              <a href={linkedInUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-blue-700 text-white hover:bg-blue-800 transition-colors">
+                <ExternalLink className="w-3 h-3" /> LinkedIn
+              </a>
+              <a href={whatsAppUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-green-600 text-white hover:bg-green-700 transition-colors">
+                <Share2 className="w-3 h-3" /> WhatsApp
+              </a>
+            </div>
           </>
         )}
 
-        {/* Earnings summary */}
         {earningsLoading && <Loader2 className="w-4 h-4 animate-spin text-brand-600" />}
         {earnings && (
           <div className="flex flex-wrap gap-3">
@@ -399,7 +402,6 @@ function ReferralCenter() {
           </div>
         )}
 
-        {/* Referrals table */}
         {earnings && earnings.referrals.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-gray-700">
@@ -428,7 +430,6 @@ function ReferralCenter() {
         )}
       </div>
 
-      {/* Redeem referral code */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
         <p className="text-sm font-semibold text-gray-800">Have a referral code?</p>
         <div className="flex gap-2">
@@ -463,7 +464,6 @@ function ReferralCenter() {
         )}
       </div>
 
-      {/* Leaderboard */}
       {!lbLoading && leaderboard.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
@@ -473,10 +473,7 @@ function ReferralCenter() {
           </div>
           <div className="divide-y divide-gray-50">
             {leaderboard.slice(0, 10).map((entry) => (
-              <div
-                key={entry.rank}
-                className={`flex items-center gap-3 px-4 py-2.5 ${entry.userLabel.includes('(you)') ? 'bg-brand-50' : ''}`}
-              >
+              <div key={entry.rank} className={`flex items-center gap-3 px-4 py-2.5 ${entry.userLabel.includes('(you)') ? 'bg-brand-50' : ''}`}>
                 <span className={`text-sm font-bold w-6 text-center ${entry.rank <= 3 ? 'text-amber-500' : 'text-gray-500'}`}>
                   {entry.rank}
                 </span>
@@ -494,28 +491,382 @@ function ReferralCenter() {
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// ── Scorecard Tab ─────────────────────────────────────────────────────────────
 
-export default function GrowthPage() {
+function ScorecardTab() {
+  const { data: pubSummary, isLoading: pubLoading } = useQuery<PublishTrackingSummary>({
+    queryKey: ['publishing-summary'],
+    queryFn: () => api.publishing.summary().then((r) => r.data),
+  });
+
+  const statItems = [
+    { label: 'Published (all time)', value: pubSummary?.published ?? '—', color: 'text-green-700', bg: 'bg-green-50' },
+    { label: 'This month', value: pubSummary?.publishedThisMonth ?? '—', color: 'text-blue-700', bg: 'bg-blue-50' },
+    { label: 'Scheduled', value: pubSummary?.scheduled ?? '—', color: 'text-violet-700', bg: 'bg-violet-50' },
+    { label: 'Upcoming 7 days', value: pubSummary?.upcoming7d ?? '—', color: 'text-indigo-700', bg: 'bg-indigo-50' },
+  ];
+
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-10">
-      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-        <Gift className="w-6 h-6 text-brand-600" />
-        Growth
-      </h1>
-
+    <div className="space-y-6">
       <TrialStatusCard />
       <UpgradeNudges />
 
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Offers</h2>
-        <OfferCenter />
-      </section>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {statItems.map((s) => (
+          <div key={s.label} className={`${s.bg} rounded-xl p-4`}>
+            {pubLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+            ) : (
+              <p className={`text-2xl font-bold ${s.color}`}>{String(s.value)}</p>
+            )}
+            <p className="text-xs text-gray-600 mt-1">{s.label}</p>
+          </div>
+        ))}
+      </div>
 
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Invite &amp; Earn</h2>
-        <ReferralCenter />
-      </section>
+      {pubSummary && pubSummary.failed > 0 && (
+        <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+          <p className="text-sm text-red-700">
+            <span className="font-semibold">{pubSummary.failed} failed</span> publishes — <Link href="/publishing" className="underline">review in Publishing</Link>
+          </p>
+        </div>
+      )}
+
+      <OfferCenter />
+
+      <div className="bg-gradient-to-r from-brand-600 to-violet-600 rounded-2xl p-6 text-white">
+        <div className="flex items-center gap-3 mb-3">
+          <Zap className="w-5 h-5" />
+          <span className="font-semibold text-lg">Unlock More Power</span>
+        </div>
+        <p className="text-sm text-white/80 mb-4">
+          Upgrade to Pro for advanced analytics, unlimited AI generations, priority rendering, and multi-channel management.
+        </p>
+        <Link href="/wallet" className="inline-flex items-center gap-2 bg-white text-brand-700 font-semibold px-4 py-2 rounded-xl text-sm hover:bg-brand-50 transition-colors">
+          <TrendingUp className="w-4 h-4" /> View Plans
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ── Credits Tab ───────────────────────────────────────────────────────────────
+
+interface WalletBalance {
+  balance: number;
+  tier?: string;
+}
+
+function CreditsTab() {
+  const { data: balance, isLoading: balLoading } = useQuery<WalletBalance>({
+    queryKey: ['wallet-balance'],
+    queryFn: () => api.wallet.balance().then((r) => r.data as WalletBalance),
+  });
+
+  const { data: usage, isLoading: usageLoading } = useQuery<UsageSummary>({
+    queryKey: ['wallet-usage', 30],
+    queryFn: () => api.wallet.usageSummary(30).then((r) => r.data),
+  });
+
+  const topActions = usage?.byAction?.slice().sort((a, b) => b.credits - a.credits).slice(0, 6) ?? [];
+  const total = topActions.reduce((s, a) => s + a.credits, 0) || 1;
+
+  const segColors = [
+    'bg-violet-500', 'bg-blue-500', 'bg-cyan-500',
+    'bg-green-500', 'bg-amber-500', 'bg-pink-500',
+  ];
+
+  const actionLabels: Record<string, string> = {
+    SCRIPT: 'Script Gen', RESEARCH: 'Research', FACT_CHECK: 'Fact Check',
+    COMPLIANCE: 'Compliance', METADATA: 'Metadata', SEO_OPTIMIZATION: 'SEO',
+    VOICE_GENERATE: 'Voice', IMAGE_GENERATE: 'Image', MUSIC_GENERATE: 'Music',
+    RENDER: 'Render', THUMBNAIL: 'Thumbnail', CALENDAR_PROPOSAL: 'Calendar AI',
+    FULL_PRODUCTION: 'Full Prod',
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-gradient-to-br from-violet-600 to-indigo-700 rounded-2xl p-6 text-white">
+        <div className="flex items-center gap-2 mb-1">
+          <Coins className="w-5 h-5" />
+          <span className="text-sm font-medium text-white/80">Current Balance</span>
+        </div>
+        {balLoading ? (
+          <Loader2 className="w-5 h-5 animate-spin mt-2" />
+        ) : (
+          <>
+            <p className="text-4xl font-bold">{balance ? fmtCredits(balance.balance) : '—'}</p>
+            <p className="text-sm text-white/70 mt-1">credits{balance?.tier ? ` · ${balance.tier} plan` : ''}</p>
+          </>
+        )}
+        <Link href="/wallet" className="inline-flex items-center gap-2 mt-4 bg-white/20 hover:bg-white/30 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+          <Zap className="w-3.5 h-3.5" /> Add Credits
+        </Link>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-gray-500" />
+          <span className="text-sm font-semibold text-gray-800">Usage by Action (last 30 days)</span>
+          {usage && <span className="text-xs text-gray-400 ml-auto">{fmtCredits(usage.totalSpent)} total spent</span>}
+        </div>
+
+        {usageLoading ? (
+          <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+        ) : topActions.length === 0 ? (
+          <p className="text-sm text-gray-400 py-4 text-center">No usage data yet</p>
+        ) : (
+          <>
+            {/* Stacked bar */}
+            <div className="flex h-5 rounded-full overflow-hidden gap-0.5">
+              {topActions.map((a, i) => (
+                <div
+                  key={a.action}
+                  className={`${segColors[i % segColors.length]} transition-all`}
+                  style={{ width: `${(a.credits / total) * 100}%` }}
+                  title={`${a.action}: ${fmtCredits(a.credits)}`}
+                />
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              {topActions.map((a, i) => (
+                <div key={a.action} className="flex items-center gap-3">
+                  <span className={`w-2.5 h-2.5 rounded-sm shrink-0 ${segColors[i % segColors.length]}`} />
+                  <span className="text-xs text-gray-700 flex-1">{actionLabels[a.action] ?? a.action.replace(/_/g, ' ')}</span>
+                  <span className="text-xs font-medium text-gray-800">{fmtCredits(a.credits)}</span>
+                  <span className="text-xs text-gray-400 w-10 text-right">{Math.round((a.credits / total) * 100)}%</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <p className="text-sm font-semibold text-amber-800 mb-1">Credit-saving tips</p>
+        <ul className="text-xs text-amber-700 space-y-1 list-disc list-inside">
+          <li>Use dry-run mode on the AI Calendar before generating full proposals</li>
+          <li>Batch your research jobs — one deep research costs less than 3 shallow ones</li>
+          <li>Enable auto-approve for low-risk compliance checks (STARTER+)</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ── Goals Tab ─────────────────────────────────────────────────────────────────
+
+interface ContentGoals {
+  weeklyVideos: number;
+  monthlyShortsTarget: number;
+}
+
+const GOALS_KEY = 'cf_content_goals';
+
+function GoalsTab() {
+  const [goals, setGoals] = useState<ContentGoals>({ weeklyVideos: 2, monthlyShortsTarget: 4 });
+  const [saved, setSaved] = useState(false);
+  const [tip, setTip] = useState('');
+  const [tipLoading, setTipLoading] = useState(false);
+
+  const { data: pubSummary } = useQuery<PublishTrackingSummary>({
+    queryKey: ['publishing-summary'],
+    queryFn: () => api.publishing.summary().then((r) => r.data),
+  });
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(GOALS_KEY);
+      if (raw) setGoals(JSON.parse(raw) as ContentGoals);
+    } catch { /* ignore */ }
+  }, []);
+
+  function saveGoals() {
+    localStorage.setItem(GOALS_KEY, JSON.stringify(goals));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function loadTip() {
+    setTipLoading(true);
+    setTip('');
+    try {
+      const res = await apiClient.post('/content/research', {
+        topic: 'content creation strategy for YouTube',
+        niche: 'general',
+        language: 'en',
+      });
+      const data = res.data as { summary?: string; keyFacts?: string[] };
+      setTip(data.summary ?? (data.keyFacts?.[0] ?? 'Keep consistent! Posting regularly is the #1 growth driver.'));
+    } catch {
+      setTip('Keep consistent! Posting at least 2x per week is the #1 growth driver for new channels.');
+    } finally {
+      setTipLoading(false);
+    }
+  }
+
+  const publishedThisMonth = pubSummary?.publishedThisMonth ?? 0;
+  const monthlyVideoTarget = goals.weeklyVideos * 4;
+  const videoProgress = Math.min(100, Math.round((publishedThisMonth / Math.max(monthlyVideoTarget, 1)) * 100));
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-5">
+        <div className="flex items-center gap-2">
+          <Target className="w-4 h-4 text-brand-600" />
+          <span className="text-sm font-semibold text-gray-800">Content Goals</span>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-2">Weekly video target</label>
+            <div className="flex gap-2 flex-wrap">
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setGoals((g) => ({ ...g, weeklyVideos: n }))}
+                  className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-colors ${goals.weeklyVideos === n ? 'bg-brand-600 text-white border-brand-600' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-brand-300'}`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-2">Monthly Shorts target</label>
+            <div className="flex gap-2 flex-wrap">
+              {[0, 2, 4, 8, 12, 16, 20].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setGoals((g) => ({ ...g, monthlyShortsTarget: n }))}
+                  className={`px-3 h-9 rounded-lg text-sm font-semibold border transition-colors ${goals.monthlyShortsTarget === n ? 'bg-brand-600 text-white border-brand-600' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-brand-300'}`}
+                >
+                  {n === 0 ? 'None' : n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={saveGoals}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700"
+          >
+            {saved ? <CheckCircle2 className="w-4 h-4" /> : <Target className="w-4 h-4" />}
+            {saved ? 'Saved!' : 'Save Goals'}
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Flame className="w-4 h-4 text-orange-500" />
+          <span className="text-sm font-semibold text-gray-800">This Month</span>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-gray-600">Videos published</span>
+              <span className="font-medium text-gray-800">{publishedThisMonth} / {monthlyVideoTarget} target</span>
+            </div>
+            <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${videoProgress >= 100 ? 'bg-green-500' : videoProgress >= 50 ? 'bg-brand-500' : 'bg-amber-400'}`}
+                style={{ width: `${videoProgress}%` }}
+              />
+            </div>
+            {videoProgress >= 100 && (
+              <p className="text-xs text-green-600 font-medium mt-1 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Goal reached!
+              </p>
+            )}
+          </div>
+
+          {goals.monthlyShortsTarget > 0 && (
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-gray-600">Shorts</span>
+                <span className="font-medium text-gray-800">0 / {goals.monthlyShortsTarget} target</span>
+              </div>
+              <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-pink-400" style={{ width: '0%' }} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-amber-500" />
+            <span className="text-sm font-semibold text-gray-800">AI Strategy Tip</span>
+          </div>
+          <button
+            onClick={() => void loadTip()}
+            disabled={tipLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs hover:bg-amber-100 disabled:opacity-50"
+          >
+            {tipLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+            Get Tip
+          </button>
+        </div>
+        {tip ? (
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+            <p className="text-sm text-amber-800">{tip}</p>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">Click "Get Tip" for an AI-powered content strategy suggestion.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+type Tab = 'scorecard' | 'referrals' | 'credits' | 'goals';
+
+const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: 'scorecard', label: 'Scorecard', icon: <TrendingUp className="w-4 h-4" /> },
+  { id: 'referrals', label: 'Referrals', icon: <Gift className="w-4 h-4" /> },
+  { id: 'credits', label: 'Credits', icon: <Coins className="w-4 h-4" /> },
+  { id: 'goals', label: 'Goals', icon: <Target className="w-4 h-4" /> },
+];
+
+export default function GrowthPage() {
+  const [tab, setTab] = useState<Tab>('scorecard');
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <div className="flex items-center gap-3 mb-6">
+        <TrendingUp className="w-7 h-7 text-brand-600" />
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Growth</h1>
+          <p className="text-sm text-gray-500">Track performance, referrals, credits, and content goals</p>
+        </div>
+      </div>
+
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-6 w-fit">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'scorecard' && <ScorecardTab />}
+      {tab === 'referrals' && <ReferralCenter />}
+      {tab === 'credits' && <CreditsTab />}
+      {tab === 'goals' && <GoalsTab />}
     </div>
   );
 }

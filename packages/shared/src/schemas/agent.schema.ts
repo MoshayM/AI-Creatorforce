@@ -296,6 +296,30 @@ const priorityCoerce = z.any().transform((v): 'high' | 'medium' | 'low' => {
   return 'medium';
 });
 
+// ── Content Repurposer ─────────────────────────────────────────────────────────
+
+export const RepurposePlatformEnum = z.enum(['shorts', 'instagram', 'tiktok', 'twitter', 'linkedin', 'newsletter']);
+export type RepurposePlatform = z.infer<typeof RepurposePlatformEnum>;
+
+export const RepurposeItemSchema = z.object({
+  platform: RepurposePlatformEnum,
+  headline: z.string(),
+  content: z.string(),
+  hashtags: z.array(z.string()).optional().default([]),
+  callToAction: z.string().optional().default(''),
+  durationNote: z.string().optional().default(''),
+  visualTips: z.array(z.string()).optional().default([]),
+  hook: z.string().optional().default(''),
+});
+export type RepurposeItem = z.infer<typeof RepurposeItemSchema>;
+
+export const RepurposeOutputSchema = z.object({
+  originalTitle: z.string(),
+  items: z.array(RepurposeItemSchema),
+  summary: z.string().optional().default(''),
+});
+export type RepurposeOutput = z.infer<typeof RepurposeOutputSchema>;
+
 export const GrowthOutputSchema = z.object({
   channelId: z.string().optional(),
   period: z.string().optional().default('next-30-days'),

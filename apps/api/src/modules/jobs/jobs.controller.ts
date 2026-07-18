@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Headers, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Headers, Query, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsOptional, IsObject } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -43,6 +43,25 @@ class EnqueueDto {
 @Controller('jobs')
 export class JobsController {
   constructor(private readonly svc: JobsService) {}
+
+  @Get()
+  async listForUser(
+    @CurrentUser() user: JwtPayload,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const result = await this.svc.listForUser(user.sub, {
+      status,
+      type,
+      limit: limit ? Math.min(parseInt(limit, 10), 500) : 100,
+    });
+    const isAdmin = roleHasPermission(user.role as never, 'admin:jobs');
+    return {
+      ...result,
+      jobs: result.jobs.map((j) => sanitizeJob(j as unknown as Record<string, unknown>, isAdmin)),
+    };
+  }
 
   // 202: the work is queued, not done (docs4/16 — async ops return 202 + job id)
   // Optional Idempotency-Key header (Wave 17): a replay returns the original job.
