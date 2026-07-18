@@ -838,14 +838,18 @@ export class AutonomyService {
   }
 
   async goalDecompose(channelId: string, userId: string, goal: string, timeframeWeeks: number): Promise<GoalPlanOutput> {
-    const profile = await this.buildProfile(channelId, userId);
+    const [profileRow, channel] = await Promise.all([
+      this.buildProfile(channelId),
+      this.prisma.channel.findUnique({ where: { id: channelId }, select: { title: true } }),
+    ]);
+    const profile = profileRow.profile as unknown as ChannelProfileSnapshot;
 
     const profileSummary = [
-      `Channel: ${profile.channelTitle}`,
-      `Avg views/video: ${profile.avgViewsPerVideo ?? 'unknown'}`,
-      `Upload cadence: ${profile.uploadCadencePerWeek?.toFixed(1) ?? '?'} videos/week`,
-      `Top formats: ${(profile.formatMix as Record<string, number> | null) ? Object.entries(profile.formatMix as Record<string, number>).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k).join(', ') : 'unknown'}`,
-      `Best weekday: ${profile.bestWeekday ?? 'any'}`,
+      `Channel: ${channel?.title ?? channelId}`,
+      `Avg views/video: ${profile.avgViews90d ?? 'unknown'}`,
+      `Upload cadence: ${profile.uploadsPerWeek90d?.toFixed(1) ?? '?'} videos/week`,
+      `Top formats: ${Object.entries(profile.formatMix).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k).join(', ')}`,
+      `Best weekday: ${profile.bestWeekdays[0] ?? 'any'}`,
       `Avg CTR: ${profile.avgCtr ? (profile.avgCtr * 100).toFixed(1) + '%' : 'unknown'}`,
       `Avg retention: ${profile.avgRetentionSecs ? Math.round(profile.avgRetentionSecs) + 's' : 'unknown'}`,
     ].join('\n');
