@@ -436,6 +436,7 @@ export class AutonomyService {
           timeOfDay: `${String(profile.bestHourUtc).padStart(2, '0')}:00`,
           priority: 40,
           keywords: [profile.niche.toLowerCase()],
+          titleVariants: [],
           rationale: 'Matches your best publish weekday and hour from the last 90 days.',
         });
       }

@@ -643,22 +643,87 @@ export class SupervisorWorker extends WorkerHost {
       }
 
       case 'VIDEO_SCENE_PLAN': {
-        this.log(jobId, projectId, 'Loading script for video scene plan…');
+        this.log(jobId, projectId, 'Loading script for storyboard generation…');
         const script = (payload['script'] as ScriptOutput | undefined)
           ?? await this.lastResult<ScriptOutput>(projectId, 'SCRIPT');
         if (!script) throw new Error('Script not found — complete the Write Script step first.');
         const t0 = Date.now();
-        this.log(jobId, projectId, 'Planning video scenes and shot list…', `${script.sections.length} sections → scenes`);
-        const VIDEO_SCENE_PROMPT = `You are a video director. Create a scene plan from a script. Respond only with valid JSON.`;
-        const sectionsJson = JSON.stringify(script.sections.map((s, i) => ({ id: `section-${i}`, heading: s.heading, durationSecs: s.durationEstimateSecs, content: s.content.slice(0, 200) })));
-        const result = await callAIStructured(
-          [{ role: 'user', content: `Create scene plan for "${script.title}". Sections: ${sectionsJson}. Project: ${projectId}. Generate scene id, title, description, durationSecs, shotType, videoPrompt, negativePrompt, transition for each section. Include totalDurationSecs and providerRecommendation.` }],
-          VideoScenePlanOutputSchema,
-          { systemPrompt: VIDEO_SCENE_PROMPT, maxTokens: 4096 },
+        const totalSecs = script.sections.reduce((s, sec) => s + (sec.durationEstimateSecs ?? 0), 0) || script.estimatedDurationMins * 60;
+        this.log(jobId, projectId, 'Semantic scene detection…', `${script.sections.length} sections · ~${Math.round(totalSecs)}s total`);
+
+        const CINEMATIC_DIRECTOR_PROMPT = `You are a cinematic director and storyboard artist specializing in YouTube long-form content.
+Your task is to decompose a video script into a shot-level storyboard using semantic scene detection.
+
+Rules:
+- Detect natural semantic boundaries (topic shifts, emotional beats, pacing changes) — NOT just one scene per script section.
+- Produce between 8 and 20 scenes for a video. Scale with video length.
+- Every scene MUST have cumulative timestamp continuity: scene[n].startSecs === scene[n-1].endSecs. First scene starts at 0.
+- Each scene's durationSecs = endSecs - startSecs. The final scene's endSecs MUST equal totalDurationSecs.
+- For shotType choose from: wide, medium, close-up, extreme-close-up, overhead, POV, B-roll, text-overlay, screen-capture, talking-head.
+- For cameraMotion choose from: static, pan-left, pan-right, tilt-up, tilt-down, zoom-in, zoom-out, dolly-in, dolly-out, handheld, orbit.
+- For animationType choose from: none, ken-burns, parallax, particle, glitch, fade, slide.
+- For transition choose from: cut, dissolve, fade-to-black, wipe-left, wipe-right, zoom-blur, flash.
+- imagePrompt: a Stable Diffusion / Midjourney prompt for a single keyframe still image representing this scene.
+- videoPrompt: a generative video model prompt describing motion, action, and atmosphere.
+- negativePrompt: list artifacts to avoid (blurry, text watermarks, distorted faces, etc.).
+- narration: the exact script text spoken during this scene (copy from script).
+- purpose: one sentence explaining the narrative or emotional role of this scene.
+- emotion: dominant viewer emotion this scene should evoke.
+- subtitleStyle: standard | large | minimal | highlight | none.
+- voiceSettings.pace: slow for emotional beats, fast for hype/energy moments.
+- musicSettings.mood: describe the music vibe for this scene.
+- semanticMethod: always "cinematic-director".
+Respond only with valid JSON matching the schema.`;
+
+        const sectionsJson = JSON.stringify(
+          script.sections.map((s, i) => ({
+            id: `section-${i}`,
+            heading: s.heading,
+            durationSecs: s.durationEstimateSecs ?? 0,
+            content: s.content.slice(0, 400),
+          })),
         );
-        const sceneCount = (result as { scenes?: unknown[] }).scenes?.length ?? 0;
-        this.log(jobId, projectId, 'Scene plan ready ✓', `${sceneCount} scene(s)`);
-        await this.jobs.logStep(jobId, 'VideoAgent', 'plan', { scenes: sceneCount }, result, 0, 0, Date.now() - t0);
+
+        const userMsg = `Create a storyboard for "${script.title}".
+Total duration: ${Math.round(totalSecs)} seconds.
+Project ID: ${projectId}.
+Sections:
+${sectionsJson}
+
+Return a VideoScenePlanOutput with semanticMethod="cinematic-director", sceneCount set to the number of scenes, totalDurationSecs=${Math.round(totalSecs)}, providerRecommendation (suggest "runway" or "pika" or "luma"), and an array of scenes with all fields populated.`;
+
+        const raw = await callAIStructured(
+          [{ role: 'user', content: userMsg }],
+          VideoScenePlanOutputSchema,
+          { systemPrompt: CINEMATIC_DIRECTOR_PROMPT, maxTokens: 6000 },
+        );
+
+        // Enforce cumulative timestamps in code so model drift can't break pipeline
+        let cursor = 0;
+        const scenes = (raw.scenes ?? []).map((scene, i) => {
+          const start = cursor;
+          const dur = Math.max(1, scene.durationSecs ?? 3);
+          const end = i === raw.scenes.length - 1 ? Math.round(totalSecs) : start + dur;
+          cursor = end;
+          return {
+            ...scene,
+            id: scene.id || `scene-${i + 1}`,
+            startSecs: start,
+            endSecs: end,
+            durationSecs: end - start,
+          };
+        });
+
+        const result = {
+          ...raw,
+          totalDurationSecs: Math.round(totalSecs),
+          semanticMethod: 'cinematic-director',
+          sceneCount: scenes.length,
+          scenes,
+        };
+
+        this.log(jobId, projectId, 'Storyboard ready ✓', `${scenes.length} scene(s) · semantic-director`);
+        await this.jobs.logStep(jobId, 'VideoAgent', 'storyboard', { scenes: scenes.length, method: 'cinematic-director' }, result, 0, 0, Date.now() - t0);
         this.events.emitJobUpdate(jobId, { step: 'VIDEO_SCENE_PLAN', status: 'COMPLETED' }, projectId);
         return result;
       }
