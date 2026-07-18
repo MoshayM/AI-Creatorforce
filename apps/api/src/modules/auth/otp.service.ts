@@ -213,10 +213,21 @@ export class OtpService {
     const sid = this.config.get<string>('TWILIO_ACCOUNT_SID');
     const token = this.config.get<string>('TWILIO_AUTH_TOKEN');
     const from = this.config.get<string>('TWILIO_FROM');
+
     if (!sid || !token || !from) {
-      console.log(`\n[OTP DEV] SMS code for ${to}: ${code}\n`);
+      // Dev fallback — store for /auth/otp/dev-peek and log visibly.
+      DEV_OTP_STORE.set(to, { code, expiresAt: Date.now() + OTP_EXPIRY_MS });
+      console.warn(
+        `\n╔══════════════════════════════════════════════════════╗\n` +
+        `║  [OTP DEV] No SMS provider configured                ║\n` +
+        `║  To: ${to.padEnd(46)}║\n` +
+        `║  OTP: ${code.padEnd(44)}║\n` +
+        `║  → GET /api/v1/auth/otp/dev-peek?identifier=${to.padEnd(9)}║\n` +
+        `╚══════════════════════════════════════════════════════╝\n`,
+      );
       return;
     }
+
     const auth = Buffer.from(`${sid}:${token}`).toString('base64');
     const res = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
@@ -229,7 +240,7 @@ export class OtpService {
         body: new URLSearchParams({
           To: to,
           From: from,
-          Body: `Your CreatorForce sign-in code is ${code}. Valid for 10 min.`,
+          Body: `Your CreatorForce OTP is ${code}. Valid for 10 min. Never share this.`,
         }).toString(),
       },
     );
