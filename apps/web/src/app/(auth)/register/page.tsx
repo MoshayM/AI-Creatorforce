@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { User, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { api, setTokens, type OAuthProviders, type OAuthProvider } from '@/lib/api';
 import { AuthShell, AuthPillInput, SocialRow, type OAuthProviderName } from '@/components/auth-shell';
+import CountryCodeSelect, { COUNTRIES, type Country } from '@/components/country-code-select';
 
 const MOCK_MODE = process.env['NEXT_PUBLIC_USE_MOCK'] === 'true';
 const MOCK_TOKEN = 'mock-jwt-token-for-testing';
@@ -15,6 +16,8 @@ function RegisterInner() {
   const searchParams = useSearchParams();
 
   const [form, setForm] = useState({ email: '', password: '', name: '' });
+  const [phone, setPhone] = useState('');
+  const [country, setCountry] = useState<Country>(COUNTRIES[0]); // India +91 default
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,7 +52,8 @@ function RegisterInner() {
     }
 
     try {
-      const { data } = await api.auth.register(form.email, form.password, form.name);
+      const fullPhone = phone.trim() ? `${country.dialCode}${phone.trim().replace(/^0+/, '')}` : undefined;
+      const { data } = await api.auth.register(form.email, form.password, form.name, fullPhone);
       setTokens(data.accessToken, data.refreshToken);
       const pending = localStorage.getItem('cf.pendingReferralCode');
       if (pending) {
@@ -114,6 +118,19 @@ function RegisterInner() {
           onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
           required
         />
+        {/* Optional phone — collected so the user can sign in via phone OTP later */}
+        <div className="flex rounded-full border border-gray-200 bg-white focus-within:ring-2 focus-within:ring-[#7b5ec7]/40">
+          <CountryCodeSelect value={country} onChange={setCountry} />
+          <input
+            type="tel"
+            aria-label="Phone number (optional)"
+            placeholder="Phone number (optional)"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+            inputMode="numeric"
+            className="flex-1 px-3 py-2.5 text-sm outline-none bg-transparent text-gray-800 placeholder:text-gray-400"
+          />
+        </div>
         <div className="relative">
           <AuthPillInput
             icon={<Lock className="w-4 h-4" />}

@@ -35,6 +35,7 @@ class RegisterDto {
   @IsEmail() email!: string;
   @IsString() @MinLength(8) password!: string;
   @IsString() @IsOptional() name?: string;
+  @IsString() @IsOptional() phone?: string;
   /** Client-side device fingerprint for trial abuse scoring (Phase 6 §6). */
   @IsString() @IsOptional() deviceFingerprint?: string;
 }

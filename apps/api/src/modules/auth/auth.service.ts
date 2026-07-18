@@ -14,6 +14,7 @@ export interface RegisterDto {
   email: string;
   password: string;
   name?: string;
+  phone?: string;
 }
 
 export interface LoginDto {
@@ -45,7 +46,13 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const isFirst = (await this.prisma.user.count()) === 0;
     const user = await this.prisma.user.create({
-      data: { email: dto.email, name: dto.name, passwordHash, role: isFirst ? 'OWNER' : 'MEMBER' },
+      data: {
+        email: dto.email,
+        name: dto.name,
+        phone: dto.phone?.trim() || null,
+        passwordHash,
+        role: isFirst ? 'OWNER' : 'MEMBER',
+      },
     });
 
     // Phase 6 §5: trial grant on signup — abuse-scored, one per identity;

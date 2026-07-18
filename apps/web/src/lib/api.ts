@@ -530,8 +530,8 @@ export const api = {
   auth: {
     login: (email: string, password: string) =>
       apiClient.post<{ accessToken: string; refreshToken: string; user: { id: string; email: string; name: string } }>('/auth/login', { email, password }),
-    register: (email: string, password: string, name?: string) =>
-      apiClient.post<{ accessToken: string; refreshToken: string; user: { id: string; email: string; name: string } }>('/auth/register', { email, password, name }),
+    register: (email: string, password: string, name?: string, phone?: string) =>
+      apiClient.post<{ accessToken: string; refreshToken: string; user: { id: string; email: string; name: string } }>('/auth/register', { email, password, ...(name ? { name } : {}), ...(phone ? { phone } : {}) }),
     me: () =>
       apiClient.get<{ id: string; email: string; name: string | null; role: string; phone: string | null; avatarUrl: string | null }>('/auth/me'),
     updateProfile: (data: { name?: string; avatarUrl?: string }) =>
