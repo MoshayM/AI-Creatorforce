@@ -17,6 +17,12 @@ class RepurposeDto {
   @IsArray() platforms!: RepurposePlatform[];
 }
 
+class ScoreScriptDto {
+  @IsString() scriptText!: string;
+  @IsString() title!: string;
+  @IsOptional() @IsString() niche?: string;
+}
+
 @ApiTags('content')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -32,5 +38,10 @@ export class ContentController {
   @Post('repurpose')
   repurpose(@Body() dto: RepurposeDto) {
     return this.svc.repurpose(dto.scriptText, dto.title, dto.platforms);
+  }
+
+  @Post('score-script')
+  scoreScript(@Body() dto: ScoreScriptDto) {
+    return this.svc.scoreScript(dto.scriptText, dto.title, dto.niche);
   }
 }

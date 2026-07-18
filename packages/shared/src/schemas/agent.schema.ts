@@ -320,6 +320,22 @@ export const RepurposeOutputSchema = z.object({
 });
 export type RepurposeOutput = z.infer<typeof RepurposeOutputSchema>;
 
+export const ScriptQualityOutputSchema = z.object({
+  overallScore: z.number().min(0).max(100),
+  grade: z.enum(['A', 'B', 'C', 'D', 'F']),
+  summary: z.string(),
+  dimensions: z.array(z.object({
+    name: z.string(),
+    score: z.number().min(0).max(100),
+    feedback: z.string(),
+    tips: z.array(z.string()).optional().default([]),
+  })),
+  strengths: z.array(z.string()),
+  improvements: z.array(z.string()),
+  estimatedRetentionPct: z.number().min(0).max(100).optional().default(60),
+});
+export type ScriptQualityOutput = z.infer<typeof ScriptQualityOutputSchema>;
+
 export const GrowthOutputSchema = z.object({
   channelId: z.string().optional(),
   period: z.string().optional().default('next-30-days'),

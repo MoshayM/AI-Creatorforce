@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { callAIStructured } from '@cf/shared';
 import {
-  ResearchOutputSchema, ScriptOutputSchema, FactCheckOutputSchema, RepurposeOutputSchema,
+  ResearchOutputSchema, ScriptOutputSchema, FactCheckOutputSchema, RepurposeOutputSchema, ScriptQualityOutputSchema,
   type ResearchOutput, type ScriptOutput, type FactCheckOutput, type RepurposeOutput,
-  type RepurposePlatform,
+  type RepurposePlatform, type ScriptQualityOutput,
 } from '@cf/shared';
 
 const RESEARCH_SYSTEM = `You are a professional YouTube content researcher. Research topics thoroughly, find trending angles, and identify trustworthy sources. Always cite sources with URLs.`;
@@ -72,6 +72,18 @@ export class ContentService {
       }],
       RepurposeOutputSchema,
       { systemPrompt: REPURPOSE_SYSTEM, maxTokens: 8192 },
+    );
+  }
+
+  async scoreScript(scriptText: string, title: string, niche?: string): Promise<ScriptQualityOutput> {
+    const truncated = scriptText.length > 4000 ? scriptText.slice(0, 4000) + '...[truncated]' : scriptText;
+    return callAIStructured(
+      [{
+        role: 'user',
+        content: `Score this YouTube script across 6 quality dimensions:\n\nTitle: ${title}\nNiche: ${niche ?? 'General'}\n\nScript:\n${truncated}\n\nScore each dimension 0-100. Return ONLY valid JSON (no markdown, no code fences):\n{"overallScore":75,"grade":"B","summary":"One sentence overall assessment","dimensions":[{"name":"Hook Strength","score":80,"feedback":"The opening grabs attention in the first 5 seconds","tips":["tip1","tip2"]},{"name":"Audience Retention","score":70,"feedback":"Pacing is good but could use more pattern interrupts","tips":[]},{"name":"SEO Alignment","score":65,"feedback":"Title keywords present but description could improve","tips":[]},{"name":"Brand Voice","score":80,"feedback":"Consistent tone throughout","tips":[]},{"name":"Educational Value","score":75,"feedback":"Good depth on key points","tips":[]},{"name":"Virality Potential","score":60,"feedback":"Shareable moments exist but hook could be stronger","tips":[]}],"strengths":["Strong hook","Clear structure"],"improvements":["Add a pattern interrupt mid-video","Include more specific data points"],"estimatedRetentionPct":65}`,
+      }],
+      ScriptQualityOutputSchema,
+      { systemPrompt: `You are an expert YouTube content strategist. Analyze scripts across 6 dimensions: Hook Strength, Audience Retention, SEO Alignment, Brand Voice, Educational Value, and Virality Potential. Be rigorous but constructive.`, maxTokens: 4000 },
     );
   }
 }

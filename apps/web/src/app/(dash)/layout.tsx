@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles, Home, Bot, Upload, BookOpen, Code2, Activity, BarChart2, Compass, ArrowRightLeft } from 'lucide-react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles, Home, Bot, Upload, BookOpen, Code2, Activity, BarChart2, Compass, ArrowRightLeft, Award } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -43,6 +43,7 @@ const NAV: NavItem[] = [
       { href: '/brand-kit', icon: Palette, label: 'Brand Kit' },
       { href: '/automation', icon: Workflow, label: 'Automation' },
       { href: '/developer', icon: Code2, label: 'Developer' },
+      { href: '/score-script', icon: Award, label: 'Script Scorer' },
     ],
   },
 ];

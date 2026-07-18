@@ -10,7 +10,7 @@ import {
   ChevronDown, ChevronUp, ArrowLeft,
   Check, Copy, Download,
   RotateCcw, ArrowRightLeft, Timer, Trash2,
-  FileText, RefreshCw, Film, Search, ShieldCheck,
+  FileText, RefreshCw, Film, Search, ShieldCheck, Tag, Image as ImageIcon,
 } from 'lucide-react';
 
 type PageTab = 'pipeline' | 'script' | 'storyboard' | 'seo' | 'checks';
@@ -637,6 +637,8 @@ export default function ProjectDetailPage() {
 
   const [factCheckLoading, setFactCheckLoading] = useState(false);
   const [complianceLoading, setComplianceLoading] = useState(false);
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [thumbnailLoading, setThumbnailLoading] = useState(false);
 
   async function runFactCheck() {
     setFactCheckLoading(true);
@@ -655,6 +657,26 @@ export default function ProjectDetailPage() {
       void qc.invalidateQueries({ queryKey: ['project', id] });
     } finally {
       setComplianceLoading(false);
+    }
+  }
+
+  async function generateMetadata() {
+    setMetadataLoading(true);
+    try {
+      await api.jobs.enqueue(id, 'METADATA', {});
+      void qc.invalidateQueries({ queryKey: ['project', id] });
+    } finally {
+      setMetadataLoading(false);
+    }
+  }
+
+  async function generateThumbnailBrief() {
+    setThumbnailLoading(true);
+    try {
+      await api.jobs.enqueue(id, 'THUMBNAIL', {});
+      void qc.invalidateQueries({ queryKey: ['project', id] });
+    } finally {
+      setThumbnailLoading(false);
     }
   }
 
@@ -783,6 +805,20 @@ export default function ProjectDetailPage() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
   const complianceResult = latestComplianceJob?.status === 'COMPLETED' ? latestComplianceJob.result as ComplianceResult | undefined : undefined;
   const hasDoneCompliance = !!complianceResult;
+
+  const latestMetadataJob = [...project.jobs]
+    .filter((j) => j.type === 'METADATA')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+  const metadataResult = latestMetadataJob?.status === 'COMPLETED'
+    ? (latestMetadataJob.result as { title: string; description: string; tags: string[]; category: string; language: string; thumbnailPrompt: string } | undefined)
+    : undefined;
+
+  const latestThumbnailJob = [...project.jobs]
+    .filter((j) => j.type === 'THUMBNAIL')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+  const thumbnailResult = latestThumbnailJob?.status === 'COMPLETED'
+    ? (latestThumbnailJob.result as { concept: string; suggestedTextOverlay?: string; colorScheme?: string; visualElements?: string[]; aspectRatio?: string } | undefined)
+    : undefined;
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -941,6 +977,85 @@ export default function ProjectDetailPage() {
                 <p className="text-xs text-gray-400">{new Date(latestScriptJob.createdAt).toLocaleDateString()}</p>
               </div>
               <ScriptViewer r={latestScriptJob.result as Record<string, unknown>} />
+            </div>
+          )}
+
+          {latestScriptJob?.status === 'COMPLETED' && (
+            <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-5">
+              <h3 className="font-semibold text-gray-900 text-sm">Generate from Script</h3>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => { void generateMetadata(); }}
+                  disabled={metadataLoading || latestMetadataJob?.status === 'RUNNING' || latestMetadataJob?.status === 'QUEUED'}
+                  className="flex items-center gap-2 px-4 py-2 bg-sky-600 text-white rounded-full text-sm font-semibold hover:bg-sky-700 disabled:opacity-50"
+                >
+                  {metadataLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />}
+                  {metadataResult ? 'Refresh Metadata' : 'Generate YouTube Metadata'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void generateThumbnailBrief(); }}
+                  disabled={thumbnailLoading || latestThumbnailJob?.status === 'RUNNING' || latestThumbnailJob?.status === 'QUEUED'}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-full text-sm font-semibold hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {thumbnailLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                  {thumbnailResult ? 'Refresh Thumbnail Brief' : 'Generate Thumbnail Brief'}
+                </button>
+              </div>
+
+              {metadataResult && (
+                <div className="space-y-3 border-t border-gray-100 pt-4">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">YouTube Metadata</h4>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Title</p>
+                    <p className="font-semibold text-gray-900">{metadataResult.title}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Description</p>
+                    <p className="text-sm text-gray-600 leading-relaxed line-clamp-3">{metadataResult.description}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1.5">Tags</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {metadataResult.tags.map((tag, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-sky-50 text-sky-700 text-xs rounded-full">#{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                  {metadataResult.thumbnailPrompt && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-0.5">Thumbnail Prompt</p>
+                      <p className="text-xs text-gray-600 italic">{metadataResult.thumbnailPrompt}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {thumbnailResult && (
+                <div className="space-y-3 border-t border-gray-100 pt-4">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Thumbnail Brief</h4>
+                  <div className="rounded-xl bg-gray-900 aspect-video flex items-center justify-center relative overflow-hidden max-w-sm">
+                    {thumbnailResult.suggestedTextOverlay && (
+                      <p className="text-white font-black text-lg leading-tight drop-shadow-lg text-center px-4" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.8)' }}>
+                        {thumbnailResult.suggestedTextOverlay}
+                      </p>
+                    )}
+                    <span className="absolute bottom-2 right-2 text-xs text-gray-500 font-mono">{thumbnailResult.aspectRatio ?? '16:9'}</span>
+                  </div>
+                  <p className="text-sm text-gray-700">{thumbnailResult.concept}</p>
+                  {thumbnailResult.colorScheme && (
+                    <p className="text-xs text-gray-500">Color scheme: {thumbnailResult.colorScheme}</p>
+                  )}
+                  {thumbnailResult.visualElements && thumbnailResult.visualElements.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {thumbnailResult.visualElements.map((el, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">{el}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
