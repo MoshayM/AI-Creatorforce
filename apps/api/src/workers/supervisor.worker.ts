@@ -140,10 +140,18 @@ export class SupervisorWorker extends WorkerHost {
     // AUTOMATION_TICK is a repeatable heartbeat — it has no AgentJob row in the DB.
     // Handle it before any AgentJob lookup to avoid NotFoundException.
     if (job.name === 'AUTOMATION_TICK') {
+      const tickT0 = Date.now();
       console.log('[AutomationTick] Heartbeat triggered');
-      await this.automation.runTick((msg) => console.log(msg));
-      console.log('[AutomationTick] Heartbeat complete');
-      return { ticked: true };
+      try {
+        await this.automation.runTick((msg) => console.log(msg));
+        console.log(`[AutomationTick] Heartbeat complete in ${Date.now() - tickT0}ms`);
+        return { ticked: true };
+      } catch (tickErr: unknown) {
+        const msg = tickErr instanceof Error ? tickErr.message : String(tickErr);
+        console.error(`[AutomationTick] Heartbeat failed after ${Date.now() - tickT0}ms: ${msg}`);
+        // Re-throw so BullMQ marks this repeat job as failed and retries per queue config.
+        throw tickErr;
+      }
     }
 
     await this.prisma.agentJob.update({ where: { id: jobId }, data: { status: 'RUNNING', startedAt: new Date() } });
