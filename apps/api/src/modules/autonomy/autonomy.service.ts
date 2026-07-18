@@ -5,7 +5,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { TrendService } from '../trend/trend.service';
 import { JobsService } from '../jobs/jobs.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { callAIStructured, type TrendOutput } from '@cf/shared';
+import { callAIStructured, GoalPlanOutputSchema, type TrendOutput, type GoalPlanOutput } from '@cf/shared';
 import { z } from 'zod';
 
 /**
@@ -835,5 +835,31 @@ export class AutonomyService {
     );
 
     return { ...result, channelCount: channels.length };
+  }
+
+  async goalDecompose(channelId: string, userId: string, goal: string, timeframeWeeks: number): Promise<GoalPlanOutput> {
+    const profile = await this.buildProfile(channelId, userId);
+
+    const profileSummary = [
+      `Channel: ${profile.channelTitle}`,
+      `Avg views/video: ${profile.avgViewsPerVideo ?? 'unknown'}`,
+      `Upload cadence: ${profile.uploadCadencePerWeek?.toFixed(1) ?? '?'} videos/week`,
+      `Top formats: ${(profile.formatMix as Record<string, number> | null) ? Object.entries(profile.formatMix as Record<string, number>).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k).join(', ') : 'unknown'}`,
+      `Best weekday: ${profile.bestWeekday ?? 'any'}`,
+      `Avg CTR: ${profile.avgCtr ? (profile.avgCtr * 100).toFixed(1) + '%' : 'unknown'}`,
+      `Avg retention: ${profile.avgRetentionSecs ? Math.round(profile.avgRetentionSecs) + 's' : 'unknown'}`,
+    ].join('\n');
+
+    return callAIStructured(
+      [{
+        role: 'user',
+        content: `Decompose this YouTube channel growth goal into a concrete ${timeframeWeeks}-week plan.\n\nGoal: ${goal}\nTimeframe: ${timeframeWeeks} weeks\n\nChannel profile:\n${profileSummary}\n\nCreate a realistic, actionable plan with weekly video topics. Each week should have 1-3 specific video ideas with titles, rationale, and estimated impact. Include measurable milestones and success metrics.\n\nReturn ONLY valid JSON matching the schema (no markdown, no code fences):\n{"goal":"${goal}","timeframeWeeks":${timeframeWeeks},"summary":"Brief 1-2 sentence strategy overview","milestones":[{"week":4,"milestone":"Reach 5k views/video average","metric":"Views per video > 5000"}],"weeklyPlan":[{"week":1,"theme":"Foundation week","videos":[{"title":"Specific video title","rationale":"Why this video","estimatedImpact":75,"productionComplexity":"medium","suggestedFormat":"tutorial"}],"cumulativeGrowthEstimate":"+100 subs"}],"resources":{"hoursPerWeek":10,"toolsNeeded":["Screen recorder"],"contentTypes":["tutorial","shorts"]},"successMetrics":["metric 1"],"risks":["risk 1"]}`,
+      }],
+      GoalPlanOutputSchema,
+      {
+        systemPrompt: 'You are a YouTube growth strategist. Create specific, actionable, data-driven content plans. Each video suggestion must have a concrete title — not a template.',
+        maxTokens: 6000,
+      },
+    );
   }
 }

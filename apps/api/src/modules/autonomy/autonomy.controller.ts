@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import type { CalendarEntryStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -133,5 +133,14 @@ export class AutonomyController {
   @Get('insights/cross-channel')
   crossChannelInsights(@CurrentUser() user: JwtPayload) {
     return this.svc.getCrossChannelInsights(user.sub);
+  }
+
+  @Post('channels/:channelId/goal-plan')
+  goalDecompose(
+    @Param('channelId') channelId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { goal: string; timeframeWeeks?: number },
+  ) {
+    return this.svc.goalDecompose(channelId, user.sub, body.goal, body.timeframeWeeks ?? 8);
   }
 }

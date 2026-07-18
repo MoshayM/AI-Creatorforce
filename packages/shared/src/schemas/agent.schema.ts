@@ -320,6 +320,39 @@ export const RepurposeOutputSchema = z.object({
 });
 export type RepurposeOutput = z.infer<typeof RepurposeOutputSchema>;
 
+// ── Goal Decomposition ─────────────────────────────────────────────────────────
+
+export const GoalPlanOutputSchema = z.object({
+  goal: z.string(),
+  timeframeWeeks: z.number().int(),
+  summary: z.string(),
+  milestones: z.array(z.object({
+    week: z.number().int(),
+    milestone: z.string(),
+    metric: z.string(),
+  })),
+  weeklyPlan: z.array(z.object({
+    week: z.number().int(),
+    theme: z.string(),
+    videos: z.array(z.object({
+      title: z.string(),
+      rationale: z.string(),
+      estimatedImpact: z.number().min(0).max(100),
+      productionComplexity: z.enum(['low', 'medium', 'high']),
+      suggestedFormat: z.string(),
+    })),
+    cumulativeGrowthEstimate: z.string().optional().default(''),
+  })),
+  resources: z.object({
+    hoursPerWeek: z.number(),
+    toolsNeeded: z.array(z.string()),
+    contentTypes: z.array(z.string()),
+  }).optional(),
+  successMetrics: z.array(z.string()),
+  risks: z.array(z.string()).optional().default([]),
+});
+export type GoalPlanOutput = z.infer<typeof GoalPlanOutputSchema>;
+
 export const ScriptQualityOutputSchema = z.object({
   overallScore: z.number().min(0).max(100),
   grade: z.enum(['A', 'B', 'C', 'D', 'F']),
