@@ -5,9 +5,9 @@ import * as path from 'path';
 
 /**
  * Local-disk object storage using the same key scheme as R2
- * (assets/{projectId}/{assetId}/v{n}/file.ext), so a future R2Storage driver
- * can replace this class without touching callers. Driver selection via
- * MEDIA_STORAGE_DIR (local root) — R2 support keys already exist in .env.
+ * (assets/{projectId}/{assetId}/v{n}/file.ext). Subclass R2StorageService
+ * overrides put/copyIn/flush/ensure/removePrefix to also sync with R2.
+ * Switch via STORAGE_BACKEND=r2.
  */
 @Injectable()
 export class StorageService {
@@ -66,5 +66,22 @@ export class StorageService {
       if (stat.isFile()) out.push({ name, sizeBytes: stat.size });
     }
     return out;
+  }
+
+  /**
+   * Upload the file at resolve(key) to the remote store.
+   * No-op for local driver; R2StorageService overrides this.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async flush(_key: string): Promise<void> {
+    // local files are already at their permanent path — nothing to do
+  }
+
+  /**
+   * Ensure the file at key is available locally. Downloads from remote if absent.
+   * Returns true if the file is now available, false if it does not exist anywhere.
+   */
+  async ensure(key: string): Promise<boolean> {
+    return this.exists(key);
   }
 }

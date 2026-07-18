@@ -1008,6 +1008,14 @@ Return a VideoScenePlanOutput with semanticMethod="cinematic-director", sceneCou
           latest('VIDEO'), latest('IMAGE'), latest('VOICE'), latest('MUSIC'),
         ]);
 
+        // Ensure source assets are available locally (no-op for local driver; downloads from R2 on cache miss)
+        await Promise.all([
+          ...videoAssets.map((a) => a.versions[0]?.r2Key ? this.storage.ensure(a.versions[0].r2Key) : Promise.resolve(false)),
+          ...imageAssets.map((a) => a.versions[0]?.r2Key ? this.storage.ensure(a.versions[0].r2Key) : Promise.resolve(false)),
+          ...voiceAssets.map((a) => a.versions[0]?.r2Key ? this.storage.ensure(a.versions[0].r2Key) : Promise.resolve(false)),
+          ...musicAssets.map((a) => a.versions[0]?.r2Key ? this.storage.ensure(a.versions[0].r2Key) : Promise.resolve(false)),
+        ]);
+
         const resolveKey = (a?: { versions: Array<{ r2Key: string | null }> }) => {
           const key = a?.versions[0]?.r2Key;
           return key && this.storage.exists(key) ? this.storage.resolve(key) : undefined;
@@ -1189,6 +1197,9 @@ Return a VideoScenePlanOutput with semanticMethod="cinematic-director", sceneCou
         } finally {
           if (tmpDir) await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
         }
+
+        // Upload the render output to R2 (no-op for local driver)
+        await this.storage.flush(renderKey);
 
         const stat = await fsp.stat(outPath);
         const renderAsset = await this.prisma.asset.create({

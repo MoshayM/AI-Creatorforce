@@ -4,6 +4,7 @@ import type { youtube_v3 } from 'googleapis';
 import type { Prisma, VideoStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ChannelsService } from '../channels/channels.service';
+import { StorageService } from '../media/storage.service';
 
 /**
  * YouTube A/S (Altered or Synthetic) disclosure — googleapis@144 typings
@@ -29,7 +30,10 @@ export interface PublishOptions {
   tags: string[];
   categoryId?: string;
   scheduledAt?: Date;
+  /** Absolute path to a local video file. Use this OR r2Key, not both. */
   videoFilePath?: string;
+  /** R2 object key for the video. StorageService.ensure() will download it locally before upload. */
+  r2Key?: string;
   /**
    * BCP-47 audio language of the uploaded media — always the SOURCE video's
    * original language, never a translation. Left unset when unknown so
@@ -52,6 +56,7 @@ export class PublishingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly channels: ChannelsService,
+    private readonly storage: StorageService,
   ) {}
 
   async publish(opts: PublishOptions, approvalId: string): Promise<string> {
@@ -62,11 +67,20 @@ export class PublishingService {
       throw new ForbiddenException('Human approval required before publishing. Approval not found or not approved.');
     }
 
-    if (!opts.videoFilePath) {
+    // Resolve the video path: explicit file path takes precedence, then r2Key
+    let resolvedPath = opts.videoFilePath;
+    if (!resolvedPath && opts.r2Key) {
+      const available = await this.storage.ensure(opts.r2Key);
+      if (!available) {
+        throw new BadRequestException(`Video asset not found in storage (r2Key: ${opts.r2Key})`);
+      }
+      resolvedPath = this.storage.resolve(opts.r2Key);
+    }
+
+    if (!resolvedPath) {
       throw new BadRequestException(
-        'videoFilePath is required for publishing. ' +
-        'Create the video file externally and provide its path. ' +
-        '(In-app video generation is a Phase 2 feature.)',
+        'Provide videoFilePath or r2Key to publish. ' +
+        'Run the render pipeline to produce an r2Key from the content pipeline.',
       );
     }
 
@@ -97,7 +111,7 @@ export class PublishingService {
         },
         status,
       },
-      media: { body: createReadStream(opts.videoFilePath) },
+      media: { body: createReadStream(resolvedPath) },
     });
 
     const youtubeVideoId = res.data.id!;

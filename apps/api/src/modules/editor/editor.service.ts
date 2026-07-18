@@ -809,7 +809,7 @@ export class EditorService {
         include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
       });
       const r2Key = existingAsset?.versions[0]?.r2Key;
-      if (r2Key && this.storage.exists(r2Key)) {
+      if (r2Key && await this.storage.ensure(r2Key)) {
         onLog?.('Render is up to date — reusing existing output');
         return {
           assetId: existingAsset!.id,
@@ -892,7 +892,7 @@ export class EditorService {
             include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
           });
           const r2Key = asset?.versions[0]?.r2Key;
-          if (!r2Key || !this.storage.exists(r2Key)) {
+          if (!r2Key || !(await this.storage.ensure(r2Key))) {
             onLog?.(`Item ${item.id} image asset missing — skipping`);
             continue;
           }
@@ -912,7 +912,7 @@ export class EditorService {
             include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
           });
           const r2Key = asset?.versions[0]?.r2Key;
-          if (!r2Key || !this.storage.exists(r2Key)) {
+          if (!r2Key || !(await this.storage.ensure(r2Key))) {
             onLog?.(`Item ${item.id} video asset missing — skipping`);
             continue;
           }
@@ -1032,7 +1032,7 @@ export class EditorService {
             include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
           });
           const r2Key = audioAsset?.versions[0]?.r2Key;
-          if (!r2Key || !this.storage.exists(r2Key)) {
+          if (!r2Key || !(await this.storage.ensure(r2Key))) {
             onLog?.(`Audio item ${audioItem.id}: asset not found — skipping`);
             continue;
           }
