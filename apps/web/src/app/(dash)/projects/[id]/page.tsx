@@ -939,6 +939,245 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
+      {/* ── SEO & Audience tab ───────────────────────────────────────────── */}
+      {activeTab === 'seo' && (
+        <div className="space-y-6">
+
+          {/* SEO Optimizer */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-5">
+            <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Search className="w-4 h-4 text-violet-600" /> SEO Optimizer
+            </h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Video Title</label>
+                <input
+                  type="text"
+                  value={seoForm.title}
+                  onChange={(e) => setSeoForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder={project.title}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                <textarea
+                  value={seoForm.description}
+                  onChange={(e) => setSeoForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="Describe what this video is about…"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Niche / Category <span className="text-gray-400">(optional)</span></label>
+                <input
+                  type="text"
+                  value={seoForm.niche}
+                  onChange={(e) => setSeoForm((f) => ({ ...f, niche: e.target.value }))}
+                  placeholder={project.niche ?? 'e.g. Tech, Fitness, Finance…'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { void handleSeoOptimize(); }}
+                  disabled={seoLoading || !seoForm.title.trim()}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white rounded-full text-sm font-semibold hover:bg-violet-700 disabled:opacity-50 shadow-sm"
+                >
+                  {seoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  {seoLoading ? 'Optimizing…' : seoResult ? 'Re-optimize' : 'Optimize with AI'}
+                </button>
+                {seoError && <p className="text-xs text-red-500">{seoError}</p>}
+              </div>
+            </div>
+
+            {seoResult && (
+              <div className="mt-5 space-y-4 border-t border-gray-100 pt-5">
+                {/* SEO Score */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-gray-600">SEO Score</span>
+                    <span className={`text-sm font-bold ${seoResult.seoScore >= 70 ? 'text-green-600' : seoResult.seoScore >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                      {seoResult.seoScore}/100
+                    </span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${seoResult.seoScore >= 70 ? 'bg-green-500' : seoResult.seoScore >= 40 ? 'bg-amber-400' : 'bg-red-500'}`}
+                      style={{ width: `${seoResult.seoScore}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Optimized Title */}
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Optimized Title</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-gray-900 font-medium flex-1">{seoResult.optimizedTitle}</p>
+                    <button
+                      onClick={() => { void navigator.clipboard.writeText(seoResult.optimizedTitle); }}
+                      className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                      title="Copy"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Optimized Description */}
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Optimized Description</p>
+                  <div className="flex items-start gap-2">
+                    <p className="text-sm text-gray-700 leading-relaxed flex-1">{seoResult.optimizedDescription}</p>
+                    <button
+                      onClick={() => { void navigator.clipboard.writeText(seoResult.optimizedDescription); }}
+                      className="text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5"
+                      title="Copy"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tags */}
+                {seoResult.tags.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1.5">Tags</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {seoResult.tags.map((tag, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-violet-50 text-violet-700 rounded-full text-xs">{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Search Keywords */}
+                {seoResult.searchKeywords.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1.5">Search Keywords</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {seoResult.searchKeywords.map((kw, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-medium">{kw}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Improvements */}
+                {seoResult.improvements.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1.5">Suggested Improvements</p>
+                    <ul className="space-y-1">
+                      {seoResult.improvements.map((tip, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-gray-600">
+                          <span className="text-violet-400 flex-shrink-0 mt-0.5">•</span>
+                          {tip}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Audience Insights */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-5">
+            <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Search className="w-4 h-4 text-violet-600" /> Audience Insights
+            </h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Content Niche</label>
+                <input
+                  type="text"
+                  value={audienceForm.niche}
+                  onChange={(e) => setAudienceForm({ niche: e.target.value })}
+                  placeholder={project.title}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { void handleAudienceAnalyze(); }}
+                  disabled={audienceLoading || !audienceForm.niche.trim()}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white rounded-full text-sm font-semibold hover:bg-violet-700 disabled:opacity-50 shadow-sm"
+                >
+                  {audienceLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  {audienceLoading ? 'Analyzing…' : audienceResult ? 'Re-analyze' : 'Analyze Audience'}
+                </button>
+                {audienceError && <p className="text-xs text-red-500">{audienceError}</p>}
+              </div>
+            </div>
+
+            {audienceResult && (
+              <div className="mt-5 space-y-4 border-t border-gray-100 pt-5">
+                {/* Primary demographic */}
+                <div className="bg-violet-50 border border-violet-100 rounded-xl px-4 py-3">
+                  <p className="text-xs font-medium text-violet-600 mb-0.5">Primary Demographic</p>
+                  <p className="text-sm text-gray-900 font-medium">{audienceResult.primaryDemographic}</p>
+                </div>
+
+                {/* Interest clusters */}
+                {audienceResult.interestClusters.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-2">Interest Clusters</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {audienceResult.interestClusters.map((c, i) => (
+                        <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                          <p className="text-sm font-medium text-gray-800">{c.cluster}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{c.size} · {c.engagement} engagement</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Content preferences */}
+                {audienceResult.contentPreferences.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1.5">Content Preferences</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {audienceResult.contentPreferences.map((pref, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">{pref}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Best posting times */}
+                {audienceResult.bestPostingTimes.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1.5">Best Posting Times</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {audienceResult.bestPostingTimes.map((t, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full text-xs font-medium">{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Growth tips */}
+                {audienceResult.growthTips.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1.5">Growth Tips</p>
+                    <ul className="space-y-1">
+                      {audienceResult.growthTips.map((tip, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-gray-600">
+                          <span className="text-green-500 flex-shrink-0 mt-0.5">✓</span>
+                          {tip}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Pipeline tab (existing content) ──────────────────────────────── */}
       {activeTab === 'pipeline' && <>
 

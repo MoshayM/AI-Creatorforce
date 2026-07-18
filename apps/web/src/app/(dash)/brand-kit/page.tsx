@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Palette, Mic, Save, CheckCircle, RefreshCw } from 'lucide-react';
+import { Palette, Mic, Save, CheckCircle, RefreshCw, Wand2 } from 'lucide-react';
+import { apiClient } from '@/lib/api';
 
 interface Channel {
   id: string;
@@ -51,6 +52,9 @@ export default function BrandKitPage() {
   const [fontStyle, setFontStyle] = useState('Modern sans-serif (Inter/Poppins)');
   const [visualMood, setVisualMood] = useState('professional, clean, modern');
   const [thumbnailStyle, setThumbnailStyle] = useState('Bold text overlay, high contrast');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiGenerated, setAiGenerated] = useState(false);
+
   // Voice profile
   const [voiceName, setVoiceName] = useState('Narrator');
   const [voiceStyle, setVoiceStyle] = useState('conversational');
@@ -78,6 +82,65 @@ export default function BrandKitPage() {
     setVoiceTone(ch.voiceProfile?.tone ?? 'engaging, confident');
     setVoicePace(ch.voiceProfile?.pace ?? 'moderate');
     setVoiceProvider(ch.voiceProfile?.provider ?? 'elevenlabs');
+  }
+
+  async function generateBrandIdentity() {
+    if (!niche.trim() || aiGenerating) return;
+    setAiGenerating(true);
+    setError('');
+    try {
+      const res = await apiClient.post('/audience/analyze', { niche: niche.trim() });
+      const audience = res.data as {
+        primaryDemographic?: string;
+        contentPreferences?: string[];
+        interestClusters?: Array<{ cluster: string }>;
+      };
+
+      const demo = (audience.primaryDemographic ?? '').toLowerCase();
+      const cluster = (audience.interestClusters?.[0]?.cluster ?? '').toLowerCase();
+      const combined = `${demo} ${cluster}`;
+
+      let primary = '#7c3aed', accent = '#a78bfa', bg = '#1a1a2e';
+      let mood = 'professional, clean, modern';
+      let thumb = 'Bold text overlay, high contrast, eye-catching';
+
+      if (/tech|ai|gaming|software|developer/.test(combined)) {
+        primary = '#6d28d9'; accent = '#8b5cf6'; bg = '#0f0f1a';
+        mood = 'futuristic, sleek, high-tech';
+        thumb = 'Dynamic text overlay, bright accents, dark bg';
+      } else if (/financ|business|invest|econom|money/.test(combined)) {
+        primary = '#1e40af'; accent = '#3b82f6'; bg = '#0a0e1a';
+        mood = 'authoritative, trustworthy, premium';
+        thumb = 'Clean, minimal, authoritative typography';
+      } else if (/health|wellness|fitness|nutrition|medical/.test(combined)) {
+        primary = '#065f46'; accent = '#34d399'; bg = '#0d1f17';
+        mood = 'warm, natural, calming, approachable';
+        thumb = 'Warm, natural, lifestyle photography';
+      } else if (/entertainment|lifestyle|fashion|beauty|travel/.test(combined)) {
+        primary = '#9d174d'; accent = '#f472b6'; bg = '#1a0d14';
+        mood = 'vibrant, trendy, energetic, fun';
+        thumb = 'Bright, colorful, lifestyle imagery with bold text';
+      } else if (/educat|learn|teach|course|tutori/.test(combined)) {
+        primary = '#92400e'; accent = '#fbbf24'; bg = '#1a1206';
+        mood = 'clear, informative, engaging, friendly';
+        thumb = 'Clean diagram overlay, warm tones, readable text';
+      }
+
+      const prefs = audience.contentPreferences ?? [];
+      if (prefs.length >= 2) mood = `${prefs[0]}, ${prefs[1]}, professional`;
+
+      setPrimaryColor(primary);
+      setAccentColor(accent);
+      setBgColor(bg);
+      setVisualMood(mood);
+      setThumbnailStyle(thumb);
+      setAiGenerated(true);
+      setTimeout(() => setAiGenerated(false), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'AI generation failed');
+    } finally {
+      setAiGenerating(false);
+    }
   }
 
   async function save() {
@@ -151,6 +214,32 @@ export default function BrandKitPage() {
               placeholder="e.g. AI, Technology, Personal Finance, Health…"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             />
+          </div>
+
+          {/* AI Generate */}
+          <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl border border-violet-200 p-5">
+            <div className="flex items-start gap-3 mb-3">
+              <Wand2 className="w-5 h-5 text-violet-600 mt-0.5 shrink-0" />
+              <div>
+                <h2 className="font-semibold text-gray-900">AI Generate Brand Identity</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Let AI suggest colors, mood, and thumbnail style based on your niche.</p>
+              </div>
+            </div>
+            {aiGenerated && (
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800 mb-3">
+                <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+                Brand identity generated from niche analysis!
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => { void generateBrandIdentity(); }}
+              disabled={aiGenerating || !niche.trim()}
+              className="flex items-center gap-2 px-4 py-2 border-2 border-violet-500 text-violet-700 rounded-lg text-sm font-semibold hover:bg-violet-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {aiGenerating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+              {aiGenerating ? 'Generating…' : 'Generate Brand Identity'}
+            </button>
           </div>
 
           {/* Brand colors */}
