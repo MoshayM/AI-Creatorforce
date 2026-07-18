@@ -24,6 +24,7 @@ const CalendarProposalSchema = z.object({
     .array(
       z.object({
         title: z.string().min(4),
+        titleVariants: z.array(z.string()).default([]).describe('2-3 alternative title phrasings for A/B testing'),
         angle: z.string().optional().describe('A compelling hook or angle — one punchy sentence that would stop a viewer mid-scroll'),
         format: z.enum(['VIDEO', 'SHORT']).default('VIDEO'),
         dayOffset: z.number().int().min(0).max(27),
@@ -278,9 +279,10 @@ export class AutonomyService {
               `- timeOfDay in 24h UTC, near hour ${profile.bestHourUtc}:00.\n` +
               `- Mix formats roughly like the channel's history (videos vs shorts).\n` +
               `- Every title must be specific and clickable for the "${profile.niche}" niche — no generic placeholders.\n` +
-              `- priority = opportunity score 0-100; include 2-5 keywords per entry and a one-line rationale.\n\n` +
+              `- priority = opportunity score 0-100; include 2-5 keywords per entry and a one-line rationale.\n` +
+              `- For each entry, provide titleVariants: 2-3 alternative title phrasings for A/B testing.\n\n` +
               `Respond with EXACTLY this JSON structure (no extra text):\n` +
-              `{"entries":[{"title":"...","angle":"...","format":"VIDEO","dayOffset":1,"timeOfDay":"17:00","priority":80,"keywords":["k1","k2"],"rationale":"..."}]}`,
+              `{"entries":[{"title":"...","titleVariants":["Alt title 1","Alt title 2"],"angle":"...","format":"VIDEO","dayOffset":1,"timeOfDay":"17:00","priority":80,"keywords":["k1","k2"],"rationale":"..."}]}`,
           },
         ],
         CalendarProposalSchema,
@@ -320,6 +322,7 @@ export class AutonomyService {
         channelId,
         batchId,
         title: e.title,
+        titleVariants: e.titleVariants ?? [],
         angle: e.angle ?? null,
         format: e.format,
         plannedAt,
@@ -548,6 +551,24 @@ export class AutonomyService {
     });
   }
 
+  async bulkApprove(channelId: string, userId: string, ids: string[]): Promise<{ updated: number }> {
+    await this.assertChannelOwnership(channelId, userId);
+    const result = await this.prisma.contentCalendarEntry.updateMany({
+      where: { id: { in: ids }, channelId, status: 'PROPOSED' },
+      data: { status: 'APPROVED' },
+    });
+    return { updated: result.count };
+  }
+
+  async bulkDismiss(channelId: string, userId: string, ids: string[]): Promise<{ updated: number }> {
+    await this.assertChannelOwnership(channelId, userId);
+    const result = await this.prisma.contentCalendarEntry.updateMany({
+      where: { id: { in: ids }, channelId, status: 'PROPOSED' },
+      data: { status: 'DISMISSED' },
+    });
+    return { updated: result.count };
+  }
+
   // ── Calendar lifecycle ────────────────────────────────────────────────────
 
   /**
@@ -670,5 +691,15 @@ export class AutonomyService {
     );
 
     log(`[Escalation] channel=${channelId} notified userId=${userId} — ${count} stale proposal(s)`);
+  }
+
+  /** M6 — Update an entry's title (e.g. swap in a variant). */
+  async updateEntryTitle(entryId: string, userId: string, title: string): Promise<void> {
+    const entry = await this.prisma.contentCalendarEntry.findUnique({
+      where: { id: entryId },
+      include: { channel: { select: { userId: true } } },
+    });
+    if (!entry || entry.channel.userId !== userId) throw new ForbiddenException('Entry not found');
+    await this.prisma.contentCalendarEntry.update({ where: { id: entryId }, data: { title } });
   }
 }

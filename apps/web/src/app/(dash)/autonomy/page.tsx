@@ -8,6 +8,7 @@ import {
   CalendarClock,
   Check,
   X,
+  XCircle,
   TrendingUp,
   Clapperboard,
   Film,
@@ -44,6 +45,7 @@ export default function AutonomyPage() {
   // reading localStorage in the initializer causes a hydration mismatch.
   const [channelId, setChannelId] = useState('');
   const [hydrated, setHydrated] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   useEffect(() => {
     setChannelId(localStorage.getItem(CHANNEL_LS_KEY) ?? '');
     setHydrated(true);
@@ -123,6 +125,38 @@ export default function AutonomyPage() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['autonomy-calendar', channelId] });
       void qc.invalidateQueries({ queryKey: ['autonomy-stats', channelId] });
+    },
+    onError: (err: unknown) => { setBanner({ type: 'error', message: getErrorMessage(err) }); },
+  });
+
+  useEffect(() => { setSelected(new Set()); }, [channelId]);
+
+  const bulkApprove = useMutation({
+    mutationFn: (ids: string[]) => api.autonomy.bulkApprove(channelId, ids),
+    onSuccess: (res) => {
+      setSelected(new Set());
+      void qc.invalidateQueries({ queryKey: ['autonomy-calendar', channelId] });
+      void qc.invalidateQueries({ queryKey: ['autonomy-stats', channelId] });
+      setBanner({ type: 'success', message: `${(res.data as { updated: number }).updated} slot(s) approved.` });
+    },
+    onError: (err: unknown) => { setBanner({ type: 'error', message: getErrorMessage(err) }); },
+  });
+
+  const bulkDismiss = useMutation({
+    mutationFn: (ids: string[]) => api.autonomy.bulkDismiss(channelId, ids),
+    onSuccess: () => {
+      setSelected(new Set());
+      void qc.invalidateQueries({ queryKey: ['autonomy-calendar', channelId] });
+      void qc.invalidateQueries({ queryKey: ['autonomy-stats', channelId] });
+    },
+    onError: (err: unknown) => { setBanner({ type: 'error', message: getErrorMessage(err) }); },
+  });
+
+  const setTitle = useMutation({
+    mutationFn: ({ entryId, title }: { entryId: string; title: string }) =>
+      api.autonomy.updateEntryTitle(entryId, title),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['autonomy-calendar', channelId] });
     },
     onError: (err: unknown) => { setBanner({ type: 'error', message: getErrorMessage(err) }); },
   });
@@ -356,9 +390,26 @@ export default function AutonomyPage() {
 
           {/* Proposals */}
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Proposed slots {proposed.length > 0 && <span className="text-sm font-normal text-gray-500">({proposed.length} awaiting review)</span>}
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-3">
+                Proposed slots
+                {proposed.length > 0 && <span className="text-sm font-normal text-gray-500">({proposed.length} awaiting review)</span>}
+              </h2>
+              {proposed.length > 0 && (
+                <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={proposed.every((e) => selected.has(e.id))}
+                    onChange={(ev) => {
+                      if (ev.target.checked) setSelected(new Set(proposed.map((e) => e.id)));
+                      else setSelected(new Set());
+                    }}
+                    className="w-4 h-4 rounded border-gray-300 text-violet-600 cursor-pointer"
+                  />
+                  Select all
+                </label>
+              )}
+            </div>
             {entriesLoading && (
               <div className="flex items-center gap-2 text-gray-500 text-sm py-6">
                 <Loader2 className="w-4 h-4 animate-spin" /> Loading calendar…
@@ -369,7 +420,19 @@ export default function AutonomyPage() {
             )}
             <div className="space-y-2">
               {proposed.map((e) => (
-                <div key={e.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4">
+                <div key={e.id} className={`bg-white border rounded-xl p-4 flex items-center gap-4 transition-colors ${selected.has(e.id) ? 'border-violet-300 bg-violet-50/30' : 'border-gray-200'}`}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(e.id)}
+                    onChange={(ev) => {
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        ev.target.checked ? next.add(e.id) : next.delete(e.id);
+                        return next;
+                      });
+                    }}
+                    className="w-4 h-4 rounded border-gray-300 text-violet-600 cursor-pointer flex-shrink-0"
+                  />
                   <div className="w-14 text-center shrink-0">
                     <p className="text-xs text-gray-500">{format(new Date(e.plannedAt), 'EEE')}</p>
                     <p className="text-lg font-bold text-gray-900 leading-tight">{format(new Date(e.plannedAt), 'd')}</p>
@@ -383,6 +446,24 @@ export default function AutonomyPage() {
                       {e.title}
                     </p>
                     {e.angle && <p className="text-sm text-gray-500 truncate mt-0.5">{e.angle}</p>}
+                    {e.titleVariants && e.titleVariants.length > 0 && (
+                      <div className="mt-1.5">
+                        <p className="text-xs text-gray-400 mb-0.5">Alt titles:</p>
+                        <div className="flex flex-col gap-0.5">
+                          {e.titleVariants.map((v, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => { setTitle.mutate({ entryId: e.id, title: v }); }}
+                              title="Use this title"
+                              className="text-xs text-left text-gray-500 hover:text-violet-700 hover:bg-violet-50 px-2 py-0.5 rounded border border-transparent hover:border-violet-200 transition-colors"
+                            >
+                              {v}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-500 mt-1">
                       {format(new Date(e.plannedAt), 'HH:mm')} UTC
                       {e.keywords.length > 0 && <> · {e.keywords.slice(0, 4).join(', ')}</>}
@@ -437,6 +518,39 @@ export default function AutonomyPage() {
             )}
           </section>
         </>
+      )}
+
+      {/* Floating bulk action bar */}
+      {selected.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-gray-200 rounded-full px-5 py-3 shadow-xl">
+          <span className="text-sm font-medium text-gray-700">{selected.size} selected</span>
+          <button
+            type="button"
+            onClick={() => { bulkApprove.mutate(Array.from(selected)); }}
+            disabled={bulkApprove.isPending || bulkDismiss.isPending}
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-green-600 text-white rounded-full text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
+          >
+            {bulkApprove.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            Approve all
+          </button>
+          <button
+            type="button"
+            onClick={() => { bulkDismiss.mutate(Array.from(selected)); }}
+            disabled={bulkApprove.isPending || bulkDismiss.isPending}
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-gray-200 text-gray-700 rounded-full text-sm font-semibold hover:bg-gray-300 disabled:opacity-50"
+          >
+            {bulkDismiss.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+            Dismiss all
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="p-1 text-gray-400 hover:text-gray-600"
+            aria-label="Clear selection"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       )}
     </div>
   );

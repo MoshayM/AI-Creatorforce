@@ -440,6 +440,7 @@ export interface CalendarEntry {
   channelId: string;
   batchId: string;
   title: string;
+  titleVariants: string[];
   angle: string | null;
   format: CalendarFormat;
   plannedAt: string;
@@ -815,6 +816,12 @@ export const api = {
       apiClient.post<CalendarEntry>(`/autonomy/calendar/${entryId}/approve`),
     dismissEntry: (entryId: string) =>
       apiClient.post<CalendarEntry>(`/autonomy/calendar/${entryId}/dismiss`),
+    bulkApprove: (channelId: string, ids: string[]) =>
+      apiClient.post<{ updated: number }>(`/autonomy/channels/${channelId}/calendar/bulk-approve`, { ids }),
+    bulkDismiss: (channelId: string, ids: string[]) =>
+      apiClient.post<{ updated: number }>(`/autonomy/channels/${channelId}/calendar/bulk-dismiss`, { ids }),
+    updateEntryTitle: (entryId: string, title: string) =>
+      apiClient.patch<void>(`/autonomy/calendar/${entryId}/title`, { title }),
     calendarStats: (channelId: string) =>
       apiClient.get<{ total: number; proposed: number; approved: number; dismissed: number; scheduled: number; upcoming7d: number; approvalRate: number | null; avgPriority: number | null }>(`/autonomy/channels/${channelId}/calendar/stats`),
   },

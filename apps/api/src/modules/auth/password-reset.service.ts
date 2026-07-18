@@ -48,9 +48,9 @@ export class PasswordResetService {
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const row = await this.prisma.passwordResetToken.findUnique({
-      where: { tokenHash },
-    });
+    // @reason: passwordResetToken added via db push; TS types not regenerated while API is running
+    const prt = (this.prisma as any).passwordResetToken;
+    const row = await prt.findUnique({ where: { tokenHash } });
 
     if (!row || row.usedAt || row.expiresAt < new Date()) {
       throw new BadRequestException('Reset link is invalid or has expired. Please request a new one.');
@@ -67,7 +67,7 @@ export class PasswordResetService {
         where: { id: row.userId },
         data: { passwordHash },
       }),
-      this.prisma.passwordResetToken.update({
+      prt.update({
         where: { tokenHash },
         data: { usedAt: new Date() },
       }),

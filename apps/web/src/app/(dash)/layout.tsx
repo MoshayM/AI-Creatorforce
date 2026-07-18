@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles, Home } from 'lucide-react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles, Home, Bot } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -17,6 +17,8 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: '/', icon: Home, label: 'Home' },
+  { href: '/notifications', icon: Bell, label: 'Notifications' },
+  { href: '/copilot', icon: Bot, label: 'Copilot' },
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
   { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
   { href: '/editor', icon: Film, label: 'Video Editor' },
@@ -359,6 +361,13 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
                       ))
                     )}
                   </ul>
+                  <Link
+                    href="/notifications"
+                    onClick={() => setBellOpen(false)}
+                    className="block w-full text-center py-2.5 text-xs font-semibold text-[#7b5ec7] hover:bg-gray-50 border-t border-gray-100"
+                  >
+                    View all notifications →
+                  </Link>
                 </div>
               )}
             </div>

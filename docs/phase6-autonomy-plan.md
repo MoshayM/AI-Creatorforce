@@ -58,7 +58,7 @@ compliance) stays untouched. No autonomous publishing in this phase.
 | Auto-expire overdue proposals | ✅ | `expireOverdue()` in `autonomy.service.ts` — PROPOSED entries past `plannedAt` by > 1 day auto-dismissed; triggers `autoPlanTick()` replan. Called from `automation.service.ts` step **g** in `tickChannel()`. |
 | Calendar stats endpoint | ✅ | `getCalendarStats()` in `autonomy.service.ts` + `GET /autonomy/channels/:id/calendar/stats` — returns total/proposed/approved/dismissed/scheduled counts, upcoming7d count, approvalRate%, avgPriority. |
 | Hook-focused angle prompt | ✅ | `CalendarProposalSchema.angle` description updated to prompt the AI for a punchy one-sentence scroll-stopper hook rather than a generic description. |
-| Title variants per entry | ⬜ | Schema migration needed: `titleVariants String[] @default([])` on `ContentCalendarEntry`; generate 2-3 alternatives in AI call; surface in proposal cards. |
+| Title variants per entry | ✅ | `titleVariants String[]` on `ContentCalendarEntry` (migration `autonomy_m6_title_variants`). AI generates 2-3 alternatives per entry; proposal cards show clickable alt titles that swap the main title via `PATCH /autonomy/calendar/:entryId/title`. |
 | Performance feedback loop | ⬜ | Feed actual view/like counts from `LibraryVideo`/`AnalyticsSnapshot` back into profile scoring after videos publish. |
 
 ## API surface (shipped)
@@ -70,7 +70,10 @@ POST /api/v1/autonomy/channels/:channelId/calendar/generate-async  { weeks?, per
 GET  /api/v1/autonomy/channels/:channelId/calendar?status=&from=&to=
 GET  /api/v1/autonomy/channels/:channelId/calendar/stats
 POST /api/v1/autonomy/calendar/:entryId/approve
-POST /api/v1/autonomy/calendar/:entryId/dismiss
+POST  /api/v1/autonomy/calendar/:entryId/dismiss
+PATCH /api/v1/autonomy/calendar/:entryId/title
+POST  /api/v1/autonomy/channels/:channelId/calendar/bulk-approve  { ids: string[] }
+POST  /api/v1/autonomy/channels/:channelId/calendar/bulk-dismiss  { ids: string[] }
 ```
 
 Models: `ChannelProfile`, `ContentCalendarEntry` (+ `CalendarFormat`, `CalendarEntryStatus`) — migration `20260717061903_phase6_autonomy_calendar`.

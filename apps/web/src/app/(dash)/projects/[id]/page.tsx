@@ -10,7 +10,10 @@ import {
   ChevronDown, ChevronUp, ArrowLeft,
   Check, Copy, Download,
   RotateCcw, ArrowRightLeft, Timer, Trash2,
+  FileText, RefreshCw,
 } from 'lucide-react';
+
+type PageTab = 'pipeline' | 'script';
 import { ElapsedBadge, formatDuration } from '@/components/ai-activity';
 import { StudioFlow, type PipelineProgress } from '@/components/studio-flow';
 
@@ -497,9 +500,15 @@ function ResultPreview({ job }: { job: Job }) {
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
 
+  const [activeTab, setActiveTab] = useState<PageTab>('pipeline');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   // Whole Recent Jobs section collapses to a summary bar (like Approvals history)
   const [jobsOpen, setJobsOpen] = useState(false);
+  // Script Writer tab state
+  const [scriptTopic, setScriptTopic] = useState('');
+  const [scriptTone, setScriptTone] = useState('Informative');
+  const [scriptDuration, setScriptDuration] = useState('Medium 8-12min');
+  const [scriptAudience, setScriptAudience] = useState('');
   // Live transient status per jobId (RETRYING, RATE_LIMITED, etc.)
   const [liveStatus, setLiveStatus] = useState<Record<string, { status: string; detail?: string }>>({});
   // Per-job activity log: messages streamed in real-time via WebSocket
@@ -512,6 +521,16 @@ export default function ProjectDetailPage() {
   const deleteJobMutation = useMutation({
     mutationFn: (jobId: string) => api.jobs.remove(jobId),
     onSuccess: () => { setConfirmDeleteJob(null); void qc.invalidateQueries({ queryKey: ['project', id] }); },
+  });
+
+  const generateScriptMutation = useMutation({
+    mutationFn: () => api.jobs.enqueue(id, 'SCRIPT', {
+      topic: scriptTopic || undefined,
+      tone: scriptTone,
+      duration: scriptDuration,
+      audience: scriptAudience || undefined,
+    }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['project', id] }),
   });
 
   const handleJobEvent = useCallback((event: Record<string, unknown>) => {
@@ -576,6 +595,12 @@ export default function ProjectDetailPage() {
     SHORT: { label: 'YouTube Short', color: 'bg-blue-100 text-blue-700' },
   };
 
+  // Derive latest completed SCRIPT job for the Script tab
+  const latestScriptJob = [...project.jobs]
+    .filter((j) => j.type === 'SCRIPT' && j.status === 'COMPLETED')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+  const pendingScriptJob = project.jobs.find((j) => j.type === 'SCRIPT' && ['PENDING', 'QUEUED', 'RUNNING'].includes(j.status));
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
 
@@ -600,6 +625,129 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Tab bar */}
+      <div className="flex bg-gray-100 rounded-full p-1 mb-6 w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveTab('pipeline')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${activeTab === 'pipeline' ? 'bg-white shadow text-brand-700' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <Play className="w-3.5 h-3.5" /> Pipeline
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('script')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${activeTab === 'script' ? 'bg-white shadow text-brand-700' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <FileText className="w-3.5 h-3.5" /> Script
+          {latestScriptJob && <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />}
+        </button>
+      </div>
+
+      {/* ── Script Writer tab ─────────────────────────────────────────────── */}
+      {activeTab === 'script' && (
+        <div className="space-y-5">
+          {/* Generation form */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-6">
+            <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-brand-600" /> AI Script Writer
+            </h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Topic</label>
+                <input
+                  type="text"
+                  value={scriptTopic}
+                  onChange={(e) => setScriptTopic(e.target.value)}
+                  placeholder={project.title}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Tone</label>
+                <select
+                  value={scriptTone}
+                  onChange={(e) => setScriptTone(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  {['Informative', 'Entertaining', 'Inspirational', 'Educational', 'Conversational'].map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Target duration</label>
+                <select
+                  value={scriptDuration}
+                  onChange={(e) => setScriptDuration(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option>Short 3-5min</option>
+                  <option>Medium 8-12min</option>
+                  <option>Long 15-20min</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Target audience <span className="text-gray-400">(optional)</span></label>
+                <input
+                  type="text"
+                  value={scriptAudience}
+                  onChange={(e) => setScriptAudience(e.target.value)}
+                  placeholder={`e.g. Beginners interested in ${project.niche ?? 'this topic'}`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={() => generateScriptMutation.mutate()}
+                disabled={generateScriptMutation.isPending || !!pendingScriptJob}
+                className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 text-white rounded-full text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 shadow-sm"
+              >
+                {(generateScriptMutation.isPending || pendingScriptJob) ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
+                ) : latestScriptJob ? (
+                  <><RefreshCw className="w-4 h-4" /> Regenerate Script</>
+                ) : (
+                  <><Play className="w-4 h-4" /> Generate Script</>
+                )}
+              </button>
+              {generateScriptMutation.isError && (
+                <p className="text-xs text-red-500">Failed to start — try again.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Latest script result */}
+          {pendingScriptJob && !latestScriptJob && (
+            <div className="bg-white border border-gray-200 rounded-2xl p-10 flex flex-col items-center gap-3 text-gray-500">
+              <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
+              <p className="text-sm">Script is being generated…</p>
+            </div>
+          )}
+
+          {!!latestScriptJob?.result && (
+            <div className="bg-white border border-gray-200 rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900">Latest Script</h3>
+                <p className="text-xs text-gray-400">{new Date(latestScriptJob.createdAt).toLocaleDateString()}</p>
+              </div>
+              <ScriptViewer r={latestScriptJob.result as Record<string, unknown>} />
+            </div>
+          )}
+
+          {!latestScriptJob && !pendingScriptJob && (
+            <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-500">
+              <FileText className="w-10 h-10 mx-auto mb-3 opacity-20" />
+              <p className="text-sm">No script yet — fill in the form above and click Generate Script.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Pipeline tab (existing content) ──────────────────────────────── */}
+      {activeTab === 'pipeline' && <>
 
       {/* Guided step-by-step studio flow (design ref: image.png / project.PNG) */}
       <StudioFlow
@@ -794,6 +942,7 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </div>
+      </> /* end pipeline tab */}
     </div>
   );
 }

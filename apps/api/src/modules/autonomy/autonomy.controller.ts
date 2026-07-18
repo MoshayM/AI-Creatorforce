@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -92,5 +92,32 @@ export class AutonomyController {
   @Post('calendar/:entryId/dismiss')
   dismiss(@Param('entryId') entryId: string, @CurrentUser() user: JwtPayload) {
     return this.svc.dismiss(entryId, user.sub);
+  }
+
+  @Post('channels/:channelId/calendar/bulk-approve')
+  bulkApprove(
+    @Param('channelId') channelId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { ids: string[] },
+  ) {
+    return this.svc.bulkApprove(channelId, user.sub, body.ids);
+  }
+
+  @Post('channels/:channelId/calendar/bulk-dismiss')
+  bulkDismiss(
+    @Param('channelId') channelId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { ids: string[] },
+  ) {
+    return this.svc.bulkDismiss(channelId, user.sub, body.ids);
+  }
+
+  @Patch('calendar/:entryId/title')
+  updateTitle(
+    @Param('entryId') entryId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { title: string },
+  ) {
+    return this.svc.updateEntryTitle(entryId, user.sub, body.title);
   }
 }

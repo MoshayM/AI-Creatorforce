@@ -6,8 +6,18 @@ import {
   Loader2, CheckCircle,
   LogOut, XCircle, Eye,
   Key, Save, EyeOff, Shield, Monitor, Unlink, Link2, Phone, User,
+  Webhook, Trash2, Play,
 } from 'lucide-react';
-import { api, type OAuthProvider, type AuthSession, type LinkedAccount, type OAuthProviders, type AuthLinksResponse } from '@/lib/api';
+import { api, apiClient, type OAuthProvider, type AuthSession, type LinkedAccount, type OAuthProviders, type AuthLinksResponse } from '@/lib/api';
+
+interface WebhookEntry {
+  id: string;
+  url: string;
+  events: string[];
+  createdAt: string;
+  lastDeliveryAt?: string | null;
+  lastStatus?: 'success' | 'failed' | null;
+}
 import { Banner, type BannerState } from '@/components/banner';
 
 interface ApiKeyEntry {
@@ -31,6 +41,13 @@ function SettingsContent() {
   const [profileName, setProfileName] = useState('');
   const [profileAvatar, setProfileAvatar] = useState('');
   const [profileSaved, setProfileSaved] = useState(false);
+
+  // ── Webhook state ───────────────────────────────────────────────────────────
+  const [showAddWebhookForm, setShowAddWebhookForm] = useState(false);
+  const [newWebhookUrl, setNewWebhookUrl] = useState('');
+  const [newWebhookEvents, setNewWebhookEvents] = useState<string[]>([]);
+  const [newWebhookSecret, setNewWebhookSecret] = useState('');
+  const [webhookTestResults, setWebhookTestResults] = useState<Record<string, { delivered: boolean; statusCode?: number; error?: string } | null>>({});
 
   const { data: me } = useQuery({
     queryKey: ['me'],
@@ -187,6 +204,56 @@ function SettingsContent() {
       setBanner({ type: 'error', message: 'Failed to save API keys.' });
     },
   });
+
+  // ── Webhook queries & mutations ─────────────────────────────────────────────
+  const { data: webhooks = [] } = useQuery<WebhookEntry[]>({
+    queryKey: ['dev-webhooks'],
+    queryFn: () =>
+      apiClient.get<{ webhooks: WebhookEntry[] }>('/dev/webhooks').then((r) => r.data.webhooks),
+  });
+
+  const createWebhookMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post('/dev/webhooks', {
+        url: newWebhookUrl,
+        events: newWebhookEvents,
+        ...(newWebhookSecret ? { secret: newWebhookSecret } : {}),
+      }),
+    onSuccess: () => {
+      setShowAddWebhookForm(false);
+      setNewWebhookUrl('');
+      setNewWebhookEvents([]);
+      setNewWebhookSecret('');
+      void qc.invalidateQueries({ queryKey: ['dev-webhooks'] });
+      setBanner({ type: 'success', message: 'Webhook created.' });
+    },
+    onError: () => setBanner({ type: 'error', message: 'Failed to create webhook.' }),
+  });
+
+  const deleteWebhookMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/dev/webhooks/${id}`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['dev-webhooks'] }),
+    onError: () => setBanner({ type: 'error', message: 'Failed to delete webhook.' }),
+  });
+
+  async function testWebhook(id: string) {
+    try {
+      const res = await apiClient.post<{ delivered: boolean; statusCode?: number; error?: string }>(
+        `/dev/webhooks/${id}/test`,
+      );
+      setWebhookTestResults((prev) => ({ ...prev, [id]: res.data }));
+    } catch {
+      setWebhookTestResults((prev) => ({ ...prev, [id]: { delivered: false, error: 'Request failed' } }));
+    }
+  }
+
+  const WEBHOOK_EVENTS = [
+    { value: 'video.completed', label: 'Video completed' },
+    { value: 'video.published', label: 'Video published' },
+    { value: 'job.failed', label: 'Job failed' },
+    { value: 'calendar.proposed', label: 'Calendar proposed' },
+    { value: 'calendar.approved', label: 'Calendar approved' },
+  ];
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-10">
@@ -456,6 +523,135 @@ function SettingsContent() {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      {/* ── Developer Webhooks ───────────────────────────────────────── */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+          <Webhook className="w-5 h-5 text-brand-600" />
+          Developer Webhooks
+        </h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Receive HTTP POST notifications when events happen in your account.
+        </p>
+
+        <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+          {webhooks.length === 0 && (
+            <div className="px-4 py-6 text-center text-sm text-gray-500">No webhooks yet.</div>
+          )}
+          {webhooks.map((wh) => {
+            const testResult = webhookTestResults[wh.id];
+            return (
+              <div key={wh.id} className="px-4 py-3 space-y-2">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-mono text-gray-800 truncate">{wh.url}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {wh.events.map((ev) => (
+                        <span key={ev} className="text-[11px] bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5">{ev}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      title={wh.lastStatus ?? 'Never delivered'}
+                      className={`w-2 h-2 rounded-full ${wh.lastStatus === 'success' ? 'bg-green-500' : wh.lastStatus === 'failed' ? 'bg-red-500' : 'bg-gray-300'}`}
+                    />
+                    <button
+                      onClick={() => void testWebhook(wh.id)}
+                      title="Send test event"
+                      className="p-1.5 text-gray-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => { if (window.confirm('Delete this webhook?')) deleteWebhookMutation.mutate(wh.id); }}
+                      disabled={deleteWebhookMutation.isPending}
+                      title="Delete webhook"
+                      className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {testResult !== undefined && testResult !== null && (
+                  <p className={`text-xs px-2 py-1 rounded-lg ${testResult.delivered ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                    {testResult.delivered
+                      ? `Delivered (HTTP ${testResult.statusCode ?? '?'})`
+                      : `Failed${testResult.error ? `: ${testResult.error}` : ''}`}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Add webhook form */}
+          {showAddWebhookForm ? (
+            <div className="px-4 py-4 space-y-3">
+              <p className="text-sm font-medium text-gray-800">New webhook</p>
+              <input
+                type="url"
+                value={newWebhookUrl}
+                onChange={(e) => setNewWebhookUrl(e.target.value)}
+                placeholder="https://your-server.com/webhook"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                required
+              />
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Events</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {WEBHOOK_EVENTS.map((ev) => (
+                    <label key={ev.value} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newWebhookEvents.includes(ev.value)}
+                        onChange={(e) =>
+                          setNewWebhookEvents((prev) =>
+                            e.target.checked ? [...prev, ev.value] : prev.filter((x) => x !== ev.value),
+                          )
+                        }
+                        className="w-4 h-4 rounded border-gray-300 text-brand-600"
+                      />
+                      {ev.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <input
+                type="text"
+                value={newWebhookSecret}
+                onChange={(e) => setNewWebhookSecret(e.target.value)}
+                placeholder="Optional signing secret"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => { setShowAddWebhookForm(false); setNewWebhookUrl(''); setNewWebhookEvents([]); setNewWebhookSecret(''); }}
+                  className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => createWebhookMutation.mutate()}
+                  disabled={createWebhookMutation.isPending || !newWebhookUrl.trim() || newWebhookEvents.length === 0}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700 disabled:opacity-50"
+                >
+                  {createWebhookMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="px-4 py-3">
+              <button
+                onClick={() => setShowAddWebhookForm(true)}
+                className="flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-700 font-medium"
+              >
+                <span className="text-lg leading-none">+</span> Add Webhook
+              </button>
+            </div>
+          )}
         </div>
       </section>
 

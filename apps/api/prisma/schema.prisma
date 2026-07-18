@@ -2058,7 +2058,8 @@ model ContentCalendarEntry {
   channelId String
   channel   Channel                  @relation(fields: [channelId], references: [id], onDelete: Cascade)
   batchId   String
-  title     String
+  title         String
+  titleVariants String[]                 @default([])
   angle     String?
   format    CalendarFormat           @default(VIDEO)
   plannedAt DateTime
