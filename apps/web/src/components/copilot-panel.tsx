@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bot, X, Send, Mic, MicOff, Loader2, Volume2, VolumeX, ShieldCheck, Building2 } from 'lucide-react';
+import { Bot, X, Send, Mic, MicOff, Volume2, VolumeX, ShieldCheck, Building2, MessageSquare } from 'lucide-react';
 import { apiClient, api, type Org } from '@/lib/api';
 
 interface ChatMessage {
@@ -45,6 +45,7 @@ function getRecognition(): SpeechRecognitionLike | null {
  */
 export function CopilotPanel() {
   const [open, setOpen] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -61,10 +62,16 @@ export function CopilotPanel() {
     typeof navigator !== 'undefined' ? navigator.language : 'en-US');
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const voiceSupported = typeof window !== 'undefined' && !!getRecognition();
   // Phase 5 §10: bill turns (chat + voice) to an org shared wallet; '' = personal
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [billingOrgId, setBillingOrgId] = useState('');
+
+  // Listen for cf:open-copilot custom event (dispatched from topbar button)
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener('cf:open-copilot', handler as EventListener);
+    return () => window.removeEventListener('cf:open-copilot', handler as EventListener);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -184,139 +191,179 @@ export function CopilotPanel() {
     startListening();
   }, [listening, startListening]);
 
+  // speakReplies toggle is available via the voice orb panel (kept for future use)
+  void setSpeakReplies;
+
   return (
     <>
-      {/* Floating launcher */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-b from-[#9d6ff0] to-[#7c4fd8] text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
-          title="Copilot — type or speak to control the pipeline"
-          aria-label="Open Copilot"
-        >
-          <Bot className="w-7 h-7" />
-        </button>
-      )}
-
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-3rem)] h-[540px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="px-4 py-3 bg-gradient-to-r from-[#9d6ff0] to-[#7c4fd8] text-white flex items-center gap-2">
-            <Bot className="w-5 h-5" />
-            <div className="flex-1">
-              <p className="font-semibold text-sm">Copilot</p>
-              <p className="text-[11px] text-white/70">Type or speak — I run the pipeline for you</p>
-            </div>
-            <button onClick={() => setSpeakReplies((s) => !s)} className="p-1.5 hover:bg-white/10 rounded-lg" title={speakReplies ? 'Voice replies on' : 'Voice replies off'}>
-              {speakReplies ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={() => {
-                conversationRef.current = false;
-                recognitionRef.current?.stop();
-                window.speechSynthesis?.cancel();
-                setOpen(false);
-              }}
-              className="p-1.5 hover:bg-white/10 rounded-lg"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+        <div
+          onClick={() => { conversationRef.current = false; recognitionRef.current?.stop(); window.speechSynthesis?.cancel(); setOpen(false); setShowChat(false); }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-fade-in-cf"
+          style={{background:'rgba(30,27,46,.14)',backdropFilter:'blur(1.5px)'}}
+        >
+          <div onClick={e => e.stopPropagation()} className="flex flex-col items-center gap-6 animate-pop-in">
 
-          {/* Bill-to picker — only shown when the user belongs to an org */}
-          {orgs.length > 0 && (
-            <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-              <Building2 className="w-3.5 h-3.5 text-gray-500" />
-              <label htmlFor="copilot-billing-org" className="text-[11px] text-gray-500">Bill to</label>
-              <select
-                id="copilot-billing-org"
-                value={billingOrgId}
-                onChange={(e) => setBillingOrgId(e.target.value)}
-                className="flex-1 text-[11px] text-gray-700 bg-transparent border border-gray-200 rounded px-1.5 py-0.5"
+            {/* Voice orb */}
+            <div style={{position:'relative',width:'220px',height:'220px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid rgba(139,92,246,.35)',animation:'ripple 2.4s ease-out infinite'}} />
+              <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid rgba(139,92,246,.25)',animation:'ripple 2.4s ease-out infinite',animationDelay:'1.2s'}} />
+              <div
+                style={{
+                  position:'relative',width:'132px',height:'132px',borderRadius:'50%',
+                  background:'linear-gradient(135deg,#9C88DD,#7E62C9)',
+                  display:'flex',alignItems:'center',justifyContent:'center',gap:'5px',
+                  animation:'pulseGlow 2.4s ease-in-out infinite',
+                }}
               >
-                <option value="">Personal wallet</option>
-                {orgs.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
+                {[
+                  {h:'22px',d:'0s'},{h:'44px',d:'.15s'},{h:'64px',d:'.3s'},{h:'40px',d:'.45s'},
+                  {h:'70px',d:'.2s'},{h:'36px',d:'.35s'},{h:'20px',d:'.5s'},
+                ].map((bar, i) => (
+                  <span key={i} style={{width:'6px',height:bar.h,borderRadius:'6px',background:'#fff',animation:`voiceBar 1s ease-in-out infinite`,animationDelay:bar.d}} />
                 ))}
-              </select>
+              </div>
             </div>
-          )}
 
-          {/* Messages */}
-          <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-            {messages.length === 0 && (
-              <div className="text-xs text-gray-500 space-y-2">
-                <p className="font-medium text-gray-500">Try:</p>
-                <p>“What's the status of my project?”</p>
-                <p>“Show my top highlights”</p>
-                <p>“Render clip … ” / “Re-run the music stage”</p>
+            {/* Status */}
+            <div style={{textAlign:'center'}}>
+              <div
+                style={{display:'inline-flex',alignItems:'center',gap:'8px',fontSize:'15px',fontWeight:700,color:'#fff',background:'rgba(30,27,46,.55)',backdropFilter:'blur(6px)',padding:'9px 18px',borderRadius:'30px'}}
+              >
+                <span style={{width:'9px',height:'9px',borderRadius:'50%',background:'#4ADE80',boxShadow:'0 0 0 4px rgba(74,222,128,.25)',flexShrink:0}} />
+                {listening ? 'Listening… speak naturally' : busy ? 'Processing…' : 'Copilot ready'}
+              </div>
+              <p style={{fontSize:'12.5px',color:'rgba(30,27,46,.55)',fontWeight:600,marginTop:'10px'}}>
+                {messages.length > 0
+                  ? (messages[messages.length - 1]?.content ?? '').slice(0, 80) + ((messages[messages.length - 1]?.content?.length ?? 0) > 80 ? '…' : '')
+                  : 'Ask me anything about your content'}
+              </p>
+            </div>
+
+            {/* Controls */}
+            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+              <button
+                type="button"
+                title={listening ? 'Stop listening' : 'Start listening'}
+                onClick={e => { e.stopPropagation(); toggleMic(); }}
+                style={{width:'52px',height:'52px',borderRadius:'50%',background:'#fff',color:'#6b6880',display:'flex',alignItems:'center',justifyContent:'center',border:'none',cursor:'pointer',boxShadow:'0 10px 26px -12px rgba(30,27,46,.5)'}}
+              >
+                {listening ? <MicOff style={{width:'22px',height:'22px'}} /> : <Mic style={{width:'22px',height:'22px'}} />}
+              </button>
+
+              <button
+                type="button"
+                title="Type a message"
+                onClick={e => { e.stopPropagation(); setShowChat(c => !c); }}
+                style={{width:'52px',height:'52px',borderRadius:'50%',background:'#fff',color:'#6b6880',display:'flex',alignItems:'center',justifyContent:'center',border:'none',cursor:'pointer',boxShadow:'0 10px 26px -12px rgba(30,27,46,.5)'}}
+              >
+                <MessageSquare style={{width:'22px',height:'22px'}} />
+              </button>
+
+              <button
+                type="button"
+                title="Close"
+                onClick={e => { e.stopPropagation(); conversationRef.current = false; recognitionRef.current?.stop(); window.speechSynthesis?.cancel(); setOpen(false); setShowChat(false); }}
+                style={{width:'64px',height:'64px',borderRadius:'50%',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',border:'none',cursor:'pointer',background:'linear-gradient(135deg,#F87171,#EF4444)',boxShadow:'0 12px 30px -12px rgba(239,68,68,.7)'}}
+              >
+                <X style={{width:'26px',height:'26px'}} />
+              </button>
+            </div>
+
+            {/* Text input */}
+            {showChat && (
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{width:'400px',maxWidth:'calc(100vw - 3rem)',background:'#fff',borderRadius:'16px',padding:'12px',display:'flex',gap:'8px',boxShadow:'0 20px 50px -20px rgba(30,27,46,.5)'}}
+              >
+                <input
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey && input.trim()) { e.preventDefault(); void send(input.trim()); }}}
+                  placeholder="Type a message…"
+                  style={{flex:'1 1 auto',border:'none',outline:'none',fontSize:'14px',color:'#1E1B2E',background:'transparent',fontFamily:'inherit'}}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  disabled={!input.trim() || busy}
+                  onClick={() => { if (input.trim()) void send(input.trim()); }}
+                  style={{width:'32px',height:'32px',borderRadius:'10px',background:'#7C3AED',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',border:'none',cursor:'pointer',opacity: (!input.trim() || busy) ? 0.4 : 1}}
+                >
+                  <Send style={{width:'16px',height:'16px'}} />
+                </button>
               </div>
             )}
-            {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap ${m.role === 'user' ? 'bg-brand-600 text-white rounded-br-sm' : 'bg-gray-100 text-gray-800 rounded-bl-sm'}`}>
-                  {m.content}
-                  {m.fromCache && (
-                    <span className="inline-flex items-center gap-0.5 ml-1 text-[10px] text-amber-500" title="Answered from intent cache — zero AI tokens">⚡ instant</span>
-                  )}
-                </div>
-              </div>
-            ))}
+
+            {/* Confirmation card */}
             {pending && (
-              <div className="border border-amber-200 bg-amber-50 rounded-xl p-3 text-sm">
-                <p className="flex items-center gap-1.5 text-amber-800 font-medium text-xs mb-1">
-                  <ShieldCheck className="w-4 h-4" /> Confirm: {pending.action.replace(/_/g, ' ')}
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{width:'360px',maxWidth:'calc(100vw - 3rem)',borderRadius:'16px',border:'1px solid #fde68a',background:'#fffbeb',padding:'16px',boxShadow:'0 20px 50px -20px rgba(30,27,46,.4)'}}
+              >
+                <p style={{display:'flex',alignItems:'center',gap:'6px',color:'#92400e',fontWeight:600,fontSize:'13px',marginBottom:'4px'}}>
+                  <ShieldCheck style={{width:'16px',height:'16px'}} /> Confirm: {pending.action.replace(/_/g,' ')}
                 </p>
-                <p className="text-[11px] text-amber-700 mb-2">
-                  {pendingEstimate !== null
-                    ? `Estimated cost: ${pendingEstimate.toLocaleString()} credits`
-                    : 'Cost depends on usage — charged from your wallet at actual usage'}
+                <p style={{fontSize:'12px',color:'#b45309',marginBottom:'12px'}}>
+                  {pendingEstimate !== null ? `Estimated: ${pendingEstimate.toLocaleString()} credits` : 'Cost varies — charged at actual usage'}
                 </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => void send('', pending)}
-                    className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700"
-                  >
-                    Yes, do it
-                  </button>
-                  <button onClick={() => setPending(null)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
-                    Cancel
-                  </button>
+                <div style={{display:'flex',gap:'8px'}}>
+                  <button onClick={() => void send('', pending)} style={{padding:'6px 12px',background:'#7C3AED',color:'#fff',borderRadius:'9px',fontSize:'12px',fontWeight:600,border:'none',cursor:'pointer'}}>Confirm</button>
+                  <button onClick={() => { setPending(null); setPendingEstimate(null); }} style={{padding:'6px 12px',background:'#f3f4f6',color:'#374151',borderRadius:'9px',fontSize:'12px',fontWeight:600,border:'none',cursor:'pointer'}}>Cancel</button>
                 </div>
-              </div>
-            )}
-            {busy && (
-              <div className="flex items-center gap-2 text-gray-500 text-xs">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> thinking…
               </div>
             )}
           </div>
 
-          {/* Input */}
-          <div className="p-3 border-t border-gray-100 flex items-center gap-2">
-            {voiceSupported && (
-              <button
-                onClick={toggleMic}
-                className={`p-2.5 rounded-xl shrink-0 ${listening ? 'bg-red-500 text-white animate-pulse' : 'border border-gray-200 text-gray-500 hover:bg-gray-50'}`}
-                title={listening ? 'Stop listening' : 'Push to talk'}
-              >
-                {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
+          {/* Agent activity panel */}
+          <div
+            onClick={e => e.stopPropagation()}
+            className="fixed bottom-6 right-6 z-[51] flex flex-col gap-3.5 animate-pop-in"
+            style={{
+              top:'84px',width:'340px',
+              background:'rgba(20,17,34,.5)',backdropFilter:'blur(16px)',
+              border:'1px solid rgba(255,255,255,.14)',borderRadius:'20px',
+              padding:'18px 16px',
+              boxShadow:'0 30px 70px -30px rgba(0,0,0,.6)',
+            }}
+          >
+            <div style={{display:'flex',alignItems:'center',gap:'9px',padding:'0 4px'}}>
+              <span style={{width:'8px',height:'8px',borderRadius:'50%',background:'#4ADE80',boxShadow:'0 0 0 4px rgba(74,222,128,.22)',flexShrink:0}} />
+              <div style={{fontSize:'13px',fontWeight:700,color:'#fff'}}>Agent activity</div>
+              <div style={{flex:'1 1 auto'}} />
+              <div style={{fontSize:'11px',fontWeight:600,color:'rgba(255,255,255,.5)'}}>live</div>
+            </div>
+            <div ref={listRef} style={{flex:'1 1 auto',overflowY:'auto',display:'flex',flexDirection:'column',gap:'13px',padding:'2px 4px'}}>
+              {messages.length === 0 ? (
+                <div style={{fontSize:'12px',color:'rgba(255,255,255,.4)',fontWeight:500,marginTop:'8px'}}>No activity yet.</div>
+              ) : (
+                messages.slice(-8).map((m, i) => (
+                  <div key={i} style={{display:'flex',alignItems:'flex-start',gap:'8px',opacity: m.role==='user' ? 0.6 : 1}}>
+                    <span style={{width:'22px',height:'22px',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',flexShrink:0,fontSize:'11px',fontWeight:700,background: m.role==='user' ? 'rgba(255,255,255,.2)' : 'rgba(124,58,237,.8)'}}>
+                      {m.role==='user' ? 'U' : 'AI'}
+                    </span>
+                    <div style={{fontSize:'12px',color:'rgba(255,255,255,.8)',fontWeight:500,lineHeight:1.45}}>
+                      {m.content.slice(0,120)}{m.content.length>120?'…':''}
+                    </div>
+                  </div>
+                ))
+              )}
+              {busy && (
+                <div style={{display:'flex',alignItems:'center',gap:'8px',paddingLeft:'2px'}}>
+                  <span style={{width:'6px',height:'6px',borderRadius:'50%',background:'#A855F7',animation:'voiceBar .9s ease-in-out infinite'}} />
+                  <span style={{fontSize:'12px',color:'rgba(255,255,255,.5)',fontWeight:500}}>Processing…</span>
+                </div>
+              )}
+            </div>
+            {orgs.length > 0 && (
+              <div style={{display:'flex',alignItems:'center',gap:'8px',borderTop:'1px solid rgba(255,255,255,.1)',paddingTop:'12px'}}>
+                <Building2 style={{width:'14px',height:'14px',color:'rgba(255,255,255,.5)',flexShrink:0}} />
+                <select value={billingOrgId} onChange={e => setBillingOrgId(e.target.value)} style={{flex:'1 1 auto',fontSize:'11px',color:'rgba(255,255,255,.7)',background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',borderRadius:'6px',padding:'4px 8px'}}>
+                  <option value="">Personal wallet</option>
+                  {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </div>
             )}
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && input.trim() && !busy) { conversationRef.current = false; void send(input.trim()); } }}
-              placeholder={listening ? 'Listening…' : 'Ask or command…'}
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-brand-400"
-            />
-            <button
-              onClick={() => { if (input.trim() && !busy) { conversationRef.current = false; void send(input.trim()); } }}
-              disabled={!input.trim() || busy}
-              className="p-2.5 bg-brand-600 text-white rounded-xl disabled:opacity-40 shrink-0"
-            >
-              <Send className="w-4 h-4" />
-            </button>
           </div>
         </div>
       )}

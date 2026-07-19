@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Plus_Jakarta_Sans } from 'next/font/google';
 import { Providers } from '@/components/providers';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
+const plusJakarta = Plus_Jakarta_Sans({ subsets: ['latin'], weight: ['400','500','600','700','800'], variable: '--font-plus-jakarta' });
 
 const SITE_URL = process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://aicreatorforce.net';
 
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={plusJakarta.className}>
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Bell, Gauge, Gift, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles, Home, Bot, Upload, BookOpen, Code2, Activity, BarChart2, Compass, ArrowRightLeft, Award, Target, FlaskConical, Layers, ListOrdered } from 'lucide-react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Bell, Gauge, Gift, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles, Home, Bot, Upload, BookOpen, Code2, Activity, BarChart2, Compass, ArrowRightLeft, Award, Target, FlaskConical, Layers, ListOrdered, Search } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -144,8 +144,8 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
   });
   /** Explicit expand/collapse choices per nav group; unset falls back to route-based auto-open. */
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  /** Mobile off-canvas sidebar (below lg the sidebar is a drawer). */
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  /** Sidebar collapsed state — collapses to icon-only rail. */
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // ── Notifications bell state ───────────────────────────────────────────────
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -193,9 +193,6 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
     return () => document.removeEventListener('mousedown', onOutside);
   }, []);
 
-  // Close the mobile drawer whenever the route changes.
-  useEffect(() => { setSidebarOpen(false); }, [pathname]);
-
   async function handleMarkRead(id: string) {
     try {
       await api.notifications.markRead(id);
@@ -232,252 +229,281 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <div className="min-h-screen bg-[#e9e1f8] p-3 md:p-5">
-      <div className="dash-shell mx-auto max-w-[1500px] bg-white rounded-[2rem] shadow-xl flex h-[calc(100vh-2.5rem)] overflow-hidden">
-        {/* Backdrop behind the mobile drawer */}
-        {sidebarOpen && (
-          <div
-            className="lg:hidden fixed inset-0 z-40 bg-black/40"
-            aria-hidden="true"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-        {/* Sidebar: static column on lg+, off-canvas drawer below lg (design ref: ux.jpg) */}
-        <aside
-          className={`m-3 w-60 shrink-0 bg-gradient-to-b from-[#9d6ff0] to-[#7c4fd8] rounded-[1.75rem] flex flex-col text-white shadow-lg
-            max-lg:fixed max-lg:inset-y-3 max-lg:left-3 max-lg:z-50 max-lg:transition-transform max-lg:duration-200
-            ${sidebarOpen ? 'max-lg:translate-x-0' : 'max-lg:-translate-x-[110%]'}`}
+    <div className="h-screen overflow-hidden flex flex-col bg-[#F4F3FB] text-[#1E1B2E]">
+
+      {/* ── TOPBAR ──────────────────────────────────────────────────────── */}
+      <header className="flex items-center gap-3.5 px-[22px] py-[11px] bg-white border-b border-[#ECECF3] shrink-0 z-[5]">
+
+        {/* Hamburger — collapses/expands sidebar */}
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed(c => !c)}
+          className="w-10 h-10 shrink-0 border border-[#ECECF3] rounded-[11px] bg-white text-[#5b5772] flex items-center justify-center hover:bg-[#F6F5FC] transition-colors"
+          aria-label="Toggle sidebar"
         >
-          <div className="px-5 pt-6 pb-4 relative">
-            <button
-              type="button"
-              aria-label="Close navigation menu"
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden absolute top-4 right-4 flex items-center justify-center w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-md">
-              <Zap className="w-7 h-7 text-brand-600" />
-            </div>
-            <p className="font-bold text-lg mt-3">AI CreatorForce</p>
-            <p className="text-xs text-white/70">AI Content Platform</p>
+          <Menu className="w-[18px] h-[18px]" />
+        </button>
+
+        {/* Logo */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div
+            className="w-[38px] h-[38px] rounded-[11px] flex items-center justify-center"
+            style={{background:'linear-gradient(135deg,#9C88DD,#7E62C9)',boxShadow:'0 6px 14px -6px rgba(124,58,237,.6)'}}
+          >
+            <Zap className="w-5 h-5 text-white" />
           </div>
-          <nav className="flex-1 py-2 space-y-1 px-3 overflow-y-auto">
-            {[...NAV, ...(isAdmin ? [{
-            href: '/admin',
-            icon: Gauge,
-            label: 'Admin',
-          } as NavItem] : [])].map(({ href, icon: Icon, label, children, isGroup, dividerBefore }) => {
-              // For isGroup items, active state is ONLY based on children (never the fake href).
-              // For regular items with children (Settings), also check the parent href.
+          <div className="leading-[1.15]">
+            <div className="font-bold text-[15px] tracking-[-0.3px]">AI CreatorForce</div>
+            <div className="text-[11px] font-medium" style={{color:'#8b88a0'}}>AI Content Platform</div>
+          </div>
+        </div>
+
+        {/* Search bar */}
+        <div className="flex-1 max-w-[400px] ml-3 flex items-center gap-2.5 rounded-[12px] px-3.5 py-2.5" style={{background:'#F7F6FB',border:'1px solid #ECECF3'}}>
+          <Search className="w-[18px] h-[18px] shrink-0" style={{color:'#9a97ab'}} />
+          <input
+            type="text"
+            placeholder="Search projects, videos, channels…"
+            className="border-none outline-none bg-transparent text-sm flex-1 text-[#1E1B2E] placeholder:text-[#9a97ab]"
+            style={{fontFamily:'inherit'}}
+          />
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Copilot button */}
+        <button
+          type="button"
+          title="Ask Copilot"
+          onClick={() => window.dispatchEvent(new CustomEvent('cf:open-copilot'))}
+          className="w-[42px] h-[42px] rounded-[12px] flex items-center justify-center hover:opacity-90 transition-opacity shrink-0"
+          style={{border:'1px solid #E4DEFB',background:'#F6F2FF',color:'#7C3AED'}}
+        >
+          <Bot className="w-[19px] h-[19px]" />
+        </button>
+
+        {/* Notification bell */}
+        <div className="relative shrink-0" ref={bellRef}>
+          <button
+            type="button"
+            aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+            aria-haspopup="true"
+            aria-expanded={bellOpen}
+            onClick={() => { setBellOpen(o => !o); if (!bellOpen) void fetchNotifications(); }}
+            className="w-[42px] h-[42px] rounded-[12px] flex items-center justify-center hover:bg-[#F6F5FC] transition-colors relative"
+            style={{border:'1px solid #ECECF3',background:'#fff',color:'#5b5772'}}
+          >
+            <Bell className="w-[19px] h-[19px]" />
+            {unreadCount > 0 && (
+              <span
+                className="absolute flex items-center justify-center text-white font-bold leading-none"
+                style={{top:'-6px',right:'-6px',minWidth:'19px',height:'19px',padding:'0 5px',borderRadius:'20px',background:'#EF4444',fontSize:'11px',border:'2px solid #fff'}}
+              >
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {bellOpen && (
+            <div
+              role="dialog"
+              aria-label="Notifications"
+              className="absolute right-0 z-50 bg-white overflow-hidden animate-drop-down"
+              style={{top:'calc(100% + 10px)',width:'360px',border:'1px solid #ECECF3',borderRadius:'18px',boxShadow:'0 30px 70px -24px rgba(30,27,46,.4)'}}
+            >
+              <div className="flex items-center justify-between" style={{padding:'15px 18px',borderBottom:'1px solid #F1EFF7'}}>
+                <span style={{fontSize:'15px',fontWeight:700,letterSpacing:'-.3px'}}>Notifications</span>
+                {unreadCount > 0 && (
+                  <button type="button" onClick={() => void handleMarkAllRead()} className="border-none bg-transparent cursor-pointer" style={{fontSize:'12.5px',fontWeight:700,color:'#7C3AED',fontFamily:'inherit'}}>
+                    Mark all read
+                  </button>
+                )}
+              </div>
+              <ul style={{maxHeight:'340px',overflowY:'auto'}}>
+                {notifications.length === 0 ? (
+                  <li style={{padding:'36px 20px',textAlign:'center'}}>
+                    <div style={{width:'46px',height:'46px',margin:'0 auto 12px',borderRadius:'14px',background:'#F3F2F9',color:'#c3c0d2',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <Bell className="w-[22px] h-[22px]" />
+                    </div>
+                    <div style={{fontSize:'13.5px',fontWeight:700,color:'#6b6880'}}>You&apos;re all caught up</div>
+                    <div style={{fontSize:'12.5px',color:'#a8a5b8',fontWeight:500,marginTop:'2px'}}>No new notifications</div>
+                  </li>
+                ) : (
+                  notifications.map((n) => (
+                    <li key={n.id} style={{display:'flex',alignItems:'flex-start',gap:'12px',padding:'13px 16px',borderBottom:'1px solid #F6F5FB'}}>
+                      <div style={{flex:'1 1 auto',minWidth:0,cursor:'pointer'}} onClick={() => { if (!n.readAt) void handleMarkRead(n.id); }}>
+                        <div style={{display:'flex',alignItems:'baseline',gap:'8px'}}>
+                          <div style={{fontSize:'13.5px',fontWeight:700,flex:'1 1 auto'}}>{n.title}</div>
+                          <div style={{fontSize:'11px',color:'#a8a5b8',fontWeight:600,flexShrink:0}}>{relativeTime(n.createdAt)}</div>
+                        </div>
+                        {n.body && <div style={{fontSize:'12.5px',color:'#8b88a0',fontWeight:500,lineHeight:1.45,marginTop:'2px'}}>{n.body}</div>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { if (!n.readAt) void handleMarkRead(n.id); setBellOpen(false); }}
+                        className="flex items-center justify-center border-none cursor-pointer hover:bg-[#FDECEC] hover:text-[#EF4444] transition-all"
+                        style={{flexShrink:0,width:'26px',height:'26px',borderRadius:'8px',background:'transparent',color:'#c3c0d2'}}
+                        title="Dismiss"
+                      >
+                        <X className="w-[15px] h-[15px]" />
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+              <Link
+                href="/notifications"
+                onClick={() => setBellOpen(false)}
+                className="block w-full text-center text-xs font-semibold hover:bg-[#F6F5FC]"
+                style={{padding:'10px',color:'#7C3AED',borderTop:'1px solid #ECECF3'}}
+              >
+                View all notifications →
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* User chip */}
+        <div className="flex items-center gap-2.5 hover:bg-[#F6F5FC] transition-colors cursor-pointer shrink-0" style={{background:'#fff',border:'1px solid #ECECF3',borderRadius:'12px',padding:'5px 14px 5px 5px'}}>
+          {meData?.avatarUrl ? (
+            <img src={meData.avatarUrl} alt={meData.name ?? 'Avatar'} style={{width:'32px',height:'32px',borderRadius:'9px',objectFit:'cover'}} />
+          ) : (
+            <div className="flex items-center justify-center text-white font-bold text-sm uppercase" style={{width:'32px',height:'32px',borderRadius:'9px',background:'linear-gradient(135deg,#9C88DD,#7E62C9)'}}>
+              {(meData?.name ?? userName).charAt(0)}
+            </div>
+          )}
+          <div style={{lineHeight:1.2}}>
+            <div style={{fontWeight:700,fontSize:'13.5px'}}>{meData?.name ?? userName}</div>
+            <div style={{fontSize:'11.5px',color:'#8b88a0',fontWeight:500}}>Creator</div>
+          </div>
+        </div>
+      </header>
+
+      {/* ── BODY: sidebar + main ─────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* ── SIDEBAR ──────────────────────────────────────────────────────── */}
+        <aside
+          className={`flex flex-col p-[10px] overflow-hidden shrink-0 transition-[width] duration-[320ms] ease-[cubic-bezier(.4,0,.2,1)]`}
+          style={{background:'linear-gradient(185deg,#7C3AED 0%,#5B21B6 100%)',width: sidebarCollapsed ? '52px' : '224px'}}
+        >
+          <nav className="flex flex-col gap-0.5 flex-1 overflow-y-auto overflow-x-hidden" style={{scrollbarWidth:'none'}}>
+            {[...NAV, ...(isAdmin ? [{ href:'/admin', icon: Gauge, label:'Admin' } as NavItem] : [])].map(({ href, icon: Icon, label, children, isGroup, dividerBefore }) => {
               const groupActive = isGroup
-                ? (children?.some((c) => !c.href.includes('#') && pathname.startsWith(c.href)) ?? false)
-                : (pathname === href || pathname.startsWith(href + '/') ||
-                    (children?.some((c) => !c.href.includes('#') && pathname.startsWith(c.href)) ?? false));
+                ? (children?.some(c => !c.href.includes('#') && pathname.startsWith(c.href)) ?? false)
+                : (pathname === href || pathname.startsWith(href + '/') || (children?.some(c => !c.href.includes('#') && pathname.startsWith(c.href)) ?? false));
               const open = openGroups[href] ?? groupActive;
               const isActiveLink = !isGroup && (pathname === href || pathname.startsWith(href + '/'));
 
               return (
-              <div key={href}>
-                {dividerBefore && (
-                  <div className="mx-3 my-2 border-t border-white/15" />
-                )}
-                <div className="relative">
+                <div key={href}>
+                  {dividerBefore && <div style={{margin:'6px 10px',borderTop:'1px solid rgba(255,255,255,.15)'}} />}
+
                   {isGroup ? (
-                    // Group header — no navigation, just expands/collapses the section
                     <button
                       type="button"
                       aria-expanded={open}
-                      aria-label={`${open ? 'Collapse' : 'Expand'} ${label}`}
-                      onClick={() => setOpenGroups((g) => ({ ...g, [href]: !open }))}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors ${
-                        groupActive
-                          ? 'bg-white/20 text-white font-semibold shadow-sm'
-                          : 'text-white/75 hover:bg-white/10 hover:text-white'
-                      }`}
+                      onClick={() => setOpenGroups(g => ({ ...g, [href]: !open }))}
+                      className="w-full flex items-center transition-colors"
+                      style={{
+                        gap:'11px',padding:'9px 10px',borderRadius:'10px',cursor:'pointer',
+                        fontSize:'12.5px',fontWeight:600,border:'none',
+                        background: groupActive ? 'rgba(255,255,255,.18)' : 'transparent',
+                        color: groupActive ? '#fff' : 'rgba(255,255,255,.82)',
+                      }}
+                      onMouseEnter={e => { if (!groupActive) (e.currentTarget as HTMLElement).style.background='rgba(255,255,255,.12)'; }}
+                      onMouseLeave={e => { if (!groupActive) (e.currentTarget as HTMLElement).style.background='transparent'; }}
                     >
-                      <Icon className="w-4 h-4 shrink-0" />
-                      <span className="flex-1 text-left">{label}</span>
-                      <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+                      <Icon style={{width:'18px',height:'18px',flexShrink:0}} />
+                      <span style={{whiteSpace:'nowrap',overflow:'hidden',flex:'1 1 auto',textAlign:'left',opacity: sidebarCollapsed ? 0 : 1,transition:'opacity .2s'}}>
+                        {label}
+                      </span>
+                      {!sidebarCollapsed && (
+                        <ChevronDown style={{width:'14px',height:'14px',flexShrink:0,transform: open ? 'none' : 'rotate(-90deg)',transition:'transform .2s'}} />
+                      )}
                     </button>
                   ) : (
-                    // Regular nav link (may also have children, e.g. Settings)
-                    <Link
-                      href={href}
-                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors ${
-                        isActiveLink
-                          ? 'bg-white/20 text-white font-semibold shadow-sm'
-                          : 'text-white/75 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4 shrink-0" />
-                      <span className="flex-1">{label}</span>
-                      {children && children.length > 0 && (
-                        <ChevronDown
-                          className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}
-                          aria-hidden="true"
+                    <div style={{position:'relative'}}>
+                      <Link
+                        href={href}
+                        className="flex items-center transition-colors"
+                        style={{
+                          gap:'11px',padding:'9px 10px',borderRadius:'10px',
+                          fontSize:'12.5px',fontWeight:600,textDecoration:'none',
+                          background: isActiveLink ? 'rgba(255,255,255,.18)' : 'transparent',
+                          color: isActiveLink ? '#fff' : 'rgba(255,255,255,.82)',
+                        }}
+                        onMouseEnter={e => { if (!isActiveLink) (e.currentTarget as HTMLElement).style.background='rgba(255,255,255,.12)'; }}
+                        onMouseLeave={e => { if (!isActiveLink) (e.currentTarget as HTMLElement).style.background='transparent'; (e.currentTarget as HTMLElement).style.color='rgba(255,255,255,.82)'; }}
+                      >
+                        <Icon style={{width:'18px',height:'18px',flexShrink:0}} />
+                        <span style={{whiteSpace:'nowrap',overflow:'hidden',flex:'1 1 auto',opacity: sidebarCollapsed ? 0 : 1,transition:'opacity .2s'}}>
+                          {label}
+                        </span>
+                        {children && children.length > 0 && !sidebarCollapsed && (
+                          <ChevronDown style={{width:'14px',height:'14px',flexShrink:0,transform: open ? 'none' : 'rotate(-90deg)',transition:'transform .2s'}} />
+                        )}
+                      </Link>
+                      {!isGroup && children && children.length > 0 && (
+                        <button
+                          type="button"
+                          aria-label={`${open ? 'Collapse' : 'Expand'} ${label} menu`}
+                          aria-expanded={open}
+                          onClick={e => { e.preventDefault(); setOpenGroups(g => ({ ...g, [href]: !open })); }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 border-none bg-transparent cursor-pointer"
+                          style={{padding:'4px',borderRadius:'6px',color:'rgba(255,255,255,.7)'}}
                         />
                       )}
-                    </Link>
+                    </div>
                   )}
-                  {/* Separate expand toggle for non-group items that have children (Settings) */}
-                  {!isGroup && children && children.length > 0 && (
-                    <button
-                      type="button"
-                      aria-label={`${open ? 'Collapse' : 'Expand'} ${label} menu`}
-                      aria-expanded={open}
-                      onClick={(e) => { e.preventDefault(); setOpenGroups((g) => ({ ...g, [href]: !open })); }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
+
+                  {open && !sidebarCollapsed && children?.map(({ href: subHref, icon: SubIcon, label: subLabel }) => (
+                    <Link
+                      key={subHref}
+                      href={subHref}
+                      className="flex items-center transition-colors"
+                      style={{
+                        gap:'9px',padding:'8px 10px 8px 36px',borderRadius:'10px',marginTop:'1px',
+                        fontSize:'12px',fontWeight:600,textDecoration:'none',
+                        background: (!subHref.includes('#') && pathname.startsWith(subHref)) ? 'rgba(255,255,255,.18)' : 'transparent',
+                        color: (!subHref.includes('#') && pathname.startsWith(subHref)) ? '#fff' : 'rgba(255,255,255,.70)',
+                      }}
+                      onMouseEnter={e => { if (!(!subHref.includes('#') && pathname.startsWith(subHref))) (e.currentTarget as HTMLElement).style.background='rgba(255,255,255,.12)'; }}
+                      onMouseLeave={e => { if (!(!subHref.includes('#') && pathname.startsWith(subHref))) (e.currentTarget as HTMLElement).style.background='transparent'; }}
                     >
-                      <span className="sr-only">{open ? 'Collapse' : 'Expand'}</span>
-                    </button>
-                  )}
+                      <SubIcon style={{width:'15px',height:'15px',flexShrink:0}} />
+                      <span style={{whiteSpace:'nowrap',overflow:'hidden'}}>{subLabel}</span>
+                    </Link>
+                  ))}
                 </div>
-                {open && children?.map(({ href: subHref, icon: SubIcon, label: subLabel }) => (
-                  <Link
-                    key={subHref}
-                    href={subHref}
-                    className={`mt-1 flex items-center gap-2.5 pl-9 pr-4 py-2 rounded-xl text-[13px] transition-colors ${
-                      !subHref.includes('#') && pathname.startsWith(subHref)
-                        ? 'bg-white/20 text-white font-semibold shadow-sm'
-                        : 'text-white/70 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <SubIcon className="w-3.5 h-3.5" />
-                    {subLabel}
-                  </Link>
-                ))}
-              </div>
               );
             })}
           </nav>
-          <div className="p-3">
-            <button
-              onClick={() => { void handleLogout(); }}
-              className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm text-white/75 hover:bg-white/10 hover:text-white w-full transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </button>
-          </div>
+
+          {/* Sign out */}
+          <button
+            onClick={() => void handleLogout()}
+            className="flex items-center transition-colors border-none cursor-pointer"
+            style={{
+              marginTop:'6px',gap:'11px',padding:'9px 10px',borderRadius:'10px',
+              fontSize:'12.5px',fontWeight:600,
+              color:'rgba(255,255,255,.82)',background:'transparent',fontFamily:'inherit',
+              width:'100%',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background='rgba(255,255,255,.12)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background='transparent'; }}
+          >
+            <LogOut style={{width:'17px',height:'17px',flexShrink:0}} />
+            <span style={{whiteSpace:'nowrap',overflow:'hidden',opacity: sidebarCollapsed ? 0 : 1,transition:'opacity .2s'}}>Sign Out</span>
+          </button>
         </aside>
 
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Top bar: hamburger (mobile) + notification bell + user chip */}
-          <div className="dash-topbar flex items-center justify-between lg:justify-end gap-3 px-4 lg:px-8 pt-5">
-            <button
-              type="button"
-              aria-label="Open navigation menu"
-              aria-expanded={sidebarOpen}
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-            >
-              <Menu className="w-4 h-4 text-gray-600" />
-            </button>
-            <div className="flex items-center gap-3">
-            {/* ── Notification bell ───────────────────────────────────────────── */}
-            <div className="relative" ref={bellRef}>
-              <button
-                type="button"
-                aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
-                aria-haspopup="true"
-                aria-expanded={bellOpen}
-                onClick={() => { setBellOpen((o) => !o); if (!bellOpen) void fetchNotifications(); }}
-                className="relative flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-              >
-                <Bell className="w-4 h-4 text-gray-600" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-[#9d6ff0] text-white text-[9px] font-bold leading-none">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </button>
-
-              {bellOpen && (
-                <div
-                  role="dialog"
-                  aria-label="Notifications"
-                  className="absolute right-0 top-11 z-50 w-80 rounded-2xl bg-white shadow-xl border border-gray-100 overflow-hidden"
-                >
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                    <span className="text-sm font-semibold text-gray-800">Notifications</span>
-                    {unreadCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => { void handleMarkAllRead(); }}
-                        className="text-[11px] text-[#9d6ff0] hover:underline font-medium focus:outline-none"
-                      >
-                        Mark all read
-                      </button>
-                    )}
-                  </div>
-
-                  {/* List */}
-                  <ul className="max-h-80 overflow-y-auto divide-y divide-gray-50">
-                    {notifications.length === 0 ? (
-                      <li className="px-4 py-6 text-center text-sm text-gray-500">No notifications yet</li>
-                    ) : (
-                      notifications.map((n) => (
-                        <li key={n.id}>
-                          <button
-                            type="button"
-                            onClick={() => { if (!n.readAt) void handleMarkRead(n.id); }}
-                            className={`w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-50 ${!n.readAt ? 'bg-purple-50/60' : ''}`}
-                          >
-                            <div className="flex items-start gap-2">
-                              {!n.readAt && (
-                                <span className="mt-1.5 flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[#9d6ff0]" aria-hidden="true" />
-                              )}
-                              <div className={!n.readAt ? '' : 'pl-3.5'}>
-                                <p className="text-[13px] font-semibold text-gray-800 leading-snug">{n.title}</p>
-                                {n.body && (
-                                  <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{n.body}</p>
-                                )}
-                                <p className="text-[10px] text-gray-500 mt-1">{relativeTime(n.createdAt)}</p>
-                              </div>
-                            </div>
-                          </button>
-                        </li>
-                      ))
-                    )}
-                  </ul>
-                  <Link
-                    href="/notifications"
-                    onClick={() => setBellOpen(false)}
-                    className="block w-full text-center py-2.5 text-xs font-semibold text-[#7b5ec7] hover:bg-gray-50 border-t border-gray-100"
-                  >
-                    View all notifications →
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            {/* ── User chip ────────────────────────────────────────────────────── */}
-            <div className="flex items-center gap-2.5">
-              {meData?.avatarUrl ? (
-                <img
-                  src={meData.avatarUrl}
-                  alt={meData.name ?? 'Avatar'}
-                  className="w-9 h-9 rounded-full object-cover border-2 border-gray-200 shrink-0"
-                />
-              ) : (
-                <div className="w-9 h-9 rounded-full bg-gradient-to-b from-[#cbbcf2] to-[#a48fe0] flex items-center justify-center text-white text-sm font-bold uppercase shrink-0">
-                  {(meData?.name ?? userName).charAt(0)}
-                </div>
-              )}
-              <div className="leading-tight">
-                <p className="text-sm font-semibold text-gray-800">{meData?.name ?? userName}</p>
-                <p className="text-[11px] text-gray-500">Creator</p>
-              </div>
-            </div>
-            </div>
-          </div>
-
-          <main className="flex-1 overflow-y-auto">{children}</main>
-        </div>
+        {/* ── MAIN ─────────────────────────────────────────────────────────── */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+          {children}
+        </main>
       </div>
+
       <CopilotPanel />
     </div>
   );

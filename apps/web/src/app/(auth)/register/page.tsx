@@ -47,7 +47,7 @@ function RegisterInner() {
         return;
       }
       localStorage.setItem('cf_token', MOCK_TOKEN);
-      router.push('/');
+      router.push('/home');
       return;
     }
 
@@ -60,11 +60,15 @@ function RegisterInner() {
         api.referral.redeem(pending).catch(() => {});
         localStorage.removeItem('cf.pendingReferralCode');
       }
-      router.push('/');
+      router.push('/home');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 409) {
         setError('Email already registered. Please log in instead.');
+      } else if (status === 429) {
+        setError('Too many sign-up attempts. Please wait a minute and try again.');
+      } else if (!status) {
+        setError('Cannot reach the server. Make sure the API is running.');
       } else {
         setError('Registration failed. Please try again.');
       }

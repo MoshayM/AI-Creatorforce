@@ -58,7 +58,7 @@ export default function LoginPage() {
     if (MOCK_MODE) {
       if (email && password) {
         localStorage.setItem('cf_token', MOCK_TOKEN);
-        router.push('/');
+        router.push('/home');
       } else {
         setError('Invalid email or password');
         setLoading(false);
@@ -69,10 +69,18 @@ export default function LoginPage() {
     try {
       const { data } = await api.auth.login(email, password);
       setTokens(data.accessToken, data.refreshToken);
-      router.push('/');
+      router.push('/home');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
-      setError(status === 401 ? 'Invalid email or password' : 'Unable to connect. Please try again.');
+      if (status === 401) {
+        setError('Invalid email or password.');
+      } else if (status === 429) {
+        setError('Too many attempts. Please wait a minute and try again.');
+      } else if (!status) {
+        setError(`Cannot reach the server. Make sure the API is running.`);
+      } else {
+        setError('Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -107,7 +115,7 @@ export default function LoginPage() {
     try {
       const { data } = await api.auth.otpVerify(otpIdentifier, otpCode.trim());
       setTokens(data.accessToken, data.refreshToken);
-      router.push('/');
+      router.push('/home');
     } catch {
       setError('Invalid or expired OTP. Please try again.');
     } finally {
