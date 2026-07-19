@@ -195,15 +195,21 @@ export class CopilotService {
           reservationId = reservation.id;
         }
       }
+      // Build the message array for the LLM. The context block MUST be merged
+      // into the last user message — Anthropic (and most providers) reject
+      // consecutive same-role messages, so adding a second 'user' turn after
+      // the user's actual query causes a 400 on every first turn.
+      const contextSuffix = `\n\n---\nCONTEXT (current platform state — use ids from here only):\n${context}${pendingNote}\n\nRespond with valid JSON only: {"reply":"...","language":"...","command":{...}|null}`;
+      const rawMsgs = req.messages.slice(-8).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      const lastUserIdx = rawMsgs.reduce<number>((acc, m, i) => (m.role === 'user' ? i : acc), -1);
+      const llmMessages: Array<{ role: 'user' | 'assistant'; content: string }> =
+        lastUserIdx >= 0
+          ? rawMsgs.map((m, i) => i === lastUserIdx ? { ...m, content: m.content + contextSuffix } : m)
+          : [...rawMsgs, { role: 'user', content: `CONTEXT:\n${context}${pendingNote}` }];
+
       try {
         decision = await runWithAiContext({ userId, accumulator }, () => callAIStructured(
-          [
-            ...req.messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
-            {
-              role: 'user' as const,
-              content: `CONTEXT (current platform state — use these ids):\n${context}${pendingNote}\n\nRespond with JSON: {"reply":"...","language":"...","command":{...}|null}`,
-            },
-          ],
+          llmMessages,
           CopilotDecisionSchema,
           {
             systemPrompt: COPILOT_SYSTEM,
