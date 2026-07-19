@@ -204,23 +204,40 @@ export function CopilotPanel() {
         >
           <div onClick={e => e.stopPropagation()} className="flex flex-col items-center gap-6 animate-pop-in">
 
-            {/* Voice orb */}
+            {/* Voice orb — animations only when listening or processing; static during idle */}
             <div style={{position:'relative',width:'220px',height:'220px',display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid rgba(139,92,246,.35)',animation:'ripple 2.4s ease-out infinite'}} />
-              <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid rgba(139,92,246,.25)',animation:'ripple 2.4s ease-out infinite',animationDelay:'1.2s'}} />
+              {/* Ripple rings: only during listening */}
+              <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid rgba(139,92,246,.35)',animation: listening ? 'ripple 2.4s ease-out infinite' : 'none',opacity: listening ? 1 : 0,transition:'opacity .4s'}} />
+              <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid rgba(139,92,246,.25)',animation: listening ? 'ripple 2.4s ease-out infinite' : 'none',animationDelay:'1.2s',opacity: listening ? 1 : 0,transition:'opacity .4s'}} />
               <div
                 style={{
                   position:'relative',width:'132px',height:'132px',borderRadius:'50%',
                   background:'linear-gradient(135deg,#9C88DD,#7E62C9)',
                   display:'flex',alignItems:'center',justifyContent:'center',gap:'5px',
-                  animation:'pulseGlow 2.4s ease-in-out infinite',
+                  /* pulseGlow only when processing; subtle static shadow at idle */
+                  animation: busy ? 'pulseGlow 2.4s ease-in-out infinite' : 'none',
+                  boxShadow: busy ? undefined : '0 8px 24px -8px rgba(124,58,237,.5)',
+                  transition:'box-shadow .4s',
                 }}
               >
                 {[
                   {h:'22px',d:'0s'},{h:'44px',d:'.15s'},{h:'64px',d:'.3s'},{h:'40px',d:'.45s'},
                   {h:'70px',d:'.2s'},{h:'36px',d:'.35s'},{h:'20px',d:'.5s'},
                 ].map((bar, i) => (
-                  <span key={i} style={{width:'6px',height:bar.h,borderRadius:'6px',background:'#fff',animation:`voiceBar 1s ease-in-out infinite`,animationDelay:bar.d}} />
+                  <span
+                    key={i}
+                    style={{
+                      width:'6px',
+                      /* bars animate only during voice activity; otherwise collapse to flat dots */
+                      height: listening ? bar.h : busy ? bar.h : '6px',
+                      borderRadius:'6px',
+                      background:'#fff',
+                      animation: listening ? `voiceBar 1s ease-in-out infinite` : 'none',
+                      animationDelay: bar.d,
+                      transition:'height .35s cubic-bezier(.4,0,.2,1)',
+                      opacity: listening ? 1 : busy ? 0.6 : 0.35,
+                    }}
+                  />
                 ))}
               </div>
             </div>
@@ -230,7 +247,12 @@ export function CopilotPanel() {
               <div
                 style={{display:'inline-flex',alignItems:'center',gap:'8px',fontSize:'15px',fontWeight:700,color:'#fff',background:'rgba(30,27,46,.55)',backdropFilter:'blur(6px)',padding:'9px 18px',borderRadius:'30px'}}
               >
-                <span style={{width:'9px',height:'9px',borderRadius:'50%',background:'#4ADE80',boxShadow:'0 0 0 4px rgba(74,222,128,.25)',flexShrink:0}} />
+                <span style={{
+                  width:'9px',height:'9px',borderRadius:'50%',flexShrink:0,
+                  background: listening ? '#4ADE80' : busy ? '#FBBF24' : 'rgba(255,255,255,.45)',
+                  boxShadow: listening ? '0 0 0 4px rgba(74,222,128,.25)' : busy ? '0 0 0 4px rgba(251,191,36,.25)' : 'none',
+                  transition:'background .3s, box-shadow .3s',
+                }} />
                 {listening ? 'Listening… speak naturally' : busy ? 'Processing…' : 'Copilot ready'}
               </div>
               <p style={{fontSize:'12.5px',color:'rgba(30,27,46,.55)',fontWeight:600,marginTop:'10px'}}>
