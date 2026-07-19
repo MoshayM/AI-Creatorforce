@@ -1,298 +1,263 @@
 import Link from 'next/link';
 import {
-  Zap,
-  Clapperboard,
-  Film,
-  Workflow,
-  ShieldCheck,
-  Wallet,
-  Gift,
-  Youtube,
-  Cpu,
-  Scissors,
-  Upload,
-  CheckCircle2,
+  Zap, Clapperboard, Film, Scissors, FileText, Mic2, Music2,
+  BookOpen, BarChart2, LayoutTemplate, TrendingUp, Upload, Layers,
+  Bot, ArrowRight, CheckCircle2, ChevronRight, Sparkles, ShieldCheck,
 } from 'lucide-react';
 import { MobileNav } from './_components/MobileNav';
-import { DownloadButtons } from './_components/DownloadButtons';
 
-// ── Feature data ──────────────────────────────────────────────────────────────
+// ── Capabilities ──────────────────────────────────────────────────────────────
 
-const FEATURES = [
-  {
-    icon: Clapperboard,
-    title: 'Channel-first Shorts Studio',
-    description:
-      'Connect your YouTube channel, import long-form videos, and let AI find the best clips, generate captions, and queue publish-ready Shorts.',
-  },
-  {
-    icon: Film,
-    title: 'Multi-track Video Editor',
-    description:
-      'Full timeline editor with effects, transitions, captions overlay, and export to MP4 or WebM — no desktop software needed.',
-  },
-  {
-    icon: Workflow,
-    title: 'Per-channel Automation',
-    description:
-      'Set up channel-level rules: auto-import new uploads, run AI analysis, and trigger publish flows with AI suggestions on schedule.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Compliance-gated Publishing',
-    description:
-      'Every piece of content passes the Compliance Intelligence Engine before it can be published — copyright, monetization, and policy checks built in.',
-  },
-  {
-    icon: Wallet,
-    title: 'Wallet & Credits',
-    description:
-      'Buy AI credits to power generation, track spend per project, and top up when needed — full visibility into every token used.',
-  },
-  {
-    icon: Gift,
-    title: 'Growth & Referrals',
-    description:
-      'Earn credits by referring creators, track referral conversions, and grow your creator network — all from within the platform.',
-  },
+const CAPABILITIES = [
+  { icon: Bot,           color: '#7C3AED', bg: '#F3EEFF', title: 'Natural Language AI Assistant',  desc: 'Describe what you want. The AI handles the rest — no forms, no menus.' },
+  { icon: FileText,      color: '#2563EB', bg: '#EFF6FF', title: 'AI Script Writing',              desc: 'Research-backed scripts crafted for your niche, tone, and target audience.' },
+  { icon: Clapperboard,  color: '#DC2626', bg: '#FFF1F1', title: 'AI Video Creation',              desc: 'Full production pipeline: research → script → voice → music → render.' },
+  { icon: Mic2,          color: '#059669', bg: '#ECFDF5', title: 'Voice Generation',               desc: 'Studio-quality AI voice-over in 30+ languages with natural rhythm and pacing.' },
+  { icon: Music2,        color: '#D97706', bg: '#FFFBEB', title: 'Music Generation',               desc: 'Original background music tuned to mood, genre, and video duration.' },
+  { icon: Scissors,      color: '#7C3AED', bg: '#F3EEFF', title: 'Shorts Generation',              desc: 'AI finds the best highlights from long-form video and auto-creates Shorts.' },
+  { icon: Film,          color: '#0891B2', bg: '#ECFEFF', title: 'Professional Editing',           desc: 'Multi-track timeline with effects, transitions, captions, and export.' },
+  { icon: LayoutTemplate,color: '#BE185D', bg: '#FDF2F8', title: 'Thumbnail Generation',          desc: 'Eye-catching thumbnails designed to maximise click-through rates.' },
+  { icon: BookOpen,      color: '#1D4ED8', bg: '#EFF6FF', title: 'AI Research',                   desc: 'Deep topic research with fact-checking and source verification built in.' },
+  { icon: TrendingUp,    color: '#065F46', bg: '#ECFDF5', title: 'AI SEO Optimisation',           desc: 'Titles, descriptions, and tags engineered to rank and surface to the right audience.' },
+  { icon: BarChart2,     color: '#7C3AED', bg: '#F3EEFF', title: 'Channel Analysis',              desc: 'Understand what is working, what is not, and exactly what to do next.' },
+  { icon: Upload,        color: '#DC2626', bg: '#FFF1F1', title: 'AI Publishing',                 desc: 'Compliance-gated, scheduled publishing to YouTube and beyond.' },
+  { icon: Layers,        color: '#0891B2', bg: '#ECFEFF', title: 'Multi-Channel Management',      desc: 'Manage multiple channels and brands from a single AI-powered workspace.' },
+  { icon: ShieldCheck,   color: '#059669', bg: '#ECFDF5', title: 'Compliance Engine',             desc: 'Every piece of content passes copyright, monetisation, and policy checks.' },
 ];
 
-// ── How it works steps ───────────────────────────────────────────────────────
+// ── Workflow steps ─────────────────────────────────────────────────────────────
 
-const STEPS = [
-  {
-    icon: Youtube,
-    step: '01',
-    title: 'Connect your channel',
-    description: 'Link your YouTube channel with OAuth in one click. Permissions stay in your control.',
-  },
-  {
-    icon: Upload,
-    step: '02',
-    title: 'Import a video',
-    description: 'Pick any video from your library. AI CreatorForce pulls metadata and the transcript automatically.',
-  },
-  {
-    icon: Cpu,
-    step: '03',
-    title: 'AI finds highlights',
-    description: 'Our AI analyses pacing, engagement signals, and topic density to surface the strongest clip candidates.',
-  },
-  {
-    icon: Scissors,
-    step: '04',
-    title: 'Edit & caption',
-    description: 'Trim, reorder, add captions and b-roll in the timeline editor. Full creative control, zero friction.',
-  },
-  {
-    icon: CheckCircle2,
-    step: '05',
-    title: 'Publish with confidence',
-    description: 'Compliance check → human approval → scheduled or instant publish to YouTube. No guesswork.',
-  },
+const WORKFLOW = [
+  { icon: Sparkles,      label: 'Idea',                sub: 'Tell the AI what you want to create' },
+  { icon: Bot,           label: 'AI Conversation',     sub: 'Copilot gathers requirements naturally' },
+  { icon: BookOpen,      label: 'Research & Planning', sub: 'AI researches, outlines, and plans' },
+  { icon: FileText,      label: 'Script',              sub: 'Fact-checked, SEO-optimised script' },
+  { icon: Mic2,          label: 'Voice',               sub: 'Natural AI voice-over generated' },
+  { icon: Music2,        label: 'Music',               sub: 'Original background track created' },
+  { icon: Clapperboard,  label: 'Video',               sub: 'Scenes rendered automatically' },
+  { icon: Film,          label: 'Professional Editing',sub: 'Transitions, captions, colour grade' },
+  { icon: ShieldCheck,   label: 'Compliance Review',   sub: 'Copyright and policy checks pass' },
+  { icon: Upload,        label: 'Publishing',          sub: 'Scheduled, approved, published' },
 ];
 
-// ── Nav links ────────────────────────────────────────────────────────────────
+// ── Nav links ─────────────────────────────────────────────────────────────────
 
 const NAV_LINKS = [
-  { label: 'Features', href: '#features' },
-  { label: 'How it works', href: '#how-it-works' },
-  { label: 'Download', href: '#download' },
+  { label: 'Features',    href: '#features' },
+  { label: 'How it works',href: '#workflow' },
+  { label: 'Pricing',     href: '#pricing' },
 ];
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LandingPage() {
   return (
     <>
-      {/* Smooth scroll — applied via a style tag; avoids touching layout.tsx */}
-      <style>{`html { scroll-behavior: smooth; }`}</style>
+      <style>{`
+        html { scroll-behavior: smooth; }
+        .glow-ring { box-shadow: 0 0 0 1px rgba(124,58,237,.15), 0 0 24px rgba(124,58,237,.12); }
+        @keyframes float-slow { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-10px); } }
+        .float-slow { animation: float-slow 6s ease-in-out infinite; }
+        @keyframes pulse-soft { 0%,100% { opacity:.6; } 50% { opacity:1; } }
+        .pulse-soft { animation: pulse-soft 3s ease-in-out infinite; }
+      `}</style>
 
-      {/* ── Header / Nav ──────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 bg-gradient-to-r from-[#9d6ff0] to-[#7c4fd8] shadow-lg">
+      {/* ── HEADER ───────────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-40 border-b border-white/10 backdrop-blur-xl" style={{background:'rgba(14,9,36,.85)'}}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 gap-4">
-            {/* Logo */}
-            <Link
-              href="/"
-              className="flex items-center gap-2.5 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-lg"
-              aria-label="AI CreatorForce — home"
-            >
-              <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                <Zap className="w-5 h-5 text-brand-600" aria-hidden="true" />
+            <Link href="/" className="flex items-center gap-2.5 shrink-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label="AI CreatorForce">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)'}}>
+                <Zap className="w-5 h-5 text-white" />
               </div>
-              <span className="font-bold text-white text-lg leading-none hidden sm:block">AI CreatorForce</span>
+              <span className="font-bold text-white text-lg leading-none hidden sm:block tracking-tight">AI CreatorForce</span>
             </Link>
 
-            {/* Desktop nav */}
-            <nav aria-label="Primary navigation" className="hidden md:flex items-center gap-1">
+            <nav className="hidden md:flex items-center gap-1" aria-label="Primary navigation">
               {NAV_LINKS.map(({ label, href }) => (
-                <a
-                  key={href}
-                  href={href}
-                  className="px-4 py-2 rounded-lg text-white/85 text-sm font-medium hover:text-white hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white transition-colors min-h-[44px] flex items-center"
-                >
+                <a key={href} href={href} className="px-4 py-2 rounded-lg text-white/70 text-sm font-medium hover:text-white hover:bg-white/8 transition-colors min-h-[44px] flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
                   {label}
                 </a>
               ))}
             </nav>
 
-            {/* Desktop CTAs */}
             <div className="hidden md:flex items-center gap-2 shrink-0">
-              <Link
-                href="/login"
-                className="px-4 py-2 rounded-xl text-white/90 text-sm font-semibold hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white transition-colors min-h-[44px] flex items-center"
-              >
+              <Link href="/login" className="px-4 py-2 rounded-xl text-white/80 text-sm font-semibold hover:text-white hover:bg-white/8 transition-colors min-h-[44px] flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
                 Log in
               </Link>
-              <Link
-                href="/login"
-                className="px-5 py-2 rounded-xl bg-white text-brand-600 text-sm font-bold shadow hover:bg-purple-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white transition-colors min-h-[44px] flex items-center"
-              >
-                Get started
+              <Link href="/login" className="px-5 py-2 rounded-xl text-sm font-bold shadow-lg min-h-[44px] flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white transition-all hover:opacity-90" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)',color:'#fff'}}>
+                Get started free
               </Link>
             </div>
 
-            {/* Mobile hamburger (client component) */}
             <MobileNav />
           </div>
         </div>
       </header>
 
       <main>
-        {/* ── Hero ──────────────────────────────────────────────────────────── */}
-        <section
-          aria-label="Hero"
-          className="relative overflow-hidden bg-gradient-to-br from-[#9d6ff0] via-[#8659e8] to-[#7c4fd8] text-white"
-        >
-          {/* Decorative blobs */}
-          <div
-            aria-hidden="true"
-            className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/5 blur-3xl pointer-events-none"
-          />
-          <div
-            aria-hidden="true"
-            className="absolute bottom-0 -left-20 w-72 h-72 rounded-full bg-white/5 blur-2xl pointer-events-none"
-          />
+        {/* ── HERO ─────────────────────────────────────────────────────────────── */}
+        <section aria-label="Hero" style={{background:'linear-gradient(160deg,#0e0924 0%,#1a0f4a 40%,#2d1b6e 100%)'}}>
+          {/* Background decorations */}
+          <div aria-hidden="true" className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full opacity-20" style={{background:'radial-gradient(ellipse,#7C3AED 0%,transparent 70%)',filter:'blur(40px)'}} />
+            <div className="absolute top-1/3 left-[10%] w-72 h-72 rounded-full opacity-10" style={{background:'#a78bfa',filter:'blur(60px)'}} />
+            <div className="absolute top-1/4 right-[8%] w-52 h-52 rounded-full opacity-10" style={{background:'#818cf8',filter:'blur(50px)'}} />
+          </div>
 
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-32 flex flex-col lg:flex-row items-center gap-14">
-            {/* Copy */}
-            <div className="flex-1 text-center lg:text-left">
-              <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 text-sm font-medium text-white/90 mb-6">
-                <Zap className="w-4 h-4" aria-hidden="true" />
-                AI-powered YouTube Content OS
-              </div>
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight">
-                Turn long videos into{' '}
-                <span className="text-yellow-300">publish-ready Shorts</span>
-              </h1>
-              <p className="mt-5 text-lg sm:text-xl text-white/80 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
-                Edit with a full timeline, comply automatically, and publish to YouTube — AI-assisted end to end.
-                From raw footage to growing channel, in minutes.
-              </p>
-              <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
-                <Link
-                  href="/login"
-                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-white text-brand-600 font-bold text-base shadow-lg hover:bg-purple-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-purple-700 transition-colors min-h-[44px]"
-                >
-                  <Zap className="w-4 h-4" aria-hidden="true" />
-                  Get started free
-                </Link>
-                <a
-                  href="#download"
-                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl border-2 border-white/40 text-white font-semibold text-base hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white transition-colors min-h-[44px]"
-                >
-                  Download app
-                </a>
-              </div>
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-36 text-center">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-1.5 mb-8 text-sm font-medium text-white/80" style={{background:'rgba(124,58,237,.15)'}}>
+              <Zap className="w-3.5 h-3.5 text-purple-400" />
+              The AI Content Operating System
             </div>
 
-            {/* Hero visual — styled div mockup, no external images */}
-            <div
-              className="flex-1 w-full max-w-lg lg:max-w-none"
-              aria-hidden="true"
-            >
-              <div className="relative bg-white/10 border border-white/20 rounded-2xl p-4 shadow-2xl backdrop-blur-sm">
-                {/* Fake browser chrome */}
-                <div className="flex items-center gap-1.5 mb-3">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-400/70" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-yellow-400/70" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-400/70" />
-                  <div className="flex-1 ml-2 h-5 bg-white/10 rounded-md" />
+            {/* Headline */}
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-[1.05] tracking-tight max-w-5xl mx-auto">
+              Create. Edit. Publish.
+              <br />
+              <span style={{background:'linear-gradient(90deg,#c4b5fd,#818cf8,#a78bfa)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
+                All with AI.
+              </span>
+            </h1>
+
+            <p className="mt-6 text-lg sm:text-xl text-white/60 max-w-2xl mx-auto leading-relaxed">
+              From a single conversation to a published video — CreatorForce handles research, scripting, voice, music, editing, and publishing.{' '}
+              <span className="text-white/80">No forms. No menus. Just results.</span>
+            </p>
+
+            <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
+              <Link href="/login" className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-bold text-white text-base shadow-2xl transition-all hover:opacity-90 hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-white" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)',boxShadow:'0 20px 50px -12px rgba(124,58,237,.6)'}}>
+                <Zap className="w-4 h-4" />
+                Start creating free
+              </Link>
+              <a href="#workflow" className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-semibold text-white text-base transition-all hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white" style={{border:'1.5px solid rgba(255,255,255,.2)'}}>
+                See how it works
+                <ChevronRight className="w-4 h-4" />
+              </a>
+            </div>
+
+            {/* Hero visual — AI workspace mockup */}
+            <div className="mt-20 max-w-4xl mx-auto float-slow">
+              <div className="glow-ring rounded-3xl overflow-hidden" style={{background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.1)'}}>
+                {/* Browser chrome */}
+                <div className="flex items-center gap-1.5 px-4 py-3 border-b border-white/8">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
+                  <div className="flex-1 mx-3 h-5 rounded-md" style={{background:'rgba(255,255,255,.06)'}} />
                 </div>
-                {/* Fake sidebar + content */}
-                <div className="flex gap-3 h-52">
-                  <div className="w-28 shrink-0 flex flex-col gap-2">
-                    {['Shorts Studio', 'Video Editor', 'Automation', 'Approvals'].map((item, i) => (
-                      <div
-                        key={item}
-                        className={`h-7 rounded-lg flex items-center px-2.5 text-[10px] font-medium ${
-                          i === 0 ? 'bg-white/20 text-white' : 'bg-white/5 text-white/50'
-                        }`}
-                      >
+
+                <div className="flex h-80 lg:h-96">
+                  {/* Sidebar */}
+                  <div className="w-44 shrink-0 border-r border-white/8 p-3 flex flex-col gap-1 hidden sm:flex">
+                    {['Home','Projects','Copilot','Shorts Studio','Video Editor','Publish','Analytics'].map((item, i) => (
+                      <div key={item} className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold" style={{background: i===2?'rgba(124,58,237,.35)':'transparent',color: i===2?'#c4b5fd':'rgba(255,255,255,.5)'}}>
+                        <div className="w-3 h-3 rounded-sm shrink-0" style={{background:i===2?'#a78bfa':'rgba(255,255,255,.2)'}} />
                         {item}
                       </div>
                     ))}
                   </div>
-                  <div className="flex-1 flex flex-col gap-2 min-w-0">
-                    <div className="h-28 rounded-xl bg-white/10 flex items-center justify-center">
-                      <Clapperboard className="w-8 h-8 text-yellow-300/70" />
+
+                  {/* Main content */}
+                  <div className="flex-1 p-5 flex flex-col gap-4">
+                    {/* Copilot chat */}
+                    <div className="flex-1 rounded-2xl p-4 flex flex-col gap-3" style={{background:'rgba(255,255,255,.03)',border:'1px solid rgba(255,255,255,.06)'}}>
+                      <div className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)'}}>
+                          <Bot className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-xs leading-relaxed" style={{background:'rgba(167,139,250,.15)',color:'#e0d7ff'}}>
+                            Hello! I&apos;m your AI Creative Director. What would you like to create today?
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 flex-row-reverse">
+                        <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center font-bold text-xs" style={{background:'linear-gradient(135deg,#f472b6,#ec4899)',color:'#fff'}}>
+                          U
+                        </div>
+                        <div className="rounded-2xl rounded-tr-sm px-3.5 py-2.5 text-xs" style={{background:'rgba(255,255,255,.08)',color:'rgba(255,255,255,.85)'}}>
+                          Create a 10-minute YouTube video on AI trends in 2026.
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)'}}>
+                          <Bot className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div className="flex-1 space-y-1.5">
+                          <div className="rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-xs leading-relaxed" style={{background:'rgba(167,139,250,.15)',color:'#e0d7ff'}}>
+                            Great choice! I&apos;ll start with research. Who is your target audience?
+                          </div>
+                          <div className="flex gap-2 flex-wrap">
+                            {['Tech enthusiasts','Business owners','General audience'].map(t => (
+                              <span key={t} className="px-2.5 py-1 rounded-full text-[10px] font-medium cursor-pointer" style={{background:'rgba(167,139,250,.2)',color:'#c4b5fd',border:'1px solid rgba(167,139,250,.3)'}}>
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <div className="flex-1 h-12 rounded-lg bg-white/10" />
-                      <div className="flex-1 h-12 rounded-lg bg-white/10" />
-                      <div className="flex-1 h-12 rounded-lg bg-white/10" />
+
+                    {/* Progress bar */}
+                    <div className="rounded-xl p-3 flex items-center gap-3" style={{background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.06)'}}>
+                      <Sparkles className="w-4 h-4 shrink-0 pulse-soft" style={{color:'#a78bfa'}} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-semibold" style={{color:'rgba(255,255,255,.8)'}}>AI Research in progress…</span>
+                          <span className="text-[10px]" style={{color:'rgba(255,255,255,.5)'}}>42%</span>
+                        </div>
+                        <div className="h-1 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,.08)'}}>
+                          <div className="h-full rounded-full" style={{width:'42%',background:'linear-gradient(90deg,#a78bfa,#7C3AED)'}} />
+                        </div>
+                      </div>
                     </div>
-                    <div className="h-5 w-3/4 rounded bg-white/10" />
                   </div>
                 </div>
-                {/* Fake timeline */}
-                <div className="mt-3 flex gap-1 h-8">
-                  {[40, 20, 60, 30, 50, 25, 45, 35, 55, 20].map((w, i) => (
-                    <div
-                      key={i}
-                      className="h-full rounded bg-yellow-300/50 shrink-0"
-                      style={{ width: `${w}px` }}
-                    />
-                  ))}
-                </div>
               </div>
+            </div>
+
+            {/* Trust badges */}
+            <div className="mt-12 flex flex-wrap items-center justify-center gap-8 text-sm font-medium">
+              {[
+                { icon: CheckCircle2, label: 'No credit card required' },
+                { icon: ShieldCheck, label: 'Compliance built in' },
+                { icon: Zap, label: 'Publish in minutes' },
+              ].map(({ icon: Icon, label }) => (
+                <div key={label} className="flex items-center gap-2" style={{color:'rgba(255,255,255,.5)'}}>
+                  <Icon className="w-4 h-4" style={{color:'#a78bfa'}} />
+                  {label}
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        {/* ── Features ──────────────────────────────────────────────────────── */}
-        <section
-          id="features"
-          aria-labelledby="features-heading"
-          className="bg-white py-20 lg:py-28"
-        >
+        {/* ── CAPABILITIES ─────────────────────────────────────────────────────── */}
+        <section id="features" aria-labelledby="features-heading" className="bg-white py-24 lg:py-32">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-14">
-              <p className="text-sm font-semibold text-brand-600 uppercase tracking-widest mb-2">Features</p>
-              <h2 id="features-heading" className="text-3xl sm:text-4xl font-extrabold text-gray-900">
-                Everything you need to grow on YouTube
+            <div className="text-center mb-16">
+              <p className="text-sm font-bold uppercase tracking-widest mb-3" style={{color:'#7C3AED'}}>Full capability suite</p>
+              <h2 id="features-heading" className="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight">
+                Everything a creator needs,
+                <br className="hidden sm:block" />
+                <span style={{color:'#7C3AED'}}> powered by AI</span>
               </h2>
-              <p className="mt-4 text-lg text-gray-500 max-w-2xl mx-auto">
-                From raw footage to growing audience — one platform, zero silos.
+              <p className="mt-5 text-lg text-gray-500 max-w-2xl mx-auto leading-relaxed">
+                One platform replaces your entire content production stack. Script to publish, in one conversation.
               </p>
             </div>
 
-            <ul
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-              aria-label="Platform features"
-            >
-              {FEATURES.map(({ icon: Icon, title, description }) => (
-                <li
-                  key={title}
-                  className="group bg-gray-50 hover:bg-brand-50 border border-gray-100 hover:border-brand-200 rounded-2xl p-6 flex flex-col gap-4 transition-colors"
-                >
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#9d6ff0] to-[#7c4fd8] flex items-center justify-center shadow-sm">
-                    <Icon className="w-5 h-5 text-white" aria-hidden="true" />
+            <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" aria-label="Platform capabilities">
+              {CAPABILITIES.map(({ icon: Icon, color, bg, title, desc }) => (
+                <li key={title} className="group bg-white border border-gray-100 hover:border-gray-200 rounded-2xl p-5 flex flex-col gap-3 transition-all hover:shadow-lg hover:-translate-y-0.5">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110" style={{background:bg}}>
+                    <Icon className="w-5 h-5" style={{color}} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-900 text-base">{title}</h3>
-                    <p className="mt-1.5 text-sm text-gray-600 leading-relaxed">{description}</p>
+                    <h3 className="font-bold text-gray-900 text-sm leading-snug">{title}</h3>
+                    <p className="mt-1 text-xs text-gray-500 leading-relaxed">{desc}</p>
                   </div>
                 </li>
               ))}
@@ -300,132 +265,202 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ── How it works ──────────────────────────────────────────────────── */}
-        <section
-          id="how-it-works"
-          aria-labelledby="how-it-works-heading"
-          className="bg-[#f8f5ff] py-20 lg:py-28"
-        >
+        {/* ── WORKFLOW ─────────────────────────────────────────────────────────── */}
+        <section id="workflow" aria-labelledby="workflow-heading" style={{background:'#f8f5ff'}} className="py-24 lg:py-32">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-14">
-              <p className="text-sm font-semibold text-brand-600 uppercase tracking-widest mb-2">How it works</p>
-              <h2 id="how-it-works-heading" className="text-3xl sm:text-4xl font-extrabold text-gray-900">
-                From upload to published in minutes
+            <div className="text-center mb-16">
+              <p className="text-sm font-bold uppercase tracking-widest mb-3" style={{color:'#7C3AED'}}>End-to-end AI pipeline</p>
+              <h2 id="workflow-heading" className="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight">
+                Idea to published,
+                <span style={{color:'#7C3AED'}}> on autopilot</span>
               </h2>
-            </div>
-
-            <ol
-              className="relative flex flex-col lg:flex-row gap-0 lg:gap-0"
-              aria-label="Step-by-step process"
-            >
-              {STEPS.map(({ icon: Icon, step, title, description }, idx) => (
-                <li key={step} className="flex-1 flex flex-col lg:items-center relative">
-                  {/* Connector line (horizontal on lg, vertical on mobile) */}
-                  {idx < STEPS.length - 1 && (
-                    <>
-                      {/* Mobile vertical line */}
-                      <div
-                        aria-hidden="true"
-                        className="lg:hidden absolute left-[22px] top-[52px] w-0.5 h-[calc(100%-52px)] bg-brand-200"
-                      />
-                      {/* Desktop horizontal line */}
-                      <div
-                        aria-hidden="true"
-                        className="hidden lg:block absolute top-[22px] left-[calc(50%+24px)] w-[calc(100%-48px)] h-0.5 bg-brand-200"
-                      />
-                    </>
-                  )}
-
-                  <div className="flex lg:flex-col items-start lg:items-center gap-4 lg:gap-3 px-0 lg:px-4 pb-10 lg:pb-0 relative">
-                    <div className="shrink-0 w-11 h-11 rounded-full bg-gradient-to-br from-[#9d6ff0] to-[#7c4fd8] flex items-center justify-center shadow-md z-10">
-                      <Icon className="w-5 h-5 text-white" aria-hidden="true" />
-                    </div>
-                    <div className="lg:text-center">
-                      <p className="text-[10px] font-bold text-brand-600 uppercase tracking-widest mb-0.5">
-                        Step {step}
-                      </p>
-                      <h3 className="font-bold text-gray-900 text-sm sm:text-base">{title}</h3>
-                      <p className="mt-1 text-xs sm:text-sm text-gray-500 leading-relaxed max-w-[220px] mx-auto">
-                        {description}
-                      </p>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
-
-        {/* ── Download ──────────────────────────────────────────────────────── */}
-        <section
-          id="download"
-          aria-labelledby="download-heading"
-          className="bg-white py-20 lg:py-28"
-        >
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-              <p className="text-sm font-semibold text-brand-600 uppercase tracking-widest mb-2">Download</p>
-              <h2 id="download-heading" className="text-3xl sm:text-4xl font-extrabold text-gray-900">
-                Take AI CreatorForce everywhere
-              </h2>
-              <p className="mt-4 text-gray-500 max-w-xl mx-auto">
-                Native desktop and mobile apps are coming. In the meantime, the full platform runs right in your browser — no install needed.
+              <p className="mt-5 text-lg text-gray-500 max-w-2xl mx-auto">
+                Tell the AI what you want. It handles every step — you stay in control.
               </p>
             </div>
 
-            {/* Download buttons — client component handles click-to-toast */}
-            <DownloadButtons />
+            {/* Step grid — 5 columns × 2 rows */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              {WORKFLOW.map(({ icon: Icon, label, sub }, idx) => (
+                <div key={label} className="relative flex flex-col items-center text-center group">
+                  {/* Connector (right side) */}
+                  {idx % 5 !== 4 && (
+                    <div aria-hidden="true" className="hidden lg:block absolute top-8 left-[calc(50%+28px)] right-0 h-px" style={{background:'linear-gradient(90deg,#c4b5fd,transparent)'}} />
+                  )}
+
+                  <div className="relative w-16 h-16 rounded-2xl flex items-center justify-center shadow-md mb-4 transition-transform group-hover:scale-110 group-hover:shadow-lg" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)'}}>
+                    <Icon className="w-7 h-7 text-white" />
+                    <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{background:'#5B21B6'}}>
+                      {idx + 1}
+                    </div>
+                  </div>
+
+                  <h3 className="font-bold text-gray-900 text-sm leading-tight mb-1">{label}</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed max-w-[140px]">{sub}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* CTA below workflow */}
+            <div className="text-center mt-14">
+              <Link href="/login" className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl font-bold text-white text-base transition-all hover:opacity-90 hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-purple-500 shadow-2xl" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)',boxShadow:'0 16px 40px -10px rgba(124,58,237,.5)'}}>
+                <Zap className="w-4 h-4" />
+                Start your first AI project
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <p className="mt-3 text-sm text-gray-500">Free to start · No credit card required</p>
+            </div>
+          </div>
+        </section>
+
+        {/* ── AI CONVERSATION DEMO ─────────────────────────────────────────────── */}
+        <section aria-label="AI Copilot demo" className="bg-white py-24 lg:py-32">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid lg:grid-cols-2 gap-16 items-center">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-widest mb-3" style={{color:'#7C3AED'}}>Natural language first</p>
+                <h2 className="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight leading-tight">
+                  No forms.<br />No menus.<br />
+                  <span style={{color:'#7C3AED'}}>Just conversation.</span>
+                </h2>
+                <p className="mt-6 text-lg text-gray-500 leading-relaxed">
+                  CreatorForce&apos;s AI Copilot works like an experienced producer. Tell it what you need — it asks the right questions, fills in the gaps, and gets it done.
+                </p>
+                <ul className="mt-8 space-y-4">
+                  {[
+                    { t: 'Voice & text input', d: 'Speak or type — the Copilot understands both.' },
+                    { t: 'Multi-language support', d: 'Responds in your language: English, Hindi, Tamil, and 30+ more.' },
+                    { t: 'Session memory', d: 'Remembers what you said so you never repeat yourself.' },
+                    { t: 'Action confirmation', d: 'Always asks before launching expensive AI jobs.' },
+                  ].map(({ t, d }) => (
+                    <li key={t} className="flex items-start gap-3">
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{background:'#EDE9FE'}}>
+                        <CheckCircle2 className="w-3.5 h-3.5" style={{color:'#7C3AED'}} />
+                      </div>
+                      <div>
+                        <span className="font-semibold text-gray-900 text-sm">{t}</span>
+                        <span className="text-gray-500 text-sm"> — {d}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-10">
+                  <Link href="/login" className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl font-bold text-white text-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)'}}>
+                    Try the AI Copilot <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Copilot visual */}
+              <div className="relative">
+                <div className="absolute inset-0 rounded-3xl" style={{background:'radial-gradient(ellipse at 50% 50%,rgba(124,58,237,.08) 0%,transparent 70%)'}} />
+                <div className="relative rounded-3xl overflow-hidden shadow-2xl" style={{background:'#1a1033',border:'1px solid rgba(255,255,255,.08)'}}>
+                  <div className="p-5 space-y-4">
+                    {/* Orb */}
+                    <div className="flex justify-center py-4">
+                      <div className="relative">
+                        <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)',boxShadow:'0 0 0 12px rgba(124,58,237,.12),0 0 0 24px rgba(124,58,237,.06)'}}>
+                          <Bot className="w-9 h-9 text-white" />
+                        </div>
+                        <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center" style={{background:'#10B981',border:'2px solid #1a1033'}}>
+                          <div className="w-2 h-2 rounded-full bg-white pulse-soft" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-center text-xs font-medium" style={{color:'rgba(255,255,255,.5)'}}>Copilot ready · Listening…</p>
+
+                    {/* Chat messages */}
+                    <div className="space-y-3 pt-2">
+                      {[
+                        { role:'ai',  text:"What kind of content do you want to create today?" },
+                        { role:'user',text:"Take last week's sermon and create 10 Shorts for YouTube." },
+                        { role:'ai',  text:"Got it! Preferred duration for each Short? 30s / 45s / 60s?" },
+                        { role:'user',text:"45 seconds each, with subtitles." },
+                        { role:'ai',  text:"Perfect. Should I use the original voice or generate an AI voice-over?" },
+                      ].map(({ role, text }, i) => (
+                        <div key={i} className={`flex ${role==='user'?'flex-row-reverse':''} items-end gap-2`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${role==='ai'?'':'opacity-90'}`} style={{background:role==='ai'?'linear-gradient(135deg,#a78bfa,#7C3AED)':'linear-gradient(135deg,#f472b6,#ec4899)',color:'#fff'}}>
+                            {role==='ai'?'AI':'U'}
+                          </div>
+                          <div className="max-w-[76%] px-3 py-2 rounded-xl text-[11px] leading-relaxed" style={{background:role==='ai'?'rgba(167,139,250,.12)':'rgba(255,255,255,.08)',color:role==='ai'?'#e0d7ff':'rgba(255,255,255,.85)',borderRadius:role==='ai'?'18px 18px 18px 4px':'18px 18px 4px 18px'}}>
+                            {text}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Input */}
+                    <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 mt-2" style={{background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.1)'}}>
+                      <Mic2 className="w-4 h-4 shrink-0" style={{color:'#a78bfa'}} />
+                      <span className="text-xs flex-1" style={{color:'rgba(255,255,255,.35)'}}>Speak or type a message…</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── FINAL CTA ─────────────────────────────────────────────────────────── */}
+        <section aria-label="Call to action" style={{background:'linear-gradient(160deg,#0e0924 0%,#1a0f4a 50%,#2d1b6e 100%)'}}>
+          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32 text-center">
+            <div aria-hidden="true" className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] rounded-full opacity-20" style={{background:'radial-gradient(ellipse,#7C3AED 0%,transparent 70%)',filter:'blur(50px)'}} />
+            </div>
+            <div className="relative">
+              <p className="text-sm font-bold uppercase tracking-widest mb-4" style={{color:'#a78bfa'}}>Start today</p>
+              <h2 className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight">
+                Your AI studio is<br />ready when you are.
+              </h2>
+              <p className="mt-6 text-lg text-white/60 max-w-xl mx-auto">
+                Join creators already building professional content with AI. Free to start — no credit card required.
+              </p>
+              <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
+                <Link href="/login" className="inline-flex items-center justify-center gap-2 px-10 py-4 rounded-2xl font-bold text-white text-base shadow-2xl transition-all hover:opacity-90 hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-white" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)',boxShadow:'0 20px 50px -12px rgba(124,58,237,.6)'}}>
+                  <Zap className="w-5 h-5" />
+                  Get started free
+                </Link>
+              </div>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm">
+                {['No credit card required','Cancel any time','14-day free trial'].map(t => (
+                  <span key={t} className="flex items-center gap-1.5" style={{color:'rgba(255,255,255,.45)'}}>
+                    <CheckCircle2 className="w-4 h-4" style={{color:'#a78bfa'}} />
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
       </main>
 
-      {/* ── Footer ────────────────────────────────────────────────────────── */}
-      <footer className="bg-gray-900 text-white py-12">
+      {/* ── FOOTER ────────────────────────────────────────────────────────────── */}
+      <footer style={{background:'#07041a',borderTop:'1px solid rgba(255,255,255,.06)'}} className="text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-            {/* Brand */}
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow">
-                <Zap className="w-5 h-5 text-brand-600" aria-hidden="true" />
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)'}}>
+                <Zap className="w-5 h-5 text-white" />
               </div>
               <div>
                 <p className="font-bold text-base leading-tight">AI CreatorForce</p>
-                <p className="text-xs text-gray-400 mt-0.5">AI Content Platform</p>
+                <p className="text-xs mt-0.5" style={{color:'rgba(255,255,255,.35)'}}>AI Content Operating System</p>
               </div>
             </div>
-
-            {/* Footer links */}
             <nav aria-label="Footer navigation">
-              <ul className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-400">
-                <li>
-                  <Link
-                    href="/login"
-                    className="hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 rounded transition-colors"
-                  >
-                    Login
-                  </Link>
-                </li>
-                <li>
-                  <a
-                    href="#features"
-                    className="hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 rounded transition-colors"
-                  >
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="#download"
-                    className="hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 rounded transition-colors"
-                  >
-                    Download
-                  </a>
-                </li>
+              <ul className="flex flex-wrap gap-x-6 gap-y-2 text-sm" style={{color:'rgba(255,255,255,.4)'}}>
+                {[{label:'Features',href:'#features'},{label:'Workflow',href:'#workflow'},{label:'Log in',href:'/login'}].map(({label,href}) => (
+                  <li key={label}>
+                    <a href={href} className="hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded">
+                      {label}
+                    </a>
+                  </li>
+                ))}
               </ul>
             </nav>
           </div>
-
-          <div className="mt-8 pt-8 border-t border-gray-800 text-center text-xs text-gray-500">
+          <div className="mt-8 pt-8 text-center text-xs" style={{borderTop:'1px solid rgba(255,255,255,.06)',color:'rgba(255,255,255,.25)'}}>
             &copy; {new Date().getFullYear()} AI CreatorForce. All rights reserved.
           </div>
         </div>
