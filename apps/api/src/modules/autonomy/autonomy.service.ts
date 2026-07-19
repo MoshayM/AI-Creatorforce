@@ -57,6 +57,14 @@ const CritiqueSchema = z.object({
   summary: z.string(),
 });
 
+export interface RecentPerformanceEntry {
+  title: string;
+  views: number;
+  likes: number;
+  watchTimeSecs: number;
+  recordedAt: string; // ISO string
+}
+
 export interface ChannelProfileSnapshot {
   niche: string;
   subscriberCount: number;
@@ -67,9 +75,13 @@ export interface ChannelProfileSnapshot {
   bestHourUtc: number;
   formatMix: { videos: number; shorts: number };
   topTitles: string[];
+  /** Top 5 videos by view count (90d window), with counts for the AI to reason over. */
+  topPerformers?: Array<{ title: string; views: number; kind: string }>;
   pipeline: Record<string, number>;
   avgCtr?: number | null;
   avgRetentionSecs?: number | null;
+  /** Rolling last-20 published video outcomes, newest first. */
+  recentPerformance?: RecentPerformanceEntry[];
 }
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -195,6 +207,10 @@ export class AutonomyService {
         shorts: recent.filter((v) => v.kind === 'short').length,
       },
       topTitles: recent.slice(0, 5).map((v) => v.title),
+      topPerformers: recent
+        .filter((v) => v.viewCount > 0)
+        .slice(0, 5)
+        .map((v) => ({ title: v.title, views: v.viewCount, kind: v.kind })),
       pipeline: Object.fromEntries(pipelineGroups.map((g) => [g.status, g._count])),
       avgCtr,
       avgRetentionSecs,
@@ -304,6 +320,16 @@ export class AutonomyService {
       this.logger.warn(`Trend context unavailable: ${err instanceof Error ? err.message : String(err)}`);
     }
 
+    // Top performer context — prefer recentPerformance (platform-published videos with
+    // confirmed view counts); fall back to topPerformers from LibraryVideo 90d window.
+    const topPerformerTitles: string[] = profile.recentPerformance && profile.recentPerformance.length > 0
+      ? [...profile.recentPerformance]
+          .sort((a, b) => b.views - a.views)
+          .slice(0, 5)
+          .map((p) => `${p.title} (${p.views.toLocaleString()} views)`)
+      : (profile.topPerformers ?? [])
+          .map((p) => `${p.title} (${p.views.toLocaleString()} views, ${p.kind})`);
+
     let proposal: CalendarProposal;
     let source: 'ai' | 'heuristic' = 'ai';
     try {
@@ -314,6 +340,9 @@ export class AutonomyService {
             content:
               `Plan a ${weeks}-week content calendar (${total} slots, ~${perWeek}/week) for the YouTube channel "${channel.title}".\n\n` +
               `CHANNEL PROFILE:\n${JSON.stringify(profile, null, 2)}\n\n` +
+              (topPerformerTitles.length > 0
+                ? `TOP PERFORMING PAST VIDEOS (by views — lean into similar topics/formats where appropriate):\n${topPerformerTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n`
+                : '') +
               (trends
                 ? `CURRENT TRENDS (tie topics to these where sensible):\n${JSON.stringify(trends.trending.slice(0, 6), null, 2)}\n\n`
                 : '') +
@@ -787,6 +816,66 @@ export class AutonomyService {
     void this.audit(userId, 'autonomy.feedback.record', { channelId, ytVideoId: data.ytVideoId, views: data.views });
     this.logger.log(`[feedback] channelId=${channelId} ytVideoId=${data.ytVideoId} views=${data.views}`);
     return { ok: true };
+  }
+
+  /**
+   * Phase 6 Performance Feedback Loop — record actual publish outcomes and
+   * fold them back into the ChannelProfile so the next calendar generation
+   * has real signal to reason over.
+   *
+   * Call this from the approvals service once a video approval completes with
+   * status APPROVED and job type SHORTS_PUBLISH or PUBLISH.
+   *
+   * - Appends an entry to `recentPerformance` (rolling window of 20).
+   * - Updates `avgViews90d` with an 80/20 weighted blend so one outlier
+   *   doesn't skew the whole profile.
+   */
+  async recordVideoPerformance(
+    channelId: string,
+    data: { videoId: string; views: number; likes: number; watchTimeSecs: number },
+  ): Promise<void> {
+    // Fetch the video title for the performance entry label.
+    const video = await this.prisma.video.findUnique({
+      where: { id: data.videoId },
+      select: { title: true },
+    });
+    const title = video?.title ?? data.videoId;
+
+    // Load the existing profile (or build fresh if absent).
+    let profileRow = await this.prisma.channelProfile.findUnique({ where: { channelId } });
+    if (!profileRow) {
+      profileRow = await this.buildProfile(channelId);
+    }
+
+    const profile = profileRow.profile as unknown as ChannelProfileSnapshot;
+
+    // Build the new entry.
+    const newEntry: RecentPerformanceEntry = {
+      title,
+      views: data.views,
+      likes: data.likes,
+      watchTimeSecs: data.watchTimeSecs,
+      recordedAt: new Date().toISOString(),
+    };
+
+    // Rolling window — prepend newest, keep last 20.
+    const existing = profile.recentPerformance ?? [];
+    const recentPerformance = [newEntry, ...existing].slice(0, 20);
+
+    // Weighted blend: 80% historical average + 20% new data point.
+    const avgViews90d = Math.round(profile.avgViews90d * 0.8 + data.views * 0.2);
+
+    const updated: ChannelProfileSnapshot = { ...profile, avgViews90d, recentPerformance };
+
+    await this.prisma.channelProfile.upsert({
+      where: { channelId },
+      create: { channelId, profile: updated as unknown as Prisma.InputJsonValue },
+      update: { profile: updated as unknown as Prisma.InputJsonValue, computedAt: new Date() },
+    });
+
+    this.logger.log(
+      `[recordVideoPerformance] channelId=${channelId} videoId=${data.videoId} views=${data.views} likes=${data.likes} watchTimeSecs=${data.watchTimeSecs}`,
+    );
   }
 
   /**

@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsController } from './analytics.controller';
+import { AutonomyModule } from '../autonomy/autonomy.module';
 
 @Module({
+  imports: [AutonomyModule],
   providers: [AnalyticsService],
   controllers: [AnalyticsController],
   exports: [AnalyticsService],

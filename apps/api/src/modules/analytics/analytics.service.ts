@@ -1,7 +1,8 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { callAIStructured } from '@cf/shared';
 import { AnalyticsOutputSchema, type AnalyticsOutput } from '@cf/shared';
+import { AutonomyService } from '../autonomy/autonomy.service';
 
 const ANALYTICS_SYSTEM = `You are a YouTube analytics expert. Interpret channel data, diagnose performance, provide specific actionable insights. Base findings on data only. Respond only with valid JSON.`;
 
@@ -9,7 +10,10 @@ const ANALYTICS_SYSTEM = `You are a YouTube analytics expert. Interpret channel 
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly autonomy: AutonomyService | null = null,
+  ) {}
 
   async getChannelOverview(channelId: string, userId: string) {
     const channel = await this.prisma.channel.findFirst({
@@ -92,12 +96,28 @@ export class AnalyticsService {
   }
 
   async saveSnapshot(channelId: string, ytVideoId: string | null, metrics: Record<string, unknown>) {
-    return this.prisma.analyticsSnapshot.create({
-      data: {
-        channelId,
-        ytVideoId,
-        metrics: metrics as never,
-      },
+    const snapshot = await this.prisma.analyticsSnapshot.create({
+      data: { channelId, ytVideoId, metrics: metrics as never },
     });
+
+    // Feed real view/like counts back into the channel profile for the
+    // performance feedback loop. Best-effort — never blocks the response.
+    if (ytVideoId && this.autonomy) {
+      const views = typeof metrics['views'] === 'number' ? metrics['views'] : 0;
+      const likes = typeof metrics['likeCount'] === 'number' ? metrics['likeCount'] : 0;
+      const watchTimeSecs = typeof metrics['avgViewDurationSecs'] === 'number' ? metrics['avgViewDurationSecs'] : 0;
+      if (views > 0) {
+        const video = await this.prisma.video.findFirst({
+          where: { channelId, youtubeVideoId: ytVideoId },
+          select: { id: true },
+        });
+        if (video) {
+          this.autonomy.recordVideoPerformance(channelId, { videoId: video.id, views, likes, watchTimeSecs })
+            .catch((err: unknown) => this.logger.warn(`recordVideoPerformance failed: ${err instanceof Error ? err.message : String(err)}`));
+        }
+      }
+    }
+
+    return snapshot;
   }
 }

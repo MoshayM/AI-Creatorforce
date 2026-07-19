@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Gift, Bell, Gauge, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles, Home, Bot, Upload, BookOpen, Code2, Activity, BarChart2, Compass, ArrowRightLeft, Award, Target, FlaskConical, Layers, ListOrdered } from 'lucide-react';
+import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Bell, Gauge, Gift, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles, Home, Bot, Upload, BookOpen, Code2, Activity, BarChart2, Compass, ArrowRightLeft, Award, Target, FlaskConical, Layers, ListOrdered } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -11,43 +11,80 @@ interface NavItem {
   href: string;
   icon: typeof FolderOpen;
   label: string;
+  /** When true, this item acts as a collapsible group header (renders as <button>, not <Link>). */
+  isGroup?: boolean;
+  /** Render a subtle divider above this item. */
+  dividerBefore?: boolean;
   /** Indented sub-links rendered directly beneath the item. */
   children?: NavItem[];
 }
 
 const NAV: NavItem[] = [
-  { href: '/', icon: Home, label: 'Home' },
-  { href: '/notifications', icon: Bell, label: 'Notifications' },
-  { href: '/copilot', icon: Bot, label: 'Copilot' },
+  { href: '/home', icon: Home, label: 'Home' },
   { href: '/projects', icon: FolderOpen, label: 'Projects' },
   { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
   { href: '/editor', icon: Film, label: 'Video Editor' },
-  { href: '/approvals', icon: CheckSquare, label: 'Approvals' },
-  { href: '/scheduler', icon: CalendarClock, label: 'Scheduler' },
-  { href: '/autonomy', icon: Sparkles, label: 'Autonomy' },
-  { href: '/publishing', icon: Upload, label: 'Publishing' },
-  { href: '/analytics', icon: BarChart2, label: 'Analytics' },
-  { href: '/discover', icon: Compass, label: 'Discover' },
-  { href: '/repurpose', icon: ArrowRightLeft, label: 'Repurpose' },
-  { href: '/strategy', icon: Target, label: 'Strategy' },
-  { href: '/ab-testing', icon: FlaskConical, label: 'A/B Testing' },
-  { href: '/monitor', icon: Activity, label: 'Monitor' },
+  { href: '/copilot', icon: Bot, label: 'Copilot' },
+  {
+    href: '/publish-group',
+    icon: Upload,
+    label: 'Publish',
+    isGroup: true,
+    dividerBefore: true,
+    children: [
+      { href: '/approvals', icon: CheckSquare, label: 'Approvals' },
+      { href: '/scheduler', icon: CalendarClock, label: 'Scheduler' },
+      { href: '/publishing', icon: Upload, label: 'Publishing' },
+      { href: '/autonomy', icon: Sparkles, label: 'Autonomy' },
+      { href: '/ab-testing', icon: FlaskConical, label: 'A/B Testing' },
+    ],
+  },
+  {
+    href: '/content-group',
+    icon: BookOpen,
+    label: 'Content',
+    isGroup: true,
+    children: [
+      { href: '/research', icon: BookOpen, label: 'Research' },
+      { href: '/discover', icon: Compass, label: 'Discover' },
+      { href: '/repurpose', icon: ArrowRightLeft, label: 'Repurpose' },
+      { href: '/series-planner', icon: ListOrdered, label: 'Series Planner' },
+      { href: '/score-script', icon: Award, label: 'Script Scorer' },
+    ],
+  },
+  {
+    href: '/insights-group',
+    icon: BarChart2,
+    label: 'Insights',
+    isGroup: true,
+    children: [
+      { href: '/analytics', icon: BarChart2, label: 'Analytics' },
+      { href: '/strategy', icon: Target, label: 'Strategy' },
+      { href: '/growth', icon: Gift, label: 'Growth' },
+      { href: '/monitor', icon: Activity, label: 'Monitor' },
+    ],
+  },
+  {
+    href: '/library-group',
+    icon: ListVideo,
+    label: 'Library',
+    isGroup: true,
+    children: [
+      { href: '/library', icon: ListVideo, label: 'Media Control' },
+      { href: '/assets', icon: Layers, label: 'Media Assets' },
+    ],
+  },
   {
     href: '/settings',
     icon: Settings,
     label: 'Settings',
+    dividerBefore: true,
     children: [
-      { href: '/research', icon: BookOpen, label: 'Research' },
-      { href: '/library', icon: ListVideo, label: 'Media Control' },
-      { href: '/wallet', icon: Wallet, label: 'Billing & Wallet' },
-      { href: '/orgs', icon: Building2, label: 'Organization' },
-      { href: '/growth', icon: Gift, label: 'Growth' },
       { href: '/brand-kit', icon: Palette, label: 'Brand Kit' },
       { href: '/automation', icon: Workflow, label: 'Automation' },
+      { href: '/wallet', icon: Wallet, label: 'Billing & Wallet' },
+      { href: '/orgs', icon: Building2, label: 'Organization' },
       { href: '/developer', icon: Code2, label: 'Developer' },
-      { href: '/score-script', icon: Award, label: 'Script Scorer' },
-      { href: '/assets', icon: Layers, label: 'Media Assets' },
-      { href: '/series-planner', icon: ListOrdered, label: 'Series Planner' },
     ],
   },
 ];
@@ -231,36 +268,69 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
             href: '/admin',
             icon: Gauge,
             label: 'Admin',
-          } as NavItem] : [])].map(({ href, icon: Icon, label, children }) => {
-              // Groups open on click (chevron or navigating into the section)
-              // and auto-open while the current page lives inside them.
-              const groupActive =
-                pathname.startsWith(href) ||
-                (children?.some((c) => !c.href.includes('#') && pathname.startsWith(c.href)) ?? false);
+          } as NavItem] : [])].map(({ href, icon: Icon, label, children, isGroup, dividerBefore }) => {
+              // For isGroup items, active state is ONLY based on children (never the fake href).
+              // For regular items with children (Settings), also check the parent href.
+              const groupActive = isGroup
+                ? (children?.some((c) => !c.href.includes('#') && pathname.startsWith(c.href)) ?? false)
+                : (pathname === href || pathname.startsWith(href + '/') ||
+                    (children?.some((c) => !c.href.includes('#') && pathname.startsWith(c.href)) ?? false));
               const open = openGroups[href] ?? groupActive;
+              const isActiveLink = !isGroup && (pathname === href || pathname.startsWith(href + '/'));
+
               return (
               <div key={href}>
+                {dividerBefore && (
+                  <div className="mx-3 my-2 border-t border-white/15" />
+                )}
                 <div className="relative">
-                  <Link
-                    href={href}
-                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors ${
-                      pathname.startsWith(href)
-                        ? 'bg-white/20 text-white font-semibold shadow-sm'
-                        : 'text-white/75 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {label}
-                  </Link>
-                  {children && children.length > 0 && (
+                  {isGroup ? (
+                    // Group header — no navigation, just expands/collapses the section
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      aria-label={`${open ? 'Collapse' : 'Expand'} ${label}`}
+                      onClick={() => setOpenGroups((g) => ({ ...g, [href]: !open }))}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors ${
+                        groupActive
+                          ? 'bg-white/20 text-white font-semibold shadow-sm'
+                          : 'text-white/75 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="flex-1 text-left">{label}</span>
+                      <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+                    </button>
+                  ) : (
+                    // Regular nav link (may also have children, e.g. Settings)
+                    <Link
+                      href={href}
+                      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors ${
+                        isActiveLink
+                          ? 'bg-white/20 text-white font-semibold shadow-sm'
+                          : 'text-white/75 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="flex-1">{label}</span>
+                      {children && children.length > 0 && (
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </Link>
+                  )}
+                  {/* Separate expand toggle for non-group items that have children (Settings) */}
+                  {!isGroup && children && children.length > 0 && (
                     <button
                       type="button"
                       aria-label={`${open ? 'Collapse' : 'Expand'} ${label} menu`}
                       aria-expanded={open}
-                      onClick={() => setOpenGroups((g) => ({ ...g, [href]: !open }))}
+                      onClick={(e) => { e.preventDefault(); setOpenGroups((g) => ({ ...g, [href]: !open })); }}
                       className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
                     >
-                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? '' : '-rotate-90'}`} />
+                      <span className="sr-only">{open ? 'Collapse' : 'Expand'}</span>
                     </button>
                   )}
                 </div>
