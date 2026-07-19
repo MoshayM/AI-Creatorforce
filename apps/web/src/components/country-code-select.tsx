@@ -14,7 +14,6 @@ import {
   useListNavigation,
   useInteractions,
   FloatingPortal,
-  FloatingFocusManager,
   flip,
   shift,
   offset,
@@ -109,11 +108,10 @@ export default function CountryCodeSelect({ value, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [maxListHeight, setMaxListHeight] = useState(280);
+  const [listMaxHeight, setListMaxHeight] = useState(280);
 
   const listRef = useRef<Array<HTMLElement | null>>([]);
   const searchRef = useRef<HTMLInputElement>(null);
-  const selectedItemRef = useRef<HTMLButtonElement | null>(null);
 
   const filtered = useMemo(
     () =>
@@ -126,6 +124,8 @@ export default function CountryCodeSelect({ value, onChange }: Props) {
     [search],
   );
 
+  const selectedIndex = filtered.findIndex((c) => c.iso === value.iso);
+
   const { refs, floatingStyles, context } = useFloating({
     open,
     onOpenChange: (next) => {
@@ -135,12 +135,11 @@ export default function CountryCodeSelect({ value, onChange }: Props) {
     placement: 'bottom-start',
     middleware: [
       offset(6),
-      flip({ padding: 12 }),
+      flip({ fallbackAxisSideDirection: 'start', padding: 12 }),
       shift({ padding: 12 }),
       size({
         apply({ availableHeight }) {
-          // Cap list at available space minus search bar (~52px) and padding
-          setMaxListHeight(Math.min(280, Math.max(120, availableHeight - 64)));
+          setListMaxHeight(Math.min(280, Math.max(120, availableHeight - 56)));
         },
         padding: 12,
       }),
@@ -148,17 +147,17 @@ export default function CountryCodeSelect({ value, onChange }: Props) {
     whileElementsMounted: autoUpdate,
   });
 
-  const click = useClick(context);
-  const dismiss = useDismiss(context);
+  const click = useClick(context, { toggle: true });
+  const dismiss = useDismiss(context, { outsidePressEvent: 'mousedown' });
   const role = useRole(context, { role: 'listbox' });
   const listNav = useListNavigation(context, {
     listRef,
     activeIndex,
-    selectedIndex: filtered.findIndex((c) => c.iso === value.iso),
+    selectedIndex,
     onNavigate: setActiveIndex,
     loop: true,
-    // Don't let arrow keys navigate while user is typing in search
     virtual: true,
+    focusItemOnOpen: false,
   });
 
   const { getReferenceProps, getFloatingProps, getItemProps } = useInteractions([
@@ -168,15 +167,17 @@ export default function CountryCodeSelect({ value, onChange }: Props) {
     listNav,
   ]);
 
-  // Auto-focus search and scroll to selected item when opened
+  // Focus search input when dropdown opens; scroll selected item into view
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(() => {
-      searchRef.current?.focus();
-      selectedItemRef.current?.scrollIntoView({ block: 'nearest' });
-    }, 30);
-    return () => clearTimeout(t);
-  }, [open]);
+    const id = requestAnimationFrame(() => {
+      searchRef.current?.focus({ preventScroll: true });
+      if (selectedIndex >= 0) {
+        listRef.current[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [open, selectedIndex]);
 
   const handleSelect = useCallback(
     (country: Country) => {
@@ -187,11 +188,13 @@ export default function CountryCodeSelect({ value, onChange }: Props) {
     [onChange],
   );
 
-  // Keyboard: Enter selects the active item
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && activeIndex !== null && filtered[activeIndex]) {
+    if (e.key === 'Enter') {
       e.preventDefault();
-      handleSelect(filtered[activeIndex]);
+      const target = activeIndex !== null ? filtered[activeIndex] : filtered[selectedIndex >= 0 ? selectedIndex : 0];
+      if (target) handleSelect(target);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
     }
   };
 
@@ -216,86 +219,81 @@ export default function CountryCodeSelect({ value, onChange }: Props) {
 
       {open && (
         <FloatingPortal>
-          <FloatingFocusManager
-            context={context}
-            modal={false}
-            initialFocus={searchRef}
-            returnFocus={false}
+          <div
+            ref={refs.setFloating}
+            style={{
+              ...floatingStyles,
+              zIndex: 99999,
+              width: 288,
+              outline: 'none',
+            }}
+            className="bg-white border border-gray-200 rounded-2xl shadow-2xl"
+            {...getFloatingProps()}
           >
-            <div
-              ref={refs.setFloating}
-              style={{ ...floatingStyles, zIndex: 9999, width: 288 }}
-              className="bg-white border border-gray-200 rounded-2xl shadow-2xl outline-none"
-              {...getFloatingProps()}
-            >
-              {/* Sticky search */}
-              <div className="p-2 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-full">
-                  <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" aria-hidden="true" />
-                  <input
-                    ref={searchRef}
-                    value={search}
-                    onChange={(e) => {
-                      setSearch(e.target.value);
-                      setActiveIndex(0);
-                    }}
-                    onKeyDown={handleSearchKeyDown}
-                    placeholder="Search country or code…"
-                    aria-label="Search countries"
-                    aria-autocomplete="list"
-                    className="flex-1 bg-transparent text-sm outline-none text-gray-700 placeholder:text-gray-400"
-                  />
-                </div>
+            {/* Sticky search bar */}
+            <div className="p-2 border-b border-gray-100">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-full">
+                <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" aria-hidden="true" />
+                <input
+                  ref={searchRef}
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setActiveIndex(0);
+                  }}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Search country or code…"
+                  aria-label="Search countries"
+                  aria-autocomplete="list"
+                  className="flex-1 bg-transparent text-sm outline-none text-gray-700 placeholder:text-gray-400"
+                />
               </div>
-
-              {/* Country list */}
-              <ul
-                role="listbox"
-                aria-label="Countries"
-                style={{ maxHeight: maxListHeight, overflowY: 'auto' }}
-                className="py-1"
-              >
-                {filtered.length === 0 ? (
-                  <li className="px-4 py-3 text-sm text-gray-400 text-center" role="option" aria-selected={false}>
-                    No results
-                  </li>
-                ) : (
-                  filtered.map((c, i) => {
-                    const isSelected = c.iso === value.iso;
-                    const isActive = activeIndex === i;
-                    return (
-                      <li key={c.iso} role="option" aria-selected={isSelected}>
-                        <button
-                          ref={(el) => {
-                            listRef.current[i] = el;
-                            if (isSelected) selectedItemRef.current = el;
-                          }}
-                          type="button"
-                          tabIndex={isActive ? 0 : -1}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-100 text-left cursor-pointer
-                            ${isSelected ? 'bg-purple-50 text-[#7b5ec7] font-medium' : 'text-gray-700'}
-                            ${isActive && !isSelected ? 'bg-gray-50' : ''}
-                            hover:bg-purple-50 hover:text-[#7b5ec7]`}
-                          {...getItemProps({
-                            onClick: () => handleSelect(c),
-                            onKeyDown: (e) => {
-                              if (e.key === 'Enter') handleSelect(c);
-                            },
-                          })}
-                        >
-                          <span className="text-lg leading-none" aria-hidden="true">{flag(c.iso)}</span>
-                          <span className="flex-1 truncate">{c.name}</span>
-                          <span className={`text-xs tabular-nums ${isSelected ? 'text-[#7b5ec7]' : 'text-gray-400'}`}>
-                            {c.dialCode}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })
-                )}
-              </ul>
             </div>
-          </FloatingFocusManager>
+
+            {/* Scrollable country list */}
+            <ul
+              role="listbox"
+              aria-label="Countries"
+              style={{ maxHeight: listMaxHeight, overflowY: 'auto' }}
+              className="py-1"
+            >
+              {filtered.length === 0 ? (
+                <li className="px-4 py-3 text-sm text-gray-400 text-center" role="option" aria-selected={false}>
+                  No results
+                </li>
+              ) : (
+                filtered.map((c, i) => {
+                  const isSelected = c.iso === value.iso;
+                  const isActive = activeIndex === i;
+                  return (
+                    <li key={c.iso} role="option" aria-selected={isSelected}>
+                      <button
+                        ref={(el) => { listRef.current[i] = el; }}
+                        type="button"
+                        tabIndex={isActive ? 0 : -1}
+                        className={[
+                          'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-100 text-left cursor-pointer',
+                          isSelected ? 'bg-purple-50 text-[#7b5ec7] font-medium' : 'text-gray-700',
+                          isActive && !isSelected ? 'bg-gray-50' : '',
+                          'hover:bg-purple-50 hover:text-[#7b5ec7]',
+                        ].join(' ')}
+                        {...getItemProps({
+                          onClick: () => handleSelect(c),
+                          onKeyDown: (e) => { if (e.key === 'Enter') handleSelect(c); },
+                        })}
+                      >
+                        <span className="text-lg leading-none" aria-hidden="true">{flag(c.iso)}</span>
+                        <span className="flex-1 truncate">{c.name}</span>
+                        <span className={`text-xs tabular-nums ${isSelected ? 'text-[#7b5ec7]' : 'text-gray-400'}`}>
+                          {c.dialCode}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </div>
         </FloatingPortal>
       )}
     </>
