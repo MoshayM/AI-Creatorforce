@@ -152,3 +152,116 @@ describe('JobsService.enqueue', () => {
     await expect(service.replayFailed('nope')).rejects.toThrow(NotFoundException);
   });
 });
+
+// ─── cancel / pause / resume ──────────────────────────────────────────────────
+
+const queueJobHandle = { remove: jest.fn() };
+
+describe('JobsService.cancel', () => {
+  let service: JobsService;
+
+  beforeEach(() => {
+    service = new JobsService(prisma as unknown as PrismaService, queue as unknown as Queue);
+    jest.clearAllMocks();
+  });
+
+  it('removes the BullMQ job and marks the row CANCELLED', async () => {
+    (queue as unknown as { getJob: jest.Mock }).getJob = jest.fn().mockResolvedValue(queueJobHandle);
+    prisma.agentJob.update.mockResolvedValue({ id: 'job-1', status: 'CANCELLED' });
+
+    await service.cancel('job-1');
+
+    expect(queueJobHandle.remove).toHaveBeenCalled();
+    expect(prisma.agentJob.update).toHaveBeenCalledWith({
+      where: { id: 'job-1' },
+      data: { status: 'CANCELLED' },
+    });
+  });
+
+  it('still marks CANCELLED even when the job is not in the queue', async () => {
+    (queue as unknown as { getJob: jest.Mock }).getJob = jest.fn().mockResolvedValue(null);
+    prisma.agentJob.update.mockResolvedValue({ id: 'job-2', status: 'CANCELLED' });
+
+    await service.cancel('job-2');
+
+    expect(queueJobHandle.remove).not.toHaveBeenCalled();
+    expect(prisma.agentJob.update).toHaveBeenCalledWith({
+      where: { id: 'job-2' },
+      data: { status: 'CANCELLED' },
+    });
+  });
+});
+
+describe('JobsService.pause', () => {
+  let service: JobsService;
+
+  beforeEach(() => {
+    service = new JobsService(prisma as unknown as PrismaService, queue as unknown as Queue);
+    jest.clearAllMocks();
+  });
+
+  it('removes from BullMQ and marks the row PAUSED', async () => {
+    (queue as unknown as { getJob: jest.Mock }).getJob = jest.fn().mockResolvedValue(queueJobHandle);
+    prisma.agentJob.update.mockResolvedValue({ id: 'job-3', status: 'PAUSED' });
+
+    await service.pause('job-3');
+
+    expect(queueJobHandle.remove).toHaveBeenCalled();
+    expect(prisma.agentJob.update).toHaveBeenCalledWith({
+      where: { id: 'job-3' },
+      data: { status: 'PAUSED' },
+    });
+  });
+
+  it('marks PAUSED even when not in queue (already dequeued)', async () => {
+    (queue as unknown as { getJob: jest.Mock }).getJob = jest.fn().mockResolvedValue(null);
+    prisma.agentJob.update.mockResolvedValue({ id: 'job-4', status: 'PAUSED' });
+
+    await service.pause('job-4');
+
+    expect(queueJobHandle.remove).not.toHaveBeenCalled();
+    expect(prisma.agentJob.update).toHaveBeenCalledWith({
+      where: { id: 'job-4' },
+      data: { status: 'PAUSED' },
+    });
+  });
+});
+
+describe('JobsService.resume', () => {
+  let service: JobsService;
+
+  beforeEach(() => {
+    service = new JobsService(prisma as unknown as PrismaService, queue as unknown as Queue);
+    jest.clearAllMocks();
+    (queue as unknown as { getJob: jest.Mock }).getJob = jest.fn().mockResolvedValue(null);
+  });
+
+  it('re-enqueues a PAUSED job as a fresh run', async () => {
+    prisma.agentJob.findUnique.mockResolvedValue({
+      id: 'job-5', projectId: 'proj-1', type: 'SCRIPT', status: 'PAUSED', payload: { tone: 'casual' },
+    });
+    prisma.agentJob.create.mockResolvedValue({ id: 'fresh-2' });
+    queue.add.mockResolvedValue({});
+    prisma.agentJob.updateMany.mockResolvedValue({ count: 1 });
+
+    const fresh = await service.resume('job-5');
+
+    expect(fresh.id).toBe('fresh-2');
+    expect(prisma.agentJob.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ projectId: 'proj-1', type: 'SCRIPT', payload: { tone: 'casual' } }),
+    });
+  });
+
+  it('throws 400 when the job is not PAUSED', async () => {
+    prisma.agentJob.findUnique.mockResolvedValue({ id: 'job-6', status: 'RUNNING' });
+
+    await expect(service.resume('job-6')).rejects.toThrow(BadRequestException);
+    expect(prisma.agentJob.create).not.toHaveBeenCalled();
+  });
+
+  it('throws 404 for an unknown job', async () => {
+    prisma.agentJob.findUnique.mockResolvedValue(null);
+
+    await expect(service.resume('nope')).rejects.toThrow(NotFoundException);
+  });
+});

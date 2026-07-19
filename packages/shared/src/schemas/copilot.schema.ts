@@ -20,6 +20,13 @@ export const CopilotCommandSchema = z.discriminatedUnion('action', [
     stage: z.string(), // JobType name; validated server-side against the enum
   }),
   z.object({ action: z.literal('cancel_job'), jobId: z.string() }),
+  z.object({
+    action: z.literal('create_project'),
+    channelId: z.string(),
+    title: z.string().min(1).max(200),
+    niche: z.string().optional(),
+    topic: z.string().optional(),
+  }),
   z.object({ action: z.literal('analyze_video'), importedVideoId: z.string() }),
   z.object({ action: z.literal('list_highlights'), importedVideoId: z.string(), limit: z.number().int().min(1).max(20).default(5) }),
   // Deterministic-first (§12): the chapter list is stored data — zero tokens
