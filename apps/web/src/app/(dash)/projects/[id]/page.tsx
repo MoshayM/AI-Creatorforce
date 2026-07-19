@@ -599,6 +599,7 @@ export default function ProjectDetailPage() {
   // FULL_PRODUCTION pipeline progress (stage n/m + ETA) streamed via job events
   const [pipelineProgress, setPipelineProgress] = useState<PipelineProgress | null>(null);
   const [confirmDeleteJob, setConfirmDeleteJob] = useState<string | null>(null);
+  const [confirmCancelJob, setConfirmCancelJob] = useState<string | null>(null);
 
   // SEO & Audience tab state
   const [seoForm, setSeoForm] = useState({ title: '', description: '', niche: '' });
@@ -614,6 +615,10 @@ export default function ProjectDetailPage() {
   const deleteJobMutation = useMutation({
     mutationFn: (jobId: string) => api.jobs.remove(jobId),
     onSuccess: () => { setConfirmDeleteJob(null); void qc.invalidateQueries({ queryKey: ['project', id] }); },
+  });
+  const cancelJobMutation = useMutation({
+    mutationFn: (jobId: string) => api.jobs.cancel(jobId),
+    onSuccess: () => { setConfirmCancelJob(null); void qc.invalidateQueries({ queryKey: ['project', id] }); },
   });
 
   const generateScriptMutation = useMutation({
@@ -1615,6 +1620,23 @@ export default function ProjectDetailPage() {
                         <button onClick={(e) => { e.stopPropagation(); toggle(histKey); }} className="text-gray-500 hover:text-gray-600">
                           {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </button>
+                      )}
+                      {['PENDING', 'QUEUED', 'RUNNING'].includes(job.status) && (
+                        confirmCancelJob === job.id ? (
+                          <span className="flex items-center gap-1.5">
+                            <button onClick={(e) => { e.stopPropagation(); cancelJobMutation.mutate(job.id); }} disabled={cancelJobMutation.isPending} className="text-xs px-2 py-1 bg-orange-600 text-white rounded-lg disabled:opacity-50">Stop it</button>
+                            <button onClick={(e) => { e.stopPropagation(); setConfirmCancelJob(null); }} className="text-xs px-2 py-1 border border-gray-200 rounded-lg text-gray-500">Keep</button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmCancelJob(job.id); }}
+                            aria-label={`Cancel ${job.type} run`}
+                            title="Cancel this running job"
+                            className="text-gray-300 hover:text-orange-500 transition-colors"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )
                       )}
                       {!['PENDING', 'QUEUED', 'RUNNING'].includes(job.status) && (
                         confirmDeleteJob === job.id ? (

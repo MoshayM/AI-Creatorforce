@@ -43,6 +43,7 @@ Command palette:
 - run_production {projectId, scope, topic?} — run the long-form pipeline (scope: FULL|SCRIPT|VOICE|MUSIC|IMAGES|VIDEO)
 - retry_stage {projectId, stage} — re-run one pipeline stage (stage is a JobType like RESEARCH, RENDER, MUSIC_GENERATE)
 - cancel_job {jobId}
+- create_project {channelId, title, niche?, topic?} — create a new content project; gather title and channel first (pick channelId from CONTEXT.channels), niche/topic optionally; after creating, offer to immediately run the full AI pipeline
 - analyze_video {importedVideoId} — run the Shorts analysis pipeline
 - list_highlights {importedVideoId, limit} — top Shorts moments for an analyzed video
 - list_chapters {importedVideoId} — YouTube-style chapters detected for an analyzed video
@@ -361,7 +362,7 @@ export class CopilotService {
 
   /** Compact project-state JSON (§3.6 token rules): ids the model may use. */
   private async buildContext(userId: string): Promise<string> {
-    const [projects, videos, recentJobs] = await Promise.all([
+    const [projects, videos, recentJobs, channels] = await Promise.all([
       this.prisma.project.findMany({
         where: { userId },
         select: { id: true, title: true, status: true },
@@ -380,11 +381,17 @@ export class CopilotService {
         orderBy: { createdAt: 'desc' },
         take: 6,
       }),
+      this.prisma.channel.findMany({
+        where: { userId },
+        select: { id: true, title: true },
+        take: 8,
+      }),
     ]);
     return JSON.stringify({
       projects,
       importedVideos: videos.map((v) => ({ id: v.id, title: v.title.slice(0, 60), topics: v._count.topicSegments })),
       recentJobs,
+      channels,
     });
   }
 
@@ -444,6 +451,29 @@ export class CopilotService {
         if (!job) throw new NotFoundException('Job not found');
         await this.jobs.cancel(command.jobId);
         return { summary: `Cancelled ${job.type}.`, data: { jobId: command.jobId } };
+      }
+
+      case 'create_project': {
+        const channel = await this.prisma.channel.findFirst({
+          where: { id: command.channelId, userId },
+          select: { id: true, title: true },
+        });
+        if (!channel) throw new NotFoundException('Channel not found — use a channelId from CONTEXT.channels.');
+        const project = await this.prisma.project.create({
+          data: {
+            userId,
+            channelId: command.channelId,
+            title: command.title,
+            status: 'ACTIVE',
+            ...(command.niche ? { niche: command.niche } : {}),
+            ...(command.topic ? { description: command.topic } : {}),
+          },
+          select: { id: true, title: true },
+        });
+        return {
+          summary: `Created project "${project.title}" on channel "${channel.title}". Ready to start the full AI pipeline whenever you say so.`,
+          data: { projectId: project.id, title: project.title, channelTitle: channel.title },
+        };
       }
 
       case 'analyze_video': {
