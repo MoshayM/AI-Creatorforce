@@ -601,6 +601,8 @@ export const api = {
     get: (id: string) => apiClient.get(`/jobs/${id}`),
     listByProject: (projectId: string) => apiClient.get(`/jobs/project/${projectId}`),
     cancel: (id: string) => apiClient.delete(`/jobs/${id}`),
+    pause: (id: string) => apiClient.patch(`/jobs/${id}/pause`, {}),
+    resume: (id: string) => apiClient.patch(`/jobs/${id}/resume`, {}),
     remove: (id: string) => apiClient.delete(`/jobs/${id}/record`),
     overrideResult: (projectId: string, type: string, result: Record<string, unknown>) =>
       apiClient.patch(`/jobs/project/${projectId}/override/${type}`, { result }),

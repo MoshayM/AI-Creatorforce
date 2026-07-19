@@ -124,4 +124,14 @@ export class JobsController {
   cancel(@Param('id') id: string) {
     return this.svc.cancel(id);
   }
+
+  @Patch(':id/pause')
+  pause(@Param('id') id: string) {
+    return this.svc.pause(id);
+  }
+
+  @Patch(':id/resume')
+  resume(@Param('id') id: string) {
+    return this.svc.resume(id);
+  }
 }

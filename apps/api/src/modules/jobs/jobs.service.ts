@@ -156,6 +156,23 @@ export class JobsService {
     });
   }
 
+  async pause(jobId: string) {
+    const bJob = await this.queue.getJob(jobId);
+    if (bJob) await bJob.remove(); // remove from queue so it won't start/continue
+    return this.prisma.agentJob.update({
+      where: { id: jobId },
+      data: { status: 'PAUSED' },
+    });
+  }
+
+  async resume(jobId: string) {
+    const job = await this.prisma.agentJob.findUnique({ where: { id: jobId } });
+    if (!job) throw new NotFoundException('Job not found');
+    if (job.status !== 'PAUSED') throw new BadRequestException(`Only PAUSED jobs can be resumed (job is ${job.status})`);
+    // Re-enqueue using the original type and payload; the pipeline resume semantics skip already-completed stages
+    return this.enqueue(job.projectId, job.type as JobType, (job.payload ?? {}) as Record<string, unknown>);
+  }
+
   /** Permanently delete a job record (history cleanup). Logs and any approval
    *  row cascade at the DB level. Active jobs must be cancelled first; if the
    *  deleted row was a stage's latest result, that stage reverts to the

@@ -52,6 +52,7 @@ export function CopilotPanel() {
   const [pending, setPending] = useState<CopilotResponse['needsConfirmation'] | null>(null);
   const [pendingEstimate, setPendingEstimate] = useState<number | null>(null);
   const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   // Voice replies default ON — the copilot answers aloud in the user's language
   const [speakReplies, setSpeakReplies] = useState(true);
   // Two-way conversation: after the bot speaks, the mic reopens for the reply.
@@ -99,8 +100,9 @@ export function CopilotPanel() {
     const match = voices.find((v) => v.lang.toLowerCase() === target.toLowerCase())
       ?? voices.find((v) => v.lang.toLowerCase().startsWith(prefix));
     if (match) utterance.voice = match;
-    utterance.onend = () => onDone?.();
-    utterance.onerror = () => onDone?.();
+    utterance.onstart = () => setSpeaking(true);
+    utterance.onend = () => { setSpeaking(false); onDone?.(); };
+    utterance.onerror = () => { setSpeaking(false); onDone?.(); };
     window.speechSynthesis.speak(utterance);
   }, [speakReplies, lang]);
 
@@ -206,18 +208,20 @@ export function CopilotPanel() {
 
             {/* Voice orb — animations only when listening or processing; static during idle */}
             <div style={{position:'relative',width:'220px',height:'220px',display:'flex',alignItems:'center',justifyContent:'center'}}>
-              {/* Ripple rings: only during listening */}
-              <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid rgba(139,92,246,.35)',animation: listening ? 'ripple 2.4s ease-out infinite' : 'none',opacity: listening ? 1 : 0,transition:'opacity .4s'}} />
-              <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid rgba(139,92,246,.25)',animation: listening ? 'ripple 2.4s ease-out infinite' : 'none',animationDelay:'1.2s',opacity: listening ? 1 : 0,transition:'opacity .4s'}} />
+              {/* Ripple rings: during listening or speaking */}
+              <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid rgba(139,92,246,.35)',animation: (listening || speaking) ? 'ripple 2.4s ease-out infinite' : 'none',opacity: (listening || speaking) ? 1 : 0,transition:'opacity .4s'}} />
+              <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid rgba(139,92,246,.25)',animation: (listening || speaking) ? 'ripple 2.4s ease-out infinite' : 'none',animationDelay:'1.2s',opacity: (listening || speaking) ? 1 : 0,transition:'opacity .4s'}} />
               <div
                 style={{
                   position:'relative',width:'132px',height:'132px',borderRadius:'50%',
-                  background:'linear-gradient(135deg,#9C88DD,#7E62C9)',
+                  background: speaking
+                    ? 'linear-gradient(135deg,#7E62C9,#5B21B6)'
+                    : 'linear-gradient(135deg,#9C88DD,#7E62C9)',
                   display:'flex',alignItems:'center',justifyContent:'center',gap:'5px',
-                  /* pulseGlow only when processing; subtle static shadow at idle */
-                  animation: busy ? 'pulseGlow 2.4s ease-in-out infinite' : 'none',
-                  boxShadow: busy ? undefined : '0 8px 24px -8px rgba(124,58,237,.5)',
-                  transition:'box-shadow .4s',
+                  /* pulseGlow when processing or speaking */
+                  animation: (busy || speaking) ? 'pulseGlow 2.4s ease-in-out infinite' : 'none',
+                  boxShadow: (busy || speaking) ? undefined : '0 8px 24px -8px rgba(124,58,237,.5)',
+                  transition:'box-shadow .4s, background .4s',
                 }}
               >
                 {[
@@ -228,14 +232,14 @@ export function CopilotPanel() {
                     key={i}
                     style={{
                       width:'6px',
-                      /* bars animate only during voice activity; otherwise collapse to flat dots */
-                      height: listening ? bar.h : busy ? bar.h : '6px',
+                      /* bars animate during listening or speaking; collapse to dots while processing or idle */
+                      height: (listening || speaking) ? bar.h : busy ? bar.h : '6px',
                       borderRadius:'6px',
-                      background:'#fff',
-                      animation: listening ? `voiceBar 1s ease-in-out infinite` : 'none',
+                      background: speaking ? '#c4b5fd' : '#fff',
+                      animation: (listening || speaking) ? `voiceBar 1s ease-in-out infinite` : 'none',
                       animationDelay: bar.d,
                       transition:'height .35s cubic-bezier(.4,0,.2,1)',
-                      opacity: listening ? 1 : busy ? 0.6 : 0.35,
+                      opacity: (listening || speaking) ? 1 : busy ? 0.6 : 0.35,
                     }}
                   />
                 ))}
@@ -249,11 +253,11 @@ export function CopilotPanel() {
               >
                 <span style={{
                   width:'9px',height:'9px',borderRadius:'50%',flexShrink:0,
-                  background: listening ? '#4ADE80' : busy ? '#FBBF24' : 'rgba(255,255,255,.45)',
-                  boxShadow: listening ? '0 0 0 4px rgba(74,222,128,.25)' : busy ? '0 0 0 4px rgba(251,191,36,.25)' : 'none',
+                  background: listening ? '#4ADE80' : speaking ? '#A78BFA' : busy ? '#FBBF24' : 'rgba(255,255,255,.45)',
+                  boxShadow: listening ? '0 0 0 4px rgba(74,222,128,.25)' : speaking ? '0 0 0 4px rgba(167,139,250,.25)' : busy ? '0 0 0 4px rgba(251,191,36,.25)' : 'none',
                   transition:'background .3s, box-shadow .3s',
                 }} />
-                {listening ? 'Listening… speak naturally' : busy ? 'Processing…' : 'Copilot ready'}
+                {listening ? 'Listening… speak naturally' : speaking ? 'Speaking…' : busy ? 'Processing…' : 'Copilot ready'}
               </div>
               <p style={{fontSize:'12.5px',color:'rgba(30,27,46,.55)',fontWeight:600,marginTop:'10px'}}>
                 {messages.length > 0

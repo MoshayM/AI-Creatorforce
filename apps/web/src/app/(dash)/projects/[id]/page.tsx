@@ -9,7 +9,7 @@ import {
   Loader2, Play, CheckCircle, XCircle, Clock, AlertCircle,
   ChevronDown, ChevronUp, ArrowLeft,
   Check, Copy, Download,
-  RotateCcw, ArrowRightLeft, Timer, Trash2,
+  RotateCcw, ArrowRightLeft, Timer, Trash2, Pause,
   FileText, RefreshCw, Film, Search, ShieldCheck, Tag, Image as ImageIcon,
   Youtube, Send, X,
 } from 'lucide-react';
@@ -171,6 +171,7 @@ const STATUS_BADGE: Record<string, string> = {
   QUEUED:            'bg-gray-100 text-gray-600',
   PENDING:           'bg-gray-100 text-gray-500',
   CANCELLED:         'bg-gray-100 text-gray-500',
+  PAUSED:            'bg-yellow-100 text-yellow-700',
   RETRYING:          'bg-yellow-100 text-yellow-700',
   RATE_LIMITED:      'bg-amber-100 text-amber-700',
   PROVIDER_SWITCHING:'bg-indigo-100 text-indigo-700',
@@ -184,6 +185,7 @@ const STATUS_LABEL: Record<string, string> = {
   QUEUED:            'Queued',
   PENDING:           'Pending',
   CANCELLED:         'Cancelled',
+  PAUSED:            'Paused',
   RETRYING:          'Retrying…',
   RATE_LIMITED:      'Rate Limited',
   PROVIDER_SWITCHING:'Provider Switching',
@@ -196,6 +198,7 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
   WAITING_APPROVAL:  <AlertCircle className="w-3.5 h-3.5" />,
   QUEUED:            <Clock className="w-3.5 h-3.5" />,
   PENDING:           <Clock className="w-3.5 h-3.5" />,
+  PAUSED:            <Pause className="w-3.5 h-3.5" />,
   RETRYING:          <RotateCcw className="w-3.5 h-3.5 animate-spin" />,
   RATE_LIMITED:      <Timer className="w-3.5 h-3.5" />,
   PROVIDER_SWITCHING:<ArrowRightLeft className="w-3.5 h-3.5" />,
@@ -619,6 +622,14 @@ export default function ProjectDetailPage() {
   const cancelJobMutation = useMutation({
     mutationFn: (jobId: string) => api.jobs.cancel(jobId),
     onSuccess: () => { setConfirmCancelJob(null); void qc.invalidateQueries({ queryKey: ['project', id] }); },
+  });
+  const pauseJobMutation = useMutation({
+    mutationFn: (jobId: string) => api.jobs.pause(jobId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['project', id] }),
+  });
+  const resumeJobMutation = useMutation({
+    mutationFn: (jobId: string) => api.jobs.resume(jobId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['project', id] }),
   });
 
   const generateScriptMutation = useMutation({
@@ -1628,15 +1639,37 @@ export default function ProjectDetailPage() {
                             <button onClick={(e) => { e.stopPropagation(); setConfirmCancelJob(null); }} className="text-xs px-2 py-1 border border-gray-200 rounded-lg text-gray-500">Keep</button>
                           </span>
                         ) : (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setConfirmCancelJob(job.id); }}
-                            aria-label={`Cancel ${job.type} run`}
-                            title="Cancel this running job"
-                            className="text-gray-300 hover:text-orange-500 transition-colors"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
+                          <span className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); pauseJobMutation.mutate(job.id); }}
+                              disabled={pauseJobMutation.isPending}
+                              aria-label={`Pause ${job.type} run`}
+                              title="Pause this job (can be resumed later)"
+                              className="text-gray-300 hover:text-yellow-500 transition-colors disabled:opacity-40"
+                            >
+                              <Pause className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setConfirmCancelJob(job.id); }}
+                              aria-label={`Cancel ${job.type} run`}
+                              title="Cancel this running job"
+                              className="text-gray-300 hover:text-orange-500 transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </span>
                         )
+                      )}
+                      {job.status === 'PAUSED' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); resumeJobMutation.mutate(job.id); }}
+                          disabled={resumeJobMutation.isPending}
+                          aria-label={`Resume ${job.type} run`}
+                          title="Resume this paused job"
+                          className="text-yellow-500 hover:text-green-500 transition-colors disabled:opacity-40"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                        </button>
                       )}
                       {!['PENDING', 'QUEUED', 'RUNNING'].includes(job.status) && (
                         confirmDeleteJob === job.id ? (
