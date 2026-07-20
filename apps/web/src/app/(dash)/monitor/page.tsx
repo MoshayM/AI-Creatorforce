@@ -244,9 +244,18 @@ export default function MonitorPage() {
                       <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 ${JOB_TYPE_COLORS[job.type] ?? 'bg-gray-100 text-gray-600'}`}>
                         {job.type.replace(/_/g, ' ')}
                       </span>
-                      {job.error && (
-                        <span className="text-xs text-red-500 truncate max-w-xs" title={job.error}>{job.error}</span>
-                      )}
+                      {job.error && (() => {
+                        const lower = job.error.toLowerCase();
+                        const isTokenExpired = lower.includes('invalid_grant') || (lower.includes('token') && lower.includes('expired')) || lower.includes('reconnect the channel');
+                        return isTokenExpired ? (
+                          <span className="text-xs text-amber-600 flex items-center gap-1 flex-wrap">
+                            YouTube token expired —{' '}
+                            <a href="/library?tab=channels" className="underline font-medium hover:text-amber-700">reconnect channel</a>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-red-500 truncate max-w-xs" title={job.error}>{job.error}</span>
+                        );
+                      })()}
                     </div>
                     {job.project ? (
                       <Link

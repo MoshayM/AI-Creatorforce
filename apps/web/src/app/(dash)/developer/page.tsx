@@ -57,6 +57,7 @@ export default function DeveloperPage() {
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [usageDays, setUsageDays] = useState(30);
   const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
@@ -89,11 +90,13 @@ export default function DeveloperPage() {
 
   const loadUsage = useCallback(async (days: number) => {
     setUsageLoading(true);
+    setUsageError(false);
     try {
       const res = await apiClient.get<UsageData>(`/dev/usage?days=${days}`);
       setUsage(res.data);
     } catch {
       setUsage(null);
+      setUsageError(true);
     } finally {
       setUsageLoading(false);
     }
@@ -453,10 +456,24 @@ export default function DeveloperPage() {
               <div className="flex justify-center py-10">
                 <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
               </div>
+            ) : usageError ? (
+              <div className="bg-white rounded-2xl p-8 text-center" style={{ border: '1.5px solid #e3ddf8' }}>
+                <BarChart2 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-700 text-sm font-medium mb-1">Failed to load usage data</p>
+                <p className="text-gray-400 text-xs mb-4">The API may be unavailable. Check that the server is running.</p>
+                <button
+                  type="button"
+                  onClick={() => void loadUsage(usageDays)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-medium text-white"
+                  style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)' }}
+                >
+                  <Loader2 className="w-3.5 h-3.5" /> Retry
+                </button>
+              </div>
             ) : !usage ? (
               <div className="bg-white rounded-2xl p-8 text-center" style={{ border: '1.5px solid #e3ddf8' }}>
                 <BarChart2 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                <p className="text-gray-500 text-sm">No usage data available.</p>
+                <p className="text-gray-500 text-sm">No usage data yet. Make API calls using your keys to see stats here.</p>
               </div>
             ) : (
               <>

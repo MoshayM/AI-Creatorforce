@@ -569,14 +569,16 @@ interface WalletBalance {
 }
 
 function CreditsTab() {
-  const { data: balance, isLoading: balLoading } = useQuery<WalletBalance>({
+  const { data: balance, isLoading: balLoading, isError: balError } = useQuery<WalletBalance>({
     queryKey: ['wallet-balance'],
     queryFn: () => api.wallet.balance().then((r) => r.data as WalletBalance),
+    retry: 1,
   });
 
-  const { data: usage, isLoading: usageLoading } = useQuery<UsageSummary>({
+  const { data: usage, isLoading: usageLoading, isError: usageError } = useQuery<UsageSummary>({
     queryKey: ['wallet-usage', 30],
     queryFn: () => api.wallet.usageSummary(30).then((r) => r.data),
+    retry: 1,
   });
 
   const topActions = usage?.byAction?.slice().sort((a, b) => b.credits - a.credits).slice(0, 6) ?? [];
@@ -604,6 +606,8 @@ function CreditsTab() {
         </div>
         {balLoading ? (
           <Loader2 className="w-5 h-5 animate-spin mt-2" />
+        ) : balError ? (
+          <p className="text-sm text-white/60 mt-2">Unable to load balance — check your connection</p>
         ) : (
           <>
             <p className="text-4xl font-bold">{balance ? fmtCredits(balance.balance) : '—'}</p>
@@ -624,6 +628,8 @@ function CreditsTab() {
 
         {usageLoading ? (
           <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+        ) : usageError ? (
+          <p className="text-sm text-amber-600 py-4 text-center">Could not load usage data. The server may be unavailable.</p>
         ) : topActions.length === 0 ? (
           <p className="text-sm text-gray-400 py-4 text-center">No usage data yet</p>
         ) : (
