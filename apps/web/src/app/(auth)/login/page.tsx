@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { User, Lock, Eye, EyeOff, Loader2, KeyRound, Phone, Mail } from 'lucide-react';
+import { Eye, EyeOff, Loader2, KeyRound, Phone, Mail, Lock, AtSign } from 'lucide-react';
 import { api, setTokens, type OAuthProviders, type OAuthProvider } from '@/lib/api';
-import { AuthShell, AuthPillInput, SocialRow, type OAuthProviderName } from '@/components/auth-shell';
+import { LoginShell, LoginInput, SocialRow, type OAuthProviderName } from '@/components/auth-shell';
 import CountryCodeSelect, { COUNTRIES, type Country } from '@/components/country-code-select';
 
 const MOCK_MODE = process.env['NEXT_PUBLIC_USE_MOCK'] === 'true';
@@ -28,7 +28,7 @@ export default function LoginPage() {
   const [otpMode, setOtpMode] = useState<OtpMode>('email');
   const [otpEmail, setOtpEmail] = useState('');
   const [otpPhone, setOtpPhone] = useState('');
-  const [otpCountry, setOtpCountry] = useState<Country>(COUNTRIES[0]); // India default
+  const [otpCountry, setOtpCountry] = useState<Country>(COUNTRIES[0]);
   const [otpCode, setOtpCode] = useState('');
   const [otpStep, setOtpStep] = useState<OtpStep>('send');
 
@@ -37,7 +37,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<OAuthProviders | undefined>(undefined);
 
-  // The full identifier sent to the API
   const otpIdentifier =
     otpMode === 'email'
       ? otpEmail.trim()
@@ -77,7 +76,7 @@ export default function LoginPage() {
       } else if (status === 429) {
         setError('Too many attempts. Please wait a minute and try again.');
       } else if (!status) {
-        setError(`Cannot reach the server. Make sure the API is running.`);
+        setError('Cannot reach the server. Make sure the API is running.');
       } else {
         setError('Login failed. Please try again.');
       }
@@ -150,130 +149,157 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthShell
-      brand="AI CreatorForce"
-      title="Welcome Back"
-      subtitle="Login to continue your journey"
-      mascot="🙋‍♀️"
+    <LoginShell
       footer={
         <>
           Don&rsquo;t have an account?{' '}
-          <Link href="/register" className="text-[#7b5ec7] font-semibold hover:underline">
-            Sign Up
+          <Link href="/register" className="text-[#6D4AE0] font-semibold hover:underline">
+            Create one free
           </Link>
         </>
       }
     >
-      {/* Tab switcher */}
-      <div className="flex bg-gray-100 rounded-full p-1 mb-5">
+      {/* ── Tab switcher ────────────────────────────────────────────── */}
+      <div className="flex bg-[#f0edf9] rounded-2xl p-1 mb-6">
         <button
           type="button"
           onClick={() => switchTab('password')}
-          className={`flex-1 py-1.5 text-sm font-medium rounded-full transition-colors ${tab === 'password' ? 'bg-white shadow text-[#7b5ec7]' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${
+            tab === 'password'
+              ? 'bg-white shadow text-[#6D4AE0]'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
         >
           Password
         </button>
         <button
           type="button"
           onClick={() => switchTab('otp')}
-          className={`flex-1 py-1.5 text-sm font-medium rounded-full transition-colors ${tab === 'otp' ? 'bg-white shadow text-[#7b5ec7]' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all ${
+            tab === 'otp'
+              ? 'bg-white shadow text-[#6D4AE0]'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
         >
           Sign in with OTP
         </button>
       </div>
 
+      {/* ── Password tab ─────────────────────────────────────────────── */}
       {tab === 'password' ? (
         <form onSubmit={(e) => { void handlePasswordSubmit(e); }} className="space-y-4">
-          <AuthPillInput
-            icon={<User className="w-4 h-4" />}
+          <LoginInput
+            icon={<AtSign className="w-4 h-4" />}
+            label="Email address"
             type="email"
             aria-label="Email"
-            placeholder="Email"
+            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
-          <div className="relative">
-            <AuthPillInput
-              icon={<Lock className="w-4 h-4" />}
-              type={showPassword ? 'text' : 'password'}
-              aria-label="Password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-gray-600"
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          <div className="text-right">
+          <LoginInput
+            icon={<Lock className="w-4 h-4" />}
+            label="Password"
+            type={showPassword ? 'text' : 'password'}
+            aria-label="Password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            rightElement={
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            }
+          />
+
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={() => router.push('/forgot-password')}
-              className="text-xs text-[#7b5ec7] hover:underline"
+              className="text-xs text-[#6D4AE0] hover:underline font-medium"
             >
-              Forgot Password?
+              Forgot password?
             </button>
           </div>
-          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-          {info && <p className="text-[#7b5ec7] text-xs text-center">{info}</p>}
+
+          {error && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-3.5 py-2.5">
+              <span className="text-red-400 text-sm" aria-hidden>⚠</span>
+              <p className="text-red-600 text-xs font-medium">{error}</p>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-[#7a63cb] hover:bg-[#6b54bd] text-white rounded-full font-semibold shadow-lg shadow-[#8b74d8]/40 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+            className="w-full py-3.5 text-white rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.99]"
+            style={{
+              background: loading ? '#8b74d8' : 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)',
+              boxShadow: '0 4px 20px rgba(109,74,224,0.35)',
+            }}
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {loading ? 'Logging in…' : 'Login'}
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
       ) : (
+        /* ── OTP tab ───────────────────────────────────────────────── */
         <div className="space-y-4">
           {otpStep === 'send' ? (
             <form onSubmit={(e) => { void handleOtpSend(e); }} className="space-y-4">
-              <p className="text-sm text-gray-500 text-center">
-                Enter your registered email or phone number to receive a sign-in OTP.
+              <p className="text-xs text-gray-400 text-center">
+                Enter your registered email or phone to receive a one-time code.
               </p>
 
-              {/* Email / Phone toggle */}
-              <div className="flex bg-gray-100 rounded-full p-0.5 text-xs">
+              {/* Email / Phone sub-toggle */}
+              <div className="flex bg-[#f0edf9] rounded-xl p-0.5">
                 <button
                   type="button"
                   onClick={() => switchOtpMode('email')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full transition-colors font-medium ${otpMode === 'email' ? 'bg-white shadow text-[#7b5ec7]' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-[10px] transition-all ${
+                    otpMode === 'email'
+                      ? 'bg-white shadow text-[#6D4AE0]'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
                 >
-                  <Mail className="w-3 h-3" /> Email
+                  <Mail className="w-3.5 h-3.5" /> Email
                 </button>
                 <button
                   type="button"
                   onClick={() => switchOtpMode('phone')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full transition-colors font-medium ${otpMode === 'phone' ? 'bg-white shadow text-[#7b5ec7]' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-[10px] transition-all ${
+                    otpMode === 'phone'
+                      ? 'bg-white shadow text-[#6D4AE0]'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
                 >
-                  <Phone className="w-3 h-3" /> Phone
+                  <Phone className="w-3.5 h-3.5" /> Phone
                 </button>
               </div>
 
               {otpMode === 'email' ? (
-                <AuthPillInput
+                <LoginInput
                   icon={<Mail className="w-4 h-4" />}
                   type="email"
                   aria-label="Email"
-                  placeholder="Email address"
+                  placeholder="you@example.com"
                   value={otpEmail}
                   onChange={(e) => setOtpEmail(e.target.value)}
                   required
                 />
               ) : (
-                <div className="flex rounded-full border border-gray-200 bg-white focus-within:ring-2 focus-within:ring-[#7b5ec7]/40">
-                  <CountryCodeSelect
-                    value={otpCountry}
-                    onChange={setOtpCountry}
-                  />
+                <div
+                  className="flex items-center bg-white rounded-2xl transition-all focus-within:ring-2 focus-within:ring-[#6D4AE0]/20 focus-within:border-[#6D4AE0]"
+                  style={{ border: '1.5px solid #e3e0f0' }}
+                >
+                  <CountryCodeSelect value={otpCountry} onChange={setOtpCountry} />
                   <input
                     type="tel"
                     aria-label="Phone number"
@@ -282,16 +308,26 @@ export default function LoginPage() {
                     onChange={(e) => setOtpPhone(e.target.value.replace(/\D/g, ''))}
                     inputMode="numeric"
                     required
-                    className="flex-1 px-3 py-2.5 text-sm outline-none bg-transparent text-gray-800 placeholder:text-gray-400"
+                    className="flex-1 px-3 py-3 text-sm outline-none bg-transparent text-gray-800 placeholder:text-gray-400"
                   />
                 </div>
               )}
 
-              {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+              {error && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-3.5 py-2.5">
+                  <span className="text-red-400 text-sm" aria-hidden>⚠</span>
+                  <p className="text-red-600 text-xs font-medium">{error}</p>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={loading || !otpIdentifier}
-                className="w-full py-3 bg-[#7a63cb] hover:bg-[#6b54bd] text-white rounded-full font-semibold shadow-lg shadow-[#8b74d8]/40 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                className="w-full py-3.5 text-white rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.99]"
+                style={{
+                  background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)',
+                  boxShadow: '0 4px 20px rgba(109,74,224,0.35)',
+                }}
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                 {loading ? 'Sending…' : 'Send OTP'}
@@ -299,22 +335,26 @@ export default function LoginPage() {
             </form>
           ) : (
             <form onSubmit={(e) => { void handleOtpVerify(e); }} className="space-y-4">
-              <p className="text-sm text-gray-500 text-center">
-                OTP sent to{' '}
-                <span className="font-medium text-gray-700">{otpIdentifier}</span>.{' '}
+              <div className="bg-[#f0edf9] rounded-xl px-4 py-3 text-center">
+                <p className="text-xs text-gray-500">
+                  Code sent to{' '}
+                  <span className="font-semibold text-[#6D4AE0]">{otpIdentifier}</span>
+                </p>
                 <button
                   type="button"
                   onClick={() => { setOtpStep('send'); setError(''); setInfo(''); }}
-                  className="text-[#7b5ec7] hover:underline text-xs"
+                  className="text-[10px] text-[#6D4AE0] hover:underline mt-0.5"
                 >
                   Change
                 </button>
-              </p>
-              <AuthPillInput
+              </div>
+
+              <LoginInput
                 icon={<KeyRound className="w-4 h-4" />}
+                label="Enter 6-digit code"
                 type="text"
                 aria-label="6-digit OTP"
-                placeholder="6-digit OTP"
+                placeholder="000000"
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 inputMode="numeric"
@@ -322,36 +362,54 @@ export default function LoginPage() {
                 maxLength={6}
                 required
               />
-              {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-              {info && <p className="text-[#7b5ec7] text-xs text-center">{info}</p>}
+
+              {info && (
+                <div className="flex items-center gap-2 bg-[#f0edf9] border border-[#d4c8f5] rounded-xl px-3.5 py-2.5">
+                  <span className="text-[#6D4AE0] text-sm" aria-hidden>✓</span>
+                  <p className="text-[#6D4AE0] text-xs font-medium">{info}</p>
+                </div>
+              )}
+              {error && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-3.5 py-2.5">
+                  <span className="text-red-400 text-sm" aria-hidden>⚠</span>
+                  <p className="text-red-600 text-xs font-medium">{error}</p>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={loading || otpCode.length !== 6}
-                className="w-full py-3 bg-[#7a63cb] hover:bg-[#6b54bd] text-white rounded-full font-semibold shadow-lg shadow-[#8b74d8]/40 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                className="w-full py-3.5 text-white rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.99]"
+                style={{
+                  background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)',
+                  boxShadow: '0 4px 20px rgba(109,74,224,0.35)',
+                }}
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                 {loading ? 'Verifying…' : 'Verify & Sign In'}
               </button>
+
               <button
                 type="button"
                 onClick={() => { void handleOtpSend({ preventDefault: () => {} } as React.FormEvent); }}
                 disabled={loading}
-                className="w-full text-xs text-[#7b5ec7] hover:underline disabled:opacity-50"
+                className="w-full text-xs text-[#6D4AE0] hover:underline disabled:opacity-50 py-1"
               >
-                Resend OTP
+                Resend code
               </button>
+
               {IS_DEV && (
                 <button
                   type="button"
                   disabled={loading}
-                  className="w-full text-xs text-amber-600 hover:underline disabled:opacity-50"
+                  className="w-full text-xs text-amber-500 hover:underline disabled:opacity-50 py-1"
                   onClick={async () => {
                     try {
                       const { data } = await api.auth.otpDevPeek(otpIdentifier);
                       setOtpCode(data.code);
                       setInfo(`[Dev] OTP auto-filled: ${data.code}`);
                     } catch {
-                      setError('[Dev] No pending OTP found. Check API console for the OTP.');
+                      setError('[Dev] No pending OTP found. Check API console.');
                     }
                   }}
                 >
@@ -363,10 +421,11 @@ export default function LoginPage() {
         </div>
       )}
 
+      {/* ── Social sign-in ───────────────────────────────────────────── */}
       <SocialRow
         providers={providers}
         onProviderClick={(p) => { void handleSocialLogin(p); }}
       />
-    </AuthShell>
+    </LoginShell>
   );
 }

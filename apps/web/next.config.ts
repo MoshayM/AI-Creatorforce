@@ -42,6 +42,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // ZAP baseline rule 10037: don't advertise the framework.
   poweredByHeader: false,
+  devIndicators: false,
   experimental: {
     serverActions: { allowedOrigins: ['localhost:3007'] },
   },
