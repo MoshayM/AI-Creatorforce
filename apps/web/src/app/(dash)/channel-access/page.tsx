@@ -8,7 +8,7 @@ import { Loader2 } from 'lucide-react';
 // query params like ?connected=true / ?error=... for the banner logic.
 export default function ChannelAccessRedirect() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-gray-500" /></div>}>
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" style={{ color: '#6D4AE0' }} /></div>}>
       <RedirectInner />
     </Suspense>
   );
@@ -24,7 +24,7 @@ function RedirectInner() {
   }, [router, searchParams]);
   return (
     <div className="flex items-center justify-center py-20">
-      <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
+      <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#6D4AE0' }} />
     </div>
   );
 }

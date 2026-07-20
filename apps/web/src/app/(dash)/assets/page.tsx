@@ -41,12 +41,12 @@ const KIND_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
   RENDER_SOURCE: Layers,
 };
 
-const STATUS_BADGE: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
-  BRIEFED: { label: 'Brief ready', icon: Clock, color: 'bg-gray-100 text-gray-600' },
-  GENERATING: { label: 'Generating', icon: RefreshCw, color: 'bg-blue-100 text-blue-700' },
-  READY: { label: 'Ready', icon: CheckCircle, color: 'bg-green-100 text-green-700' },
-  ACCEPTED: { label: 'Accepted', icon: CheckCircle, color: 'bg-brand-100 text-brand-700' },
-  FAILED: { label: 'Failed', icon: AlertCircle, color: 'bg-red-100 text-red-600' },
+const STATUS_BADGE: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; style: React.CSSProperties }> = {
+  BRIEFED: { label: 'Brief ready', icon: Clock, style: { background: '#f3f4f6', color: '#4b5563' } },
+  GENERATING: { label: 'Generating', icon: RefreshCw, style: { background: '#eff6ff', color: '#1d4ed8' } },
+  READY: { label: 'Ready', icon: CheckCircle, style: { background: '#ecfdf5', color: '#065f46' } },
+  ACCEPTED: { label: 'Accepted', icon: CheckCircle, style: { background: '#f5f2fd', color: '#6D4AE0' } },
+  FAILED: { label: 'Failed', icon: AlertCircle, style: { background: '#fef2f2', color: '#dc2626' } },
 };
 
 export default function AssetsPage() {
@@ -78,83 +78,97 @@ export default function AssetsPage() {
   }, {});
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex items-center gap-3 mb-8">
-        <Layers className="w-7 h-7 text-brand-600" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Asset Library</h1>
-          <p className="text-sm text-gray-500">Voice takes, images, music, thumbnails, and render sources per project</p>
-        </div>
-      </div>
-
-      {/* Project selector */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <label htmlFor="assets-project" className="block text-sm font-medium text-gray-700 mb-2">Select Project</label>
-        <select
-          id="assets-project"
-          value={selectedProject}
-          onChange={e => setSelectedProject(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-        >
-          <option value="">Choose a project…</option>
-          {projects.map(p => (
-            <option key={p.id} value={p.id}>{p.title}</option>
-          ))}
-        </select>
-      </div>
-
-      {loading && (
-        <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-6 h-6 animate-spin text-brand-500" />
-        </div>
-      )}
-      {error && <p className="text-sm text-red-500">{error}</p>}
-
-      {selectedProject && !loading && assets.length === 0 && (
-        <div className="text-center py-16 text-gray-500">
-          <Layers className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No assets yet for this project.</p>
-          <p className="text-xs mt-1">Run Voice Spec, Image Brief, or Music Brief from the project pipeline.</p>
-        </div>
-      )}
-
-      {Object.entries(grouped).map(([kind, kindAssets]) => {
-        const Icon = KIND_ICONS[kind] ?? Layers;
-        return (
-          <div key={kind} className="mb-6">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">
-              <Icon className="w-4 h-4 text-brand-500" />
-              {kind.replace('_', ' ')} ({kindAssets.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {kindAssets.map(asset => {
-                const status = STATUS_BADGE[asset.status] ?? STATUS_BADGE['BRIEFED'];
-                const StatusIcon = status.icon;
-                const latestVersion = asset.versions[0];
-                return (
-                  <div key={asset.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <p className="text-sm font-medium text-gray-900 truncate flex-1">
-                        {asset.label ?? `${kind} — ${asset.id.slice(0, 8)}`}
-                      </p>
-                      <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ml-2 ${status.color}`}>
-                        <StatusIcon className={`w-3 h-3 ${asset.status === 'GENERATING' ? 'animate-spin' : ''}`} />
-                        {status.label}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      {asset.versions.length} version{asset.versions.length !== 1 ? 's' : ''}
-                      {latestVersion?.provider ? ` · ${latestVersion.provider}` : ''}
-                      {latestVersion?.durationMs ? ` · ${Math.round(latestVersion.durationMs / 1000)}s` : ''}
-                    </p>
-                    <p className="text-xs text-gray-300 mt-1">Created {new Date(asset.createdAt).toLocaleDateString()}</p>
-                  </div>
-                );
-              })}
-            </div>
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
+        {/* Page header */}
+        <div className="flex items-center gap-3">
+          <Layers className="w-7 h-7" style={{ color: '#6D4AE0' }} />
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">Asset Library</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Voice takes, images, music, thumbnails, and render sources per project</p>
           </div>
-        );
-      })}
+        </div>
+
+        {/* Project selector */}
+        <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+          <label htmlFor="assets-project" className="block text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-2">Select Project</label>
+          <select
+            id="assets-project"
+            value={selectedProject}
+            onChange={e => setSelectedProject(e.target.value)}
+            className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+            style={{ border: '1.5px solid #e3e0f0' }}
+          >
+            <option value="">Choose a project…</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.title}</option>
+            ))}
+          </select>
+        </div>
+
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw className="w-6 h-6 animate-spin" style={{ color: '#6D4AE0' }} />
+          </div>
+        )}
+        {error && <p className="text-sm text-red-500">{error}</p>}
+
+        {selectedProject && !loading && assets.length === 0 && (
+          <div className="bg-white rounded-3xl p-12 flex flex-col items-center text-center" style={{ border: '1.5px solid #e3ddf8' }}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg, #f0edf9, #e3ddf8)' }}>
+              <Layers className="w-7 h-7" style={{ color: '#6D4AE0' }} />
+            </div>
+            <p className="text-sm font-semibold text-gray-700">No assets yet for this project</p>
+            <p className="text-xs text-gray-400 mt-1">Run Voice Spec, Image Brief, or Music Brief from the project pipeline.</p>
+          </div>
+        )}
+
+        {Object.entries(grouped).map(([kind, kindAssets]) => {
+          const Icon = KIND_ICONS[kind] ?? Layers;
+          return (
+            <div key={kind}>
+              <h2 className="flex items-center gap-2 mb-3">
+                <Icon className="w-4 h-4 text-[#6D4AE0]" />
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">
+                  {kind.replace('_', ' ')}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold" style={{ background: '#f5f2fd', color: '#6D4AE0' }}>
+                  {kindAssets.length}
+                </span>
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {kindAssets.map(asset => {
+                  const status = STATUS_BADGE[asset.status] ?? STATUS_BADGE['BRIEFED'];
+                  const StatusIcon = status.icon;
+                  const latestVersion = asset.versions[0];
+                  return (
+                    <div key={asset.id} className="bg-white rounded-2xl p-4" style={{ border: '1.5px solid #e3ddf8' }}>
+                      <div className="flex items-start justify-between mb-2">
+                        <p className="text-sm font-medium text-gray-900 truncate flex-1">
+                          {asset.label ?? `${kind} — ${asset.id.slice(0, 8)}`}
+                        </p>
+                        <span
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ml-2"
+                          style={status.style}
+                        >
+                          <StatusIcon className={`w-3 h-3 ${asset.status === 'GENERATING' ? 'animate-spin' : ''}`} />
+                          {status.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {asset.versions.length} version{asset.versions.length !== 1 ? 's' : ''}
+                        {latestVersion?.provider ? ` · ${latestVersion.provider}` : ''}
+                        {latestVersion?.durationMs ? ` · ${Math.round(latestVersion.durationMs / 1000)}s` : ''}
+                      </p>
+                      <p className="text-xs text-gray-300 mt-1">Created {new Date(asset.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

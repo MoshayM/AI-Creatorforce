@@ -39,9 +39,9 @@ function CreateOrgCard({ onCreated }: { onCreated: (org: Org) => void }) {
   });
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-5 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center gap-2">
-        <PlusCircle className="w-4 h-4 text-brand-600" />
+        <PlusCircle className="w-4 h-4" style={{ color: '#6D4AE0' }} />
         <span className="text-sm font-semibold text-gray-800">Create Organization</span>
       </div>
       <p className="text-xs text-gray-500">
@@ -55,7 +55,8 @@ function CreateOrgCard({ onCreated }: { onCreated: (org: Org) => void }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Acme Studios"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+            style={{ border: '1.5px solid #e3e0f0' }}
           />
         </div>
         <div>
@@ -66,7 +67,8 @@ function CreateOrgCard({ onCreated }: { onCreated: (org: Org) => void }) {
             value={billingEmail}
             onChange={(e) => setBillingEmail(e.target.value)}
             placeholder="finance@acme.example"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+            style={{ border: '1.5px solid #e3e0f0' }}
           />
         </div>
       </div>
@@ -76,7 +78,8 @@ function CreateOrgCard({ onCreated }: { onCreated: (org: Org) => void }) {
       <button
         onClick={() => create.mutate()}
         disabled={!name.trim() || create.isPending}
-        className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2"
+        className="inline-flex items-center gap-1.5 disabled:opacity-50 text-white text-sm font-bold rounded-2xl px-5 py-3"
+        style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
       >
         {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
         Create organization
@@ -137,10 +140,10 @@ function BudgetCard({ org }: { org: Org }) {
     : 0;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-5 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <PiggyBank className="w-4 h-4 text-brand-600" />
+          <PiggyBank className="w-4 h-4" style={{ color: '#6D4AE0' }} />
           <span className="text-sm font-semibold text-gray-800">Shared Wallet &amp; Budget</span>
         </div>
         <div className="flex items-center gap-3">
@@ -149,7 +152,8 @@ function BudgetCard({ org }: { org: Org }) {
               aria-label="Budget scope"
               value={teamId}
               onChange={(e) => setTeamId(e.target.value)}
-              className="border border-gray-300 rounded-lg px-2 py-1 text-xs bg-white"
+              className="bg-white rounded-2xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+              style={{ border: '1.5px solid #e3e0f0' }}
             >
               <option value="">Org-wide</option>
               {teams.map((t) => (
@@ -158,28 +162,28 @@ function BudgetCard({ org }: { org: Org }) {
             </select>
           )}
           {canManageBudget(org.role) && !editing && (
-            <button onClick={() => setEditing(true)} className="text-xs text-brand-600 hover:underline">
+            <button onClick={() => setEditing(true)} className="text-xs font-semibold hover:underline" style={{ color: '#6D4AE0' }}>
               New budget period
             </button>
           )}
         </div>
       </div>
 
-      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} />}
 
       {budget && (
         <div className="grid sm:grid-cols-3 gap-3 text-center">
-          <div className="bg-gray-50 rounded-lg p-3">
+          <div className="bg-gray-50 rounded-2xl p-3">
             <p className="text-xs text-gray-500">Org balance</p>
             <p className="text-lg font-bold text-gray-900">{budget.orgBalance.toLocaleString()}</p>
             <p className="text-[11px] text-gray-500">credits</p>
           </div>
-          <div className="bg-gray-50 rounded-lg p-3">
+          <div className="bg-gray-50 rounded-2xl p-3">
             <p className="text-xs text-gray-500">Period budget</p>
             <p className="text-lg font-bold text-gray-900">{period ? period.allocatedCredits.toLocaleString() : '—'}</p>
             <p className="text-[11px] text-gray-500">{period ? (period.hardCap ? 'hard cap' : 'soft cap') : 'no current period'}</p>
           </div>
-          <div className="bg-gray-50 rounded-lg p-3">
+          <div className="bg-gray-50 rounded-2xl p-3">
             <p className="text-xs text-gray-500">Remaining</p>
             <p className="text-lg font-bold text-gray-900">{budget.remaining !== null ? budget.remaining.toLocaleString() : '—'}</p>
             <p className="text-[11px] text-gray-500">{period ? `${consumedPct}% consumed` : 'unlimited'}</p>
@@ -190,8 +194,8 @@ function BudgetCard({ org }: { org: Org }) {
       {period && (
         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full ${consumedPct >= 90 ? 'bg-red-500' : consumedPct >= 70 ? 'bg-amber-400' : 'bg-brand-600'}`}
-            style={{ width: `${consumedPct}%` }}
+            className={`h-full rounded-full ${consumedPct >= 90 ? 'bg-red-500' : consumedPct >= 70 ? 'bg-amber-400' : ''}`}
+            style={{ width: `${consumedPct}%`, ...(consumedPct < 70 ? { background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)' } : {}) }}
           />
         </div>
       )}
@@ -209,17 +213,20 @@ function BudgetCard({ org }: { org: Org }) {
             <div>
               <label htmlFor="budget-start" className="block text-xs text-gray-600 mb-1">Period start</label>
               <input id="budget-start" type="date" value={start} onChange={(e) => setStart(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+                style={{ border: '1.5px solid #e3e0f0' }} />
             </div>
             <div>
               <label htmlFor="budget-end" className="block text-xs text-gray-600 mb-1">Period end</label>
               <input id="budget-end" type="date" value={end} onChange={(e) => setEnd(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+                style={{ border: '1.5px solid #e3e0f0' }} />
             </div>
             <div>
               <label htmlFor="budget-credits" className="block text-xs text-gray-600 mb-1">Allocated credits</label>
               <input id="budget-credits" type="number" min={0} value={allocated} onChange={(e) => setAllocated(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+                style={{ border: '1.5px solid #e3e0f0' }} />
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -233,11 +240,12 @@ function BudgetCard({ org }: { org: Org }) {
             <button
               onClick={() => save.mutate()}
               disabled={!start || !end || save.isPending}
-              className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2"
+              className="inline-flex items-center gap-1.5 disabled:opacity-50 text-white text-sm font-bold rounded-2xl px-5 py-3"
+              style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
             >
               {save.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Save period
             </button>
-            <button onClick={() => { setEditing(false); setError(null); }} className="text-sm text-gray-500 hover:text-gray-700 px-3">
+            <button onClick={() => { setEditing(false); setError(null); }} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-3 rounded-2xl font-semibold" style={{ border: '1.5px solid #e3ddf8' }}>
               Cancel
             </button>
           </div>
@@ -276,14 +284,14 @@ function MembersCard({ org }: { org: Org }) {
   });
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-5 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center gap-2">
-        <Users className="w-4 h-4 text-brand-600" />
+        <Users className="w-4 h-4" style={{ color: '#6D4AE0' }} />
         <span className="text-sm font-semibold text-gray-800">Members</span>
         <span className="text-xs text-gray-500">{members.length}</span>
       </div>
 
-      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} />}
 
       {members.length > 0 && (
         <table className="w-full text-sm">
@@ -325,12 +333,14 @@ function MembersCard({ org }: { org: Org }) {
               <label htmlFor="member-email" className="block text-xs text-gray-600 mb-1">Email (must be registered)</label>
               <input id="member-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="teammate@example.com"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+                style={{ border: '1.5px solid #e3e0f0' }} />
             </div>
             <div>
               <label htmlFor="member-role" className="block text-xs text-gray-600 mb-1">Role</label>
               <select id="member-role" value={role} onChange={(e) => setRole(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+                style={{ border: '1.5px solid #e3e0f0' }}>
                 <option value="MEMBER">Member</option>
                 <option value="TEAM_MANAGER">Team manager</option>
                 <option value="BILLING_ADMIN">Billing admin</option>
@@ -341,7 +351,8 @@ function MembersCard({ org }: { org: Org }) {
               <div>
                 <label htmlFor="member-team" className="block text-xs text-gray-600 mb-1">Team</label>
                 <select id="member-team" value={teamId} onChange={(e) => setTeamId(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+                  style={{ border: '1.5px solid #e3e0f0' }}>
                   <option value="">No team</option>
                   {teams.map((t) => (
                     <option key={t.id} value={t.id}>{t.name}</option>
@@ -362,7 +373,8 @@ function MembersCard({ org }: { org: Org }) {
           <button
             onClick={() => add.mutate()}
             disabled={!email.trim() || add.isPending}
-            className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2"
+            className="inline-flex items-center gap-1.5 disabled:opacity-50 text-white text-sm font-bold rounded-2xl px-5 py-3"
+            style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
           >
             {add.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
             Add member
@@ -393,9 +405,9 @@ function TeamsCard({ org }: { org: Org }) {
   });
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-5 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center gap-2">
-        <Layers className="w-4 h-4 text-brand-600" />
+        <Layers className="w-4 h-4" style={{ color: '#6D4AE0' }} />
         <span className="text-sm font-semibold text-gray-800">Teams</span>
         <span className="text-xs text-gray-500">{teams.length}</span>
       </div>
@@ -403,7 +415,7 @@ function TeamsCard({ org }: { org: Org }) {
         Teams scope budgets: a budget period created for a team only gates members assigned to it.
       </p>
 
-      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} />}
 
       {teams.length > 0 && (
         <ul className="flex flex-wrap gap-2">
@@ -420,12 +432,14 @@ function TeamsCard({ org }: { org: Org }) {
               <label htmlFor="team-name" className="block text-xs text-gray-600 mb-1">Team name</label>
               <input id="team-name" value={name} onChange={(e) => setName(e.target.value)}
                 placeholder="Video production"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+                style={{ border: '1.5px solid #e3e0f0' }} />
             </div>
             <button
               onClick={() => create.mutate()}
               disabled={!name.trim() || create.isPending}
-              className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2"
+              className="inline-flex items-center gap-1.5 disabled:opacity-50 text-white text-sm font-bold rounded-2xl px-5 py-3"
+              style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
             >
               {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
               Create team
@@ -467,7 +481,7 @@ function UsageReportCard({ org }: { org: Org }) {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+    <div className="bg-white rounded-2xl p-5 flex items-center justify-between" style={{ border: '1.5px solid #e3ddf8' }}>
       <div>
         <p className="text-sm font-semibold text-gray-800">Usage report</p>
         <p className="text-xs text-gray-500">Per-member credit usage rollup for this organization.</p>
@@ -478,7 +492,8 @@ function UsageReportCard({ org }: { org: Org }) {
       <button
         onClick={() => void download()}
         disabled={downloading}
-        className="inline-flex items-center gap-1.5 border border-gray-300 hover:bg-gray-50 disabled:opacity-50 text-gray-700 text-sm font-medium rounded-lg px-4 py-2"
+        className="inline-flex items-center gap-1.5 disabled:opacity-50 text-gray-600 text-sm font-semibold rounded-2xl px-5 py-3"
+        style={{ border: '1.5px solid #e3ddf8' }}
       >
         {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
         Download CSV
@@ -500,53 +515,56 @@ export default function OrgsPage() {
   const selected = orgs.find((o) => o.id === selectedId) ?? orgs[0] ?? null;
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Building2 className="w-6 h-6 text-brand-600" /> Organization
-        </h1>
-        <p className="text-gray-500 mt-1">
-          Shared wallets, budgets and member roles. Projects and copilot turns can bill here instead of your personal wallet.
-        </p>
-      </div>
-
-      {isLoading && <Loader2 className="w-6 h-6 animate-spin text-brand-600" />}
-
-      {!isLoading && orgs.length > 1 && (
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
         <div>
-          <label htmlFor="org-select" className="block text-xs text-gray-600 mb-1">Organization</label>
-          <select
-            id="org-select"
-            value={selected?.id ?? ''}
-            onChange={(e) => setSelectedId(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
-          >
-            {orgs.map((o) => (
-              <option key={o.id} value={o.id}>{o.name}</option>
-            ))}
-          </select>
+          <h1 className="flex items-center gap-2 text-2xl font-extrabold text-gray-900 leading-tight">
+            <Building2 className="w-6 h-6" style={{ color: '#6D4AE0' }} /> Organization
+          </h1>
+          <p className="text-sm text-gray-400 mt-0.5">
+            Shared wallets, budgets and member roles. Projects and copilot turns can bill here instead of your personal wallet.
+          </p>
         </div>
-      )}
 
-      {selected && (
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-gray-900">{selected.name}</h2>
-            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ROLE_BADGE[selected.role] ?? ROLE_BADGE['MEMBER']}`}>
-              your role: {selected.role.replace(/_/g, ' ')}
-            </span>
+        {isLoading && <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#6D4AE0' }} />}
+
+        {!isLoading && orgs.length > 1 && (
+          <div>
+            <label htmlFor="org-select" className="block text-xs text-gray-600 mb-1">Organization</label>
+            <select
+              id="org-select"
+              value={selected?.id ?? ''}
+              onChange={(e) => setSelectedId(e.target.value)}
+              className="bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+              style={{ border: '1.5px solid #e3e0f0' }}
+            >
+              {orgs.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
           </div>
-          <BudgetCard org={selected} />
-          <TeamsCard org={selected} />
-          <MembersCard org={selected} />
-          <UsageReportCard org={selected} />
-        </section>
-      )}
+        )}
 
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">{orgs.length === 0 ? 'Get started' : 'New organization'}</h2>
-        <CreateOrgCard onCreated={(org) => setSelectedId(org.id)} />
-      </section>
+        {selected && (
+          <section className="space-y-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-gray-900">{selected.name}</h2>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ROLE_BADGE[selected.role] ?? ROLE_BADGE['MEMBER']}`}>
+                your role: {selected.role.replace(/_/g, ' ')}
+              </span>
+            </div>
+            <BudgetCard org={selected} />
+            <TeamsCard org={selected} />
+            <MembersCard org={selected} />
+            <UsageReportCard org={selected} />
+          </section>
+        )}
+
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">{orgs.length === 0 ? 'Get started' : 'New organization'}</h2>
+          <CreateOrgCard onCreated={(org) => setSelectedId(org.id)} />
+        </section>
+      </div>
     </div>
   );
 }

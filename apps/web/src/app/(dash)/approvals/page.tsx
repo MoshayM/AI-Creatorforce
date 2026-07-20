@@ -16,11 +16,11 @@ interface Approval {
   job: { type: string; result: unknown };
 }
 
-const STATUS_CHIP: Record<string, string> = {
-  APPROVED: 'bg-green-100 text-green-700',
-  REJECTED: 'bg-red-100 text-red-700',
-  EXPIRED: 'bg-gray-100 text-gray-500',
-  PENDING: 'bg-gray-100 text-gray-500', // lapsed-pending shown as expired
+const STATUS_CHIP: Record<string, React.CSSProperties> = {
+  APPROVED: { background: '#ecfdf5', color: '#065f46' },
+  REJECTED: { background: '#fef2f2', color: '#dc2626' },
+  EXPIRED: { background: '#f3f4f6', color: '#4b5563' },
+  PENDING: { background: '#f3f4f6', color: '#4b5563' },
 };
 
 interface ShortsExportResult {
@@ -59,19 +59,19 @@ function ShortsExportReview({ result }: { result: ShortsExportResult }) {
   const videoUrl = useBlobUrl(result.exportVersionId);
   const meta = result.metadata ?? {};
   return (
-    <div className="flex gap-4 bg-gray-50 rounded-lg p-4 mb-4">
+    <div className="flex gap-4 rounded-2xl p-4 mb-4" style={{ background: '#faf9ff', border: '1.5px solid #e3ddf8' }}>
       <div className="w-32 shrink-0">
         {videoUrl ? (
           // eslint-disable-next-line jsx-a11y/media-has-caption -- AI-generated preview; caption track not produced
-          <video src={videoUrl} controls className="w-full rounded-lg aspect-[9/16] object-cover bg-black" />
+          <video src={videoUrl} controls className="w-full rounded-2xl aspect-[9/16] object-cover bg-black" />
         ) : (
-          <div className="w-full rounded-lg aspect-[9/16] bg-gray-200 flex items-center justify-center">
-            <Clapperboard className="w-6 h-6 text-gray-500" />
+          <div className="w-full rounded-2xl aspect-[9/16] bg-gray-100 flex items-center justify-center">
+            <Clapperboard className="w-6 h-6 text-gray-400" />
           </div>
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-brand-700 uppercase tracking-wide flex items-center gap-1.5">
+        <p className="text-xs font-extrabold uppercase tracking-widest flex items-center gap-1.5" style={{ color: '#6D4AE0' }}>
           <Clapperboard className="w-3.5 h-3.5" />
           {(result.clipType ?? 'SHORT').replace(/_/g, ' ')}
           {result.durationMs ? ` · ${Math.round(result.durationMs / 1000)}s` : ''}
@@ -82,14 +82,14 @@ function ShortsExportReview({ result }: { result: ShortsExportResult }) {
         )}
         {(meta.tags?.length ?? 0) > 0 && (
           <p className="flex items-center gap-1 flex-wrap mt-2">
-            <Tag className="w-3 h-3 text-gray-500" />
+            <Tag className="w-3 h-3 text-gray-400" />
             {meta.tags!.slice(0, 8).map((t) => (
-              <span key={t} className="px-1.5 py-0.5 bg-brand-50 text-brand-700 rounded text-[11px]">{t}</span>
+              <span key={t} className="px-1.5 py-0.5 rounded text-[11px]" style={{ background: '#f5f2fd', color: '#6D4AE0' }}>{t}</span>
             ))}
           </p>
         )}
         {result.shortClipId && (
-          <Link href={`/shorts-studio/clips/${result.shortClipId}/export`} className="inline-block text-xs text-brand-600 hover:underline mt-2">
+          <Link href={`/shorts-studio/clips/${result.shortClipId}/export`} className="inline-block text-xs hover:underline mt-2" style={{ color: '#6D4AE0' }}>
             Open full export page →
           </Link>
         )}
@@ -121,7 +121,7 @@ function GenericResultView({ result }: { result: unknown }) {
   }
 
   return (
-    <div className="bg-gray-50 rounded-lg p-4 mb-4 text-sm">
+    <div className="rounded-2xl p-4 mb-4 text-sm" style={{ background: '#faf9ff', border: '1.5px solid #e3ddf8' }}>
       {flat.length > 0 ? (
         <dl className="space-y-1.5">
           {flat.map(([k, v]) => (
@@ -155,7 +155,7 @@ function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggl
     ?? (a.job.type === 'SHORTS_EXPORT' ? 'Short clip' : a.job.type.replace(/_/g, ' ').toLowerCase());
   const effectiveStatus = a.status === 'PENDING' ? 'EXPIRED' : a.status;
   return (
-    <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+    <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
       <div
         onClick={onToggle}
         role="button"
@@ -163,13 +163,16 @@ function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggl
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors cursor-pointer"
       >
-        {open ? <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-500 shrink-0" />}
-        <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 ${STATUS_CHIP[effectiveStatus] ?? 'bg-gray-100 text-gray-500'}`}>
+        {open ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+        <span
+          className="px-2 py-0.5 rounded-full text-[11px] font-bold shrink-0"
+          style={STATUS_CHIP[effectiveStatus] ?? { background: '#f3f4f6', color: '#4b5563' }}
+        >
           {effectiveStatus}
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-gray-900 truncate">{title}</p>
-          <p className="text-[11px] text-gray-500 truncate">
+          <p className="text-[11px] text-gray-400 truncate">
             {a.project.title} · {a.project.channel.title}
             {a.reviewedAt ? ` · reviewed ${new Date(a.reviewedAt).toLocaleString()}` : ''}
           </p>
@@ -178,7 +181,8 @@ function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggl
           <Link
             href={`/shorts-studio/clips/${shorts.shortClipId}/export`}
             onClick={(e) => e.stopPropagation()}
-            className="text-brand-600 hover:text-brand-700 shrink-0"
+            className="hover:opacity-70 shrink-0 transition-opacity"
+            style={{ color: '#6D4AE0' }}
             title="Open clip export page"
           >
             <ExternalLink className="w-4 h-4" />
@@ -186,10 +190,10 @@ function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggl
         )}
       </div>
       {open && (
-        <div className="px-4 pb-4 border-t border-gray-50 pt-3">
+        <div className="px-4 pb-4 border-t pt-3" style={{ borderColor: '#e3ddf8' }}>
           {shorts ? <ShortsExportReview result={shorts} /> : <GenericResultView result={a.job.result} />}
-          <div className="text-xs text-gray-500 space-y-0.5 -mt-2">
-            {a.notes && <p><span className="text-gray-500">Review notes:</span> “{a.notes}”</p>}
+          <div className="text-xs text-gray-400 space-y-0.5 -mt-2">
+            {a.notes && <p><span className="text-gray-500">Review notes:</span> "{a.notes}"</p>}
             {a.reviewedAt && <p><span className="text-gray-500">Reviewed:</span> {new Date(a.reviewedAt).toLocaleString()}</p>}
             <p><span className="text-gray-500">Expires{effectiveStatus === 'EXPIRED' ? 'd' : ''}:</span> {new Date(a.expiresAt).toLocaleString()}</p>
           </div>
@@ -246,128 +250,142 @@ export default function ApprovalsPage() {
   });
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Approval Center</h1>
-        <p className="text-gray-500 mt-1">Review AI-generated content before it goes live</p>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-brand-600" /></div>
-      ) : approvals.length === 0 ? (
-        <div className="text-center py-20 text-gray-500">
-          <CheckCircle className="w-12 h-12 mx-auto mb-4 opacity-30" />
-          <p>No pending approvals. All caught up!</p>
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
+        {/* Page header */}
+        <div>
+          <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">Approval Center</h1>
+          <p className="text-sm text-gray-400 mt-0.5">Review AI-generated content before it goes live</p>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {approvals.map((a) => (
-            <div key={a.id} className="bg-white border border-gray-200 rounded-xl p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-gray-900">{a.project.title}</h3>
-                  <p className="text-sm text-gray-500">
-                    {a.project.channel.title} · {a.job.type === 'SHORTS_EXPORT' ? 'Short ready to publish' : a.job.type.replace(/_/g, ' ').toLowerCase()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 text-sm text-orange-600">
-                  <Clock className="w-4 h-4" />
-                  Expires {new Date(a.expiresAt).toLocaleDateString()}
-                </div>
-              </div>
 
-              {isShortsExport(a.job.type, a.job.result)
-                ? <ShortsExportReview result={a.job.result} />
-                : <GenericResultView result={a.job.result} />}
-
-              <div className="mb-4">
-                <textarea
-                  placeholder="Review notes (optional)"
-                  value={notes[a.id] ?? ''}
-                  onChange={(e) => setNotes((n) => ({ ...n, [a.id]: e.target.value }))}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => approveMutation.mutate({ id: a.id })}
-                  disabled={approveMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 disabled:opacity-50"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Approve
-                </button>
-                <button
-                  onClick={() => rejectMutation.mutate({ id: a.id })}
-                  disabled={rejectMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Reject
-                </button>
-                {isShortsExport(a.job.type, a.job.result) && a.job.result.shortClipId && (
-                  <button
-                    onClick={() => moveToEditingMutation.mutate({ id: a.id })}
-                    disabled={moveToEditingMutation.isPending}
-                    title="Close this approval and reopen the clip in the timeline editor"
-                    className="flex items-center gap-2 px-4 py-2 border border-brand-300 text-brand-700 rounded-lg hover:bg-brand-50 disabled:opacity-50"
-                  >
-                    {moveToEditingMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-                    Move to editing
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {history.length > 0 && (
-        <section className="mt-10">
-          <div
-            onClick={() => setHistoryOpen((o) => !o)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHistoryOpen((o) => !o); } }}
-            className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
-          >
-            {historyOpen ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
-              <History className="w-4 h-4" /> Recently reviewed
-            </h2>
-            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[11px] font-medium">{history.length}</span>
-            {historyOpen && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setOpenRows((prev) => prev.size === history.length ? new Set() : new Set(history.map((a) => a.id)));
-                }}
-                className="ml-auto text-xs text-brand-600 hover:underline"
-              >
-                {openRows.size === history.length ? 'Collapse all' : 'Expand all'}
-              </button>
-            )}
+        {isLoading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#6D4AE0' }} />
           </div>
-          {historyOpen && (
-            <div className="space-y-2 mt-2">
-              {history.map((a) => (
-                <HistoryRow
-                  key={a.id}
-                  a={a}
-                  open={openRows.has(a.id)}
-                  onToggle={() => setOpenRows((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
-                    return next;
-                  })}
-                />
-              ))}
+        ) : approvals.length === 0 ? (
+          <div className="bg-white rounded-3xl p-12 flex flex-col items-center text-center" style={{ border: '1.5px solid #e3ddf8' }}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg, #f0edf9, #e3ddf8)' }}>
+              <CheckCircle className="w-7 h-7" style={{ color: '#6D4AE0' }} />
             </div>
-          )}
-        </section>
-      )}
+            <p className="text-sm font-semibold text-gray-700">No pending approvals</p>
+            <p className="text-xs text-gray-400 mt-1">All caught up!</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {approvals.map((a) => (
+              <div key={a.id} className="bg-white rounded-2xl p-6" style={{ border: '1.5px solid #e3ddf8' }}>
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{a.project.title}</h3>
+                    <p className="text-sm text-gray-400">
+                      {a.project.channel.title} · {a.job.type === 'SHORTS_EXPORT' ? 'Short ready to publish' : a.job.type.replace(/_/g, ' ').toLowerCase()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 text-sm" style={{ color: '#c2410c' }}>
+                    <Clock className="w-4 h-4" />
+                    Expires {new Date(a.expiresAt).toLocaleDateString()}
+                  </div>
+                </div>
+
+                {isShortsExport(a.job.type, a.job.result)
+                  ? <ShortsExportReview result={a.job.result} />
+                  : <GenericResultView result={a.job.result} />}
+
+                <div className="mb-4">
+                  <textarea
+                    placeholder="Review notes (optional)"
+                    value={notes[a.id] ?? ''}
+                    onChange={(e) => setNotes((n) => ({ ...n, [a.id]: e.target.value }))}
+                    rows={2}
+                    className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+                    style={{ border: '1.5px solid #e3e0f0' }}
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => approveMutation.mutate({ id: a.id })}
+                    disabled={approveMutation.isPending}
+                    className="flex items-center gap-2 px-4 py-2 rounded-2xl font-bold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+                    style={{ background: '#15803d', boxShadow: '0 4px 16px rgba(21,128,61,0.25)' }}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => rejectMutation.mutate({ id: a.id })}
+                    disabled={rejectMutation.isPending}
+                    className="flex items-center gap-2 px-4 py-2 rounded-2xl font-bold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+                    style={{ background: '#dc2626', boxShadow: '0 4px 16px rgba(220,38,38,0.25)' }}
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Reject
+                  </button>
+                  {isShortsExport(a.job.type, a.job.result) && a.job.result.shortClipId && (
+                    <button
+                      onClick={() => moveToEditingMutation.mutate({ id: a.id })}
+                      disabled={moveToEditingMutation.isPending}
+                      title="Close this approval and reopen the clip in the timeline editor"
+                      className="flex items-center gap-2 px-4 py-2 rounded-2xl font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-all"
+                      style={{ border: '1.5px solid #e3ddf8' }}
+                    >
+                      {moveToEditingMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+                      Move to editing
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {history.length > 0 && (
+          <section>
+            <div
+              onClick={() => setHistoryOpen((o) => !o)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHistoryOpen((o) => !o); } }}
+              className="flex items-center gap-2 bg-white rounded-2xl px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+              style={{ border: '1.5px solid #e3ddf8' }}
+            >
+              {historyOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+              <h2 className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 flex items-center gap-1.5">
+                <History className="w-4 h-4" /> Recently reviewed
+              </h2>
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold" style={{ background: '#f5f2fd', color: '#6D4AE0' }}>{history.length}</span>
+              {historyOpen && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenRows((prev) => prev.size === history.length ? new Set() : new Set(history.map((a) => a.id)));
+                  }}
+                  className="ml-auto text-xs hover:underline"
+                  style={{ color: '#6D4AE0' }}
+                >
+                  {openRows.size === history.length ? 'Collapse all' : 'Expand all'}
+                </button>
+              )}
+            </div>
+            {historyOpen && (
+              <div className="space-y-2 mt-2">
+                {history.map((a) => (
+                  <HistoryRow
+                    key={a.id}
+                    a={a}
+                    open={openRows.has(a.id)}
+                    onToggle={() => setOpenRows((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
+                      return next;
+                    })}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
     </div>
   );
 }

@@ -11,12 +11,12 @@ function fmtCredits(n: number) {
   return n.toLocaleString();
 }
 
-function entryBadgeStyle(entryType: string): string {
-  if (entryType === 'USAGE_DEBIT' || entryType === 'EXPIRY') return 'bg-red-50 text-red-700 border-red-200';
-  if (entryType === 'PURCHASE') return 'bg-green-50 text-green-700 border-green-200';
-  if (entryType === 'TRIAL' || entryType === 'BONUS' || entryType === 'REFERRAL' || entryType === 'PROMO') return 'bg-purple-50 text-purple-700 border-purple-200';
-  if (entryType === 'REFUND') return 'bg-blue-50 text-blue-700 border-blue-200';
-  return 'bg-gray-100 text-gray-600 border-gray-200';
+function entryBadgeStyle(entryType: string): React.CSSProperties {
+  if (entryType === 'USAGE_DEBIT' || entryType === 'EXPIRY') return { background: '#fef2f2', color: '#b91c1c' };
+  if (entryType === 'PURCHASE') return { background: '#ecfdf5', color: '#065f46' };
+  if (entryType === 'TRIAL' || entryType === 'BONUS' || entryType === 'REFERRAL' || entryType === 'PROMO') return { background: '#f5f2fd', color: '#6D4AE0' };
+  if (entryType === 'REFUND') return { background: '#eff6ff', color: '#1d4ed8' };
+  return { background: '#f3f4f6', color: '#4b5563' };
 }
 
 function statusColor(status: BudgetState['status']): string {
@@ -64,29 +64,34 @@ function BudgetCard() {
     setEditing(true);
   }
 
-  if (isLoading) return <div className="bg-white border border-gray-200 rounded-xl p-4"><Loader2 className="w-5 h-5 animate-spin text-brand-600" /></div>;
+  if (isLoading) return (
+    <div className="bg-white rounded-2xl p-4" style={{ border: '1.5px solid #e3ddf8' }}>
+      <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} />
+    </div>
+  );
 
   const pct = budget && budget.monthlyLimit > 0 ? Math.min(100, Math.round((budget.spent / budget.monthlyLimit) * 100)) : 0;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-brand-600" />
+          <AlertCircle className="w-4 h-4" style={{ color: '#6D4AE0' }} />
           <span className="text-sm font-semibold text-gray-800">Monthly Budget</span>
           {budget && budget.status !== 'NONE' && (
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-              budget.status === 'OK' ? 'bg-green-50 text-green-700 border-green-200' :
-              budget.status === 'ALERT' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-              'bg-red-50 text-red-700 border-red-200'
-            }`}>
+            <span className="text-xs font-bold rounded-full px-2.5 py-0.5" style={
+              budget.status === 'OK' ? { background: '#ecfdf5', color: '#065f46' } :
+              budget.status === 'ALERT' ? { background: '#fff7ed', color: '#c2410c' } :
+              { background: '#fef2f2', color: '#b91c1c' }
+            }>
               {budget.status}
             </span>
           )}
         </div>
         <button
           onClick={editing ? () => setEditing(false) : startEdit}
-          className="text-xs text-brand-600 hover:underline"
+          className="text-xs font-bold hover:underline"
+          style={{ color: '#6D4AE0' }}
         >
           {editing ? 'Cancel' : 'Edit'}
         </button>
@@ -131,7 +136,8 @@ function BudgetCard() {
               min={0}
               value={limitDraft}
               onChange={(e) => setLimitDraft(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+              style={{ border: '1.5px solid #e3e0f0' }}
               placeholder="e.g. 10000"
             />
           </div>
@@ -143,7 +149,8 @@ function BudgetCard() {
               max={100}
               value={thresholdDraft}
               onChange={(e) => setThresholdDraft(e.target.value)}
-              className="w-full accent-brand-600"
+              className="w-full"
+              style={{ accentColor: '#6D4AE0' }}
             />
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
@@ -151,7 +158,8 @@ function BudgetCard() {
               type="checkbox"
               checked={hardCapDraft}
               onChange={(e) => setHardCapDraft(e.target.checked)}
-              className="rounded border-gray-300 text-brand-600"
+              className="rounded"
+              style={{ accentColor: '#6D4AE0' }}
             />
             <span className="text-sm text-gray-700">Hard cap — block new AI actions when exceeded</span>
           </label>
@@ -164,7 +172,8 @@ function BudgetCard() {
           <button
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 rounded-2xl font-bold text-white text-sm hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+            style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
           >
             {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
             Save budget
@@ -187,14 +196,14 @@ function ForecastCard() {
   });
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center gap-2">
-        <CalendarClock className="w-4 h-4 text-brand-600" />
+        <CalendarClock className="w-4 h-4" style={{ color: '#6D4AE0' }} />
         <span className="text-sm font-semibold text-gray-800">Forecast</span>
         <span className="text-xs text-gray-500">last {forecast?.windowDays ?? 30} days average</span>
       </div>
 
-      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} />}
 
       {forecast && forecast.dailyBurn === 0 && (
         <p className="text-sm text-gray-500 italic">No usage in the window yet — nothing to project.</p>
@@ -202,19 +211,19 @@ function ForecastCard() {
 
       {forecast && forecast.dailyBurn > 0 && (
         <div className="grid grid-cols-3 gap-3 text-center">
-          <div className="bg-gray-50 rounded-lg p-3">
+          <div className="rounded-2xl p-3" style={{ background: '#faf9ff', border: '1.5px solid #e3ddf8' }}>
             <p className="text-xs text-gray-500">Daily burn</p>
             <p className="text-lg font-bold text-gray-900">{forecast.dailyBurn.toLocaleString()}</p>
             <p className="text-[11px] text-gray-500">credits/day</p>
           </div>
-          <div className="bg-gray-50 rounded-lg p-3">
+          <div className="rounded-2xl p-3" style={{ background: '#faf9ff', border: '1.5px solid #e3ddf8' }}>
             <p className="text-xs text-gray-500">Balance lasts</p>
             <p className="text-lg font-bold text-gray-900">
               {forecast.daysToEmpty !== null ? `~${Math.round(forecast.daysToEmpty)}d` : '—'}
             </p>
             <p className="text-[11px] text-gray-500">{forecast.emptyOn ? `empty ${forecast.emptyOn}` : 'no burn'}</p>
           </div>
-          <div className="bg-gray-50 rounded-lg p-3">
+          <div className="rounded-2xl p-3" style={{ background: '#faf9ff', border: '1.5px solid #e3ddf8' }}>
             <p className="text-xs text-gray-500">Month-end spend</p>
             <p className="text-lg font-bold text-gray-900">{forecast.projectedMonthEndSpend.toLocaleString()}</p>
             <p className="text-[11px] text-gray-500">projected credits</p>
@@ -236,23 +245,22 @@ function RecommendationsCard() {
   if (!isLoading && recs.length === 0) return null; // nothing to say — stay quiet
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center gap-2">
-        <Lightbulb className="w-4 h-4 text-brand-600" />
+        <Lightbulb className="w-4 h-4" style={{ color: '#6D4AE0' }} />
         <span className="text-sm font-semibold text-gray-800">Optimization Tips</span>
       </div>
 
-      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} />}
 
       <ul className="space-y-2">
         {recs.map((rec) => (
           <li
             key={rec.type}
-            className={`flex items-start gap-2 text-sm rounded-lg px-3 py-2 border ${
-              rec.severity === 'warning'
-                ? 'bg-amber-50 border-amber-200 text-amber-800'
-                : 'bg-gray-50 border-gray-200 text-gray-700'
-            }`}
+            className="flex items-start gap-2 text-sm rounded-2xl px-3 py-2"
+            style={rec.severity === 'warning'
+              ? { background: '#fff7ed', border: '1.5px solid #fed7aa', color: '#c2410c' }
+              : { background: '#faf9ff', border: '1.5px solid #e3ddf8', color: '#374151' }}
           >
             {rec.severity === 'warning'
               ? <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -277,17 +285,18 @@ function UsageSummaryCard() {
   const max = data?.byAction[0]?.credits ?? 1;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <TrendingDown className="w-4 h-4 text-brand-600" />
+          <TrendingDown className="w-4 h-4" style={{ color: '#6D4AE0' }} />
           <span className="text-sm font-semibold text-gray-800">Usage by Action</span>
         </div>
         <select
           aria-label="Usage window"
           value={days}
           onChange={(e) => setDays(Number(e.target.value))}
-          className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 bg-white"
+          className="bg-white rounded-2xl px-4 py-2 text-xs text-gray-600 outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+          style={{ border: '1.5px solid #e3e0f0' }}
         >
           {[7, 14, 30, 60, 90].map((d) => (
             <option key={d} value={d}>Last {d} days</option>
@@ -295,7 +304,7 @@ function UsageSummaryCard() {
         </select>
       </div>
 
-      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} />}
 
       {data && (
         <>
@@ -314,8 +323,8 @@ function UsageSummaryCard() {
                 </div>
                 <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-brand-500 rounded-full"
-                    style={{ width: `${Math.round((credits / max) * 100)}%` }}
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.round((credits / max) * 100)}%`, background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)' }}
                   />
                 </div>
               </div>
@@ -336,21 +345,24 @@ function TransactionsCard() {
   });
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+    <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
+      <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #f0edf9' }}>
         <span className="text-sm font-semibold text-gray-800">Recent Transactions</span>
         <span className="text-xs text-gray-500">(last 50)</span>
       </div>
-      {isLoading && <div className="p-4"><Loader2 className="w-5 h-5 animate-spin text-brand-600" /></div>}
+      {isLoading && <div className="p-4"><Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} /></div>}
       {!isLoading && txns.length === 0 && (
         <p className="text-sm text-gray-500 italic p-4">No transactions yet.</p>
       )}
-      <div className="divide-y divide-gray-50">
+      <div>
         {txns.map((tx) => (
-          <div key={tx.id} className="flex items-center gap-3 px-4 py-2.5">
+          <div key={tx.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#faf9ff]" style={{ borderBottom: '1px solid #f0edf9' }}>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className={`text-[11px] font-medium border rounded-full px-2 py-0.5 whitespace-nowrap ${entryBadgeStyle(tx.entryType)}`}>
+                <span
+                  className="text-[11px] font-bold rounded-full px-2.5 py-0.5 whitespace-nowrap"
+                  style={entryBadgeStyle(tx.entryType)}
+                >
                   {tx.entryType.replace(/_/g, ' ')}
                 </span>
                 <span className="text-xs text-gray-500 truncate">
@@ -408,13 +420,13 @@ function BalanceCard() {
     : [];
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
+    <div className="bg-white rounded-2xl p-4 space-y-4" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center gap-2">
-        <Wallet className="w-4 h-4 text-brand-600" />
+        <Wallet className="w-4 h-4" style={{ color: '#6D4AE0' }} />
         <span className="text-sm font-semibold text-gray-800">Balance</span>
       </div>
 
-      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} />}
 
       {balance && (
         <>
@@ -426,7 +438,7 @@ function BalanceCard() {
           {nonZeroBuckets.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {nonZeroBuckets.map(([key, value]) => (
-                <span key={key} className="text-xs bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1 text-gray-600">
+                <span key={key} className="text-xs rounded-full px-2.5 py-1" style={{ background: '#f5f2fd', color: '#6D4AE0', border: '1.5px solid #e3ddf8' }}>
                   {fmtCredits(value)} {BUCKET_LABELS[key] ?? key}
                 </span>
               ))}
@@ -449,7 +461,8 @@ function BalanceCard() {
               aria-label="Recharge amount"
               value={rechargeUsd}
               onChange={(e) => setRechargeUsd(Number(e.target.value))}
-              className="text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white"
+              className="bg-white rounded-2xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+              style={{ border: '1.5px solid #e3e0f0' }}
             >
               {[5, 10, 25, 50, 100].map((usd) => (
                 <option key={usd} value={usd}>${usd}</option>
@@ -458,7 +471,8 @@ function BalanceCard() {
             <button
               onClick={() => rechargeMutation.mutate(rechargeUsd)}
               disabled={rechargeMutation.isPending}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl font-bold text-white text-sm hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+              style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
             >
               {rechargeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
               Add credits
@@ -488,22 +502,25 @@ function ExpiryTimelineCard() {
   };
 
   const daysLeft = (iso: string) => Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000));
-  const urgency = (d: number) => (d <= 3 ? 'bg-red-50 text-red-700 border-red-200' : d <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-gray-100 text-gray-600 border-gray-200');
+  const urgencyStyle = (d: number): React.CSSProperties =>
+    d <= 3 ? { background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca' }
+    : d <= 7 ? { background: '#fff7ed', color: '#c2410c', border: '1.5px solid #fed7aa' }
+    : { background: '#f3f4f6', color: '#4b5563', border: '1.5px solid #e5e7eb' };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center gap-2">
-        <CalendarClock className="w-4 h-4 text-brand-600" />
+        <CalendarClock className="w-4 h-4" style={{ color: '#6D4AE0' }} />
         <span className="text-sm font-semibold text-gray-800">Expiry Timeline</span>
       </div>
-      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} />}
       {!isLoading && lots.length === 0 && (
         <p className="text-sm text-gray-500">No active credit lots.</p>
       )}
       {lots.length > 0 && (
-        <ul className="divide-y divide-gray-100">
+        <ul>
           {lots.map((lot) => (
-            <li key={lot.id} className="flex items-center justify-between py-2">
+            <li key={lot.id} className="flex items-center justify-between py-2 hover:bg-[#faf9ff]" style={{ borderBottom: '1px solid #f0edf9' }}>
               <div>
                 <p className="text-sm font-medium text-gray-800">
                   {fmtCredits(lot.remaining)} <span className="text-gray-500 font-normal">of {fmtCredits(lot.amount)}</span>{' '}
@@ -512,12 +529,12 @@ function ExpiryTimelineCard() {
                 <p className="text-[11px] text-gray-500">granted {new Date(lot.createdAt).toLocaleDateString()}</p>
               </div>
               {lot.expiresAt ? (
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${urgency(daysLeft(lot.expiresAt))}`}>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold" style={urgencyStyle(daysLeft(lot.expiresAt))}>
                   {daysLeft(lot.expiresAt) === 0 ? 'expires today' : `${daysLeft(lot.expiresAt)}d left`}
                   <span className="font-normal"> · {new Date(lot.expiresAt).toLocaleDateString()}</span>
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full text-xs font-semibold border bg-green-50 text-green-700 border-green-200">never expires</span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold" style={{ background: '#ecfdf5', color: '#065f46', border: '1.5px solid #a7f3d0' }}>never expires</span>
               )}
             </li>
           ))}
@@ -547,19 +564,19 @@ function CreditPacksCard() {
     new Intl.NumberFormat(undefined, { style: 'currency', currency: pack.currency.toUpperCase() }).format(pack.priceMinor / 100);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center gap-2">
-        <ShoppingBag className="w-4 h-4 text-brand-600" />
+        <ShoppingBag className="w-4 h-4" style={{ color: '#6D4AE0' }} />
         <span className="text-sm font-semibold text-gray-800">Credit Packs</span>
       </div>
-      {isLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+      {isLoading && <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} />}
       {!isLoading && packs.length === 0 && (
         <p className="text-sm text-gray-500">No credit packs available right now.</p>
       )}
       {packs.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {packs.map((pack) => (
-            <div key={pack.id} className="border border-gray-200 rounded-lg p-3 flex flex-col gap-2">
+            <div key={pack.id} className="rounded-2xl p-3 flex flex-col gap-2" style={{ border: '1.5px solid #e3ddf8' }}>
               <div>
                 <p className="text-sm font-semibold text-gray-800">{pack.name}</p>
                 <p className="text-xs text-gray-500">{fmtCredits(pack.credits)} credits</p>
@@ -569,7 +586,8 @@ function CreditPacksCard() {
                 <button
                   onClick={() => buyMutation.mutate(pack.id)}
                   disabled={buyMutation.isPending}
-                  className="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 disabled:opacity-50 flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-2xl font-bold text-white text-xs hover:opacity-90 active:scale-[0.98] disabled:opacity-50 flex items-center gap-1 transition-all"
+                  style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
                 >
                   {buyMutation.isPending && buyMutation.variables === pack.id
                     ? <Loader2 className="w-3 h-3 animate-spin" />
@@ -619,16 +637,16 @@ function SubscriptionCard() {
   return (
     <div>
       {sub && (
-        <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-4">
-          <p className="font-medium text-brand-900">Current plan: {sub.plan}</p>
-          <p className="text-sm text-brand-700">Renews {new Date(sub.currentPeriodEnd).toLocaleDateString()}</p>
+        <div className="rounded-2xl p-4 mb-4" style={{ background: '#f5f2fd', border: '1.5px solid #e3ddf8' }}>
+          <p className="font-semibold" style={{ color: '#6D4AE0' }}>Current plan: {sub.plan}</p>
+          <p className="text-sm text-gray-600 mt-0.5">Renews {new Date(sub.currentPeriodEnd).toLocaleDateString()}</p>
         </div>
       )}
       <div className="grid grid-cols-3 gap-4">
         {PLANS.map((plan) => (
-          <div key={plan.id} className="bg-white border border-gray-200 rounded-xl p-5">
+          <div key={plan.id} className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
             <h3 className="font-semibold text-gray-900">{plan.name}</h3>
-            <p className="text-2xl font-bold text-brand-600 my-2">{plan.price}</p>
+            <p className="text-2xl font-bold my-2" style={{ color: '#6D4AE0' }}>{plan.price}</p>
             <ul className="space-y-1 mb-4">
               {plan.features.map((f) => (
                 <li key={f} className="text-sm text-gray-600 flex items-center gap-1">
@@ -639,7 +657,10 @@ function SubscriptionCard() {
             <button
               onClick={() => upgradeMutation.mutate(plan.id)}
               disabled={upgradeMutation.isPending || sub?.plan === plan.id}
-              className="w-full px-3 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+              className="w-full px-3 py-2 rounded-2xl font-bold text-white text-sm hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+              style={sub?.plan === plan.id
+                ? { background: '#f3f4f6', color: '#4b5563', border: '1.5px solid #e5e7eb' }
+                : { background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
             >
               {sub?.plan === plan.id ? 'Current' : 'Upgrade'}
             </button>
@@ -657,62 +678,69 @@ function SubscriptionCard() {
 
 export default function WalletPage() {
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-10">
-      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-        <Wallet className="w-6 h-6 text-brand-600" />
-        Billing &amp; Wallet
-      </h1>
-
-      {/* Balance */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Credit Balance</h2>
-        <BalanceCard />
-      </section>
-
-      {/* Subscription & plans (moved from Settings) */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Subscription &amp; Plans</h2>
-        <SubscriptionCard />
-      </section>
-
-      {/* Expiry timeline (Phase 6 §11) */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Credit Expiry</h2>
-        <ExpiryTimelineCard />
-      </section>
-
-      {/* Credit marketplace (Phase 6 §12) */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Buy Credits</h2>
-        <CreditPacksCard />
-      </section>
-
-      {/* Budget */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Monthly Budget</h2>
-        <BudgetCard />
-      </section>
-
-      {/* Forecast + optimization tips */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Forecast &amp; Tips</h2>
-        <div className="space-y-4">
-          <ForecastCard />
-          <RecommendationsCard />
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #f0edf9, #e3ddf8)' }}>
+            <Wallet className="w-5 h-5" style={{ color: '#6D4AE0' }} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">Billing &amp; Wallet</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Manage credits, subscriptions, and spending</p>
+          </div>
         </div>
-      </section>
 
-      {/* Usage summary */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Usage Summary</h2>
-        <UsageSummaryCard />
-      </section>
+        {/* Balance */}
+        <section>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Credit Balance</p>
+          <BalanceCard />
+        </section>
 
-      {/* Transactions */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Transaction History</h2>
-        <TransactionsCard />
-      </section>
+        {/* Subscription & plans (moved from Settings) */}
+        <section>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Subscription &amp; Plans</p>
+          <SubscriptionCard />
+        </section>
+
+        {/* Expiry timeline (Phase 6 §11) */}
+        <section>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Credit Expiry</p>
+          <ExpiryTimelineCard />
+        </section>
+
+        {/* Credit marketplace (Phase 6 §12) */}
+        <section>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Buy Credits</p>
+          <CreditPacksCard />
+        </section>
+
+        {/* Budget */}
+        <section>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Monthly Budget</p>
+          <BudgetCard />
+        </section>
+
+        {/* Forecast + optimization tips */}
+        <section>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Forecast &amp; Tips</p>
+          <div className="space-y-4">
+            <ForecastCard />
+            <RecommendationsCard />
+          </div>
+        </section>
+
+        {/* Usage summary */}
+        <section>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Usage Summary</p>
+          <UsageSummaryCard />
+        </section>
+
+        {/* Transactions */}
+        <section>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Transaction History</p>
+          <TransactionsCard />
+        </section>
+      </div>
     </div>
   );
 }

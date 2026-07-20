@@ -34,10 +34,10 @@ function relativeTime(iso: string | null | undefined): string {
   return diff < 0 ? `${d}d ago` : `in ${d}d`;
 }
 
-const STATUS_BADGE: Record<TrackedVideoStatus, string> = {
-  SCHEDULED: 'bg-blue-100 text-blue-700',
-  PUBLISHED: 'bg-green-100 text-green-700',
-  FAILED: 'bg-red-100 text-red-700',
+const STATUS_STYLE: Record<TrackedVideoStatus, React.CSSProperties> = {
+  SCHEDULED: { background: '#fff7ed', color: '#c2410c' },
+  PUBLISHED: { background: '#ecfdf5', color: '#065f46' },
+  FAILED: { background: '#fef2f2', color: '#b91c1c' },
 };
 
 function VideoRow({ video }: { video: TrackedVideo }) {
@@ -48,9 +48,12 @@ function VideoRow({ video }: { video: TrackedVideo }) {
       : relativeTime(video.scheduledAt ?? video.createdAt);
 
   return (
-    <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0">
+    <div
+      className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#faf9ff] transition-colors"
+      style={{ borderBottom: '1px solid #f0edf9' }}
+    >
       {/* Thumbnail */}
-      <div className="w-16 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+      <div className="w-16 h-10 bg-gray-100 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden">
         {video.thumbnailUrl ? (
           <img src={video.thumbnailUrl} alt="" className="w-full h-full object-cover" />
         ) : (
@@ -61,24 +64,27 @@ function VideoRow({ video }: { video: TrackedVideo }) {
       {/* Title + channel */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-900 truncate">{video.title}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{video.channel.title}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{video.channel.title}</p>
       </div>
 
       {/* Stats (published only) */}
       {video.status === 'PUBLISHED' && (
-        <div className="hidden md:flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
+        <div className="hidden md:flex items-center gap-4 text-xs text-gray-400 flex-shrink-0">
           <span>{video.viewCount.toLocaleString()} views</span>
           <span>{video.likeCount.toLocaleString()} likes</span>
         </div>
       )}
 
       {/* Date */}
-      <div className="text-xs text-gray-500 flex-shrink-0 min-w-[72px] text-right">
+      <div className="text-xs text-gray-400 flex-shrink-0 min-w-[72px] text-right">
         {dateStr}
       </div>
 
       {/* Status badge */}
-      <span className={`px-2.5 py-1 rounded-full text-xs font-medium flex-shrink-0 ${STATUS_BADGE[video.status]}`}>
+      <span
+        className="px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0"
+        style={STATUS_STYLE[video.status]}
+      >
         {video.status === 'SCHEDULED' ? 'Scheduled' : video.status === 'PUBLISHED' ? 'Published' : 'Failed'}
       </span>
 
@@ -100,14 +106,14 @@ function VideoRow({ video }: { video: TrackedVideo }) {
 
 function SkeletonRow() {
   return (
-    <div className="flex items-center gap-4 px-5 py-3.5 border-b border-gray-100 last:border-0 animate-pulse">
-      <div className="w-16 h-10 bg-gray-200 rounded-lg flex-shrink-0" />
+    <div className="flex items-center gap-4 px-5 py-3.5 animate-pulse" style={{ borderBottom: '1px solid #f0edf9' }}>
+      <div className="w-16 h-10 bg-gray-100 rounded-2xl flex-shrink-0" />
       <div className="flex-1 space-y-2">
-        <div className="h-3.5 bg-gray-200 rounded w-2/3" />
-        <div className="h-3 bg-gray-100 rounded w-1/3" />
+        <div className="h-3.5 bg-gray-100 rounded w-2/3" />
+        <div className="h-3 bg-gray-50 rounded w-1/3" />
       </div>
-      <div className="h-3 bg-gray-200 rounded w-16 flex-shrink-0" />
-      <div className="h-6 bg-gray-200 rounded-full w-20 flex-shrink-0" />
+      <div className="h-3 bg-gray-100 rounded w-16 flex-shrink-0" />
+      <div className="h-6 bg-gray-100 rounded-full w-20 flex-shrink-0" />
     </div>
   );
 }
@@ -198,160 +204,171 @@ export default function PublishingPage() {
   ];
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-violet-100 rounded-xl flex items-center justify-center">
-            <Upload className="w-5 h-5 text-violet-600" />
-          </div>
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Publishing</h1>
-            <p className="text-sm text-gray-500">Track scheduled and published YouTube videos</p>
+            <h1 className="text-2xl font-extrabold text-gray-900 leading-tight flex items-center gap-2">
+              <Upload className="w-6 h-6" style={{ color: '#6D4AE0' }} />
+              Publishing
+            </h1>
+            <p className="text-sm text-gray-400 mt-0.5">Track scheduled and published YouTube videos</p>
           </div>
-        </div>
-        <button
-          onClick={handleRefresh}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
-
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Calendar className="w-4 h-4 text-blue-500" />
-            <span className="text-xs font-medium text-gray-500">Scheduled</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{summary?.scheduled ?? '—'}</p>
-          {summary?.upcoming7d !== undefined && (
-            <p className="text-xs text-gray-400 mt-1">{summary.upcoming7d} in next 7d</p>
-          )}
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle className="w-4 h-4 text-green-500" />
-            <span className="text-xs font-medium text-gray-500">Published</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{summary?.published ?? '—'}</p>
-          {summary?.publishedThisMonth !== undefined && (
-            <p className="text-xs text-gray-400 mt-1">{summary.publishedThisMonth} this month</p>
-          )}
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertCircle className="w-4 h-4 text-red-500" />
-            <span className="text-xs font-medium text-gray-500">Failed</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{summary?.failed ?? '—'}</p>
-          <p className="text-xs text-gray-400 mt-1">need attention</p>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Film className="w-4 h-4 text-gray-400" />
-            <span className="text-xs font-medium text-gray-500">Total</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {summary ? (summary.scheduled + summary.published + summary.failed) : '—'}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">tracked videos</p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        {/* Channel selector */}
-        <div className="relative">
-          <select
-            value={channelId}
-            onChange={e => {
-              setChannelId(e.target.value);
-              localStorage.setItem(CHANNEL_LS_KEY, e.target.value);
-            }}
-            className="appearance-none bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-300"
-          >
-            <option value="">All channels</option>
-            {(channels ?? []).map((ch: Channel) => (
-              <option key={ch.id} value={ch.id}>{ch.title}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-        </div>
-
-        {/* Search */}
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search videos…"
-            value={q}
-            onChange={e => setQ(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
-          />
-        </div>
-      </div>
-
-      {/* Status tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {TABS.map(tab => (
           <button
-            key={tab.id}
-            onClick={() => setStatusFilter(tab.id)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              statusFilter === tab.id
-                ? 'bg-white shadow text-violet-700'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
+            onClick={handleRefresh}
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-gray-600 rounded-2xl hover:bg-gray-50 transition-colors"
+            style={{ border: '1.5px solid #e3ddf8' }}
           >
-            {tab.label}
-            {tab.id === 'FAILED' && summary && summary.failed > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
-                {summary.failed}
-              </span>
-            )}
+            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+            Refresh
           </button>
-        ))}
-      </div>
+        </div>
 
-      {/* Video list */}
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-        {isFetching && allVideos.length === 0 ? (
-          <div>
-            {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-2xl p-4" style={{ border: '1.5px solid #e3ddf8' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-4 h-4" style={{ color: '#6D4AE0' }} />
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Scheduled</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{summary?.scheduled ?? '—'}</p>
+            {summary?.upcoming7d !== undefined && (
+              <p className="text-xs text-gray-400 mt-1">{summary.upcoming7d} in next 7d</p>
+            )}
           </div>
-        ) : allVideos.length === 0 ? (
-          <div className="py-16 text-center">
-            <Upload className="w-10 h-10 mx-auto mb-3 text-gray-200" />
-            <p className="text-gray-500 text-sm">{EMPTY_MESSAGES[statusFilter]}</p>
+
+          <div className="bg-white rounded-2xl p-4" style={{ border: '1.5px solid #e3ddf8' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle className="w-4 h-4 text-green-500" />
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Published</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{summary?.published ?? '—'}</p>
+            {summary?.publishedThisMonth !== undefined && (
+              <p className="text-xs text-gray-400 mt-1">{summary.publishedThisMonth} this month</p>
+            )}
           </div>
-        ) : (
-          <div>
-            {allVideos.map(video => (
-              <VideoRow key={video.id} video={video} />
-            ))}
+
+          <div className="bg-white rounded-2xl p-4" style={{ border: '1.5px solid #e3ddf8' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Failed</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{summary?.failed ?? '—'}</p>
+            <p className="text-xs text-gray-400 mt-1">need attention</p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-4" style={{ border: '1.5px solid #e3ddf8' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <Film className="w-4 h-4 text-gray-400" />
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Total</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">
+              {summary ? (summary.scheduled + summary.published + summary.failed) : '—'}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">tracked videos</p>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Channel selector */}
+          <div className="relative">
+            <select
+              value={channelId}
+              onChange={e => {
+                setChannelId(e.target.value);
+                localStorage.setItem(CHANNEL_LS_KEY, e.target.value);
+              }}
+              className="appearance-none bg-white rounded-2xl pl-4 pr-9 py-3 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+              style={{ border: '1.5px solid #e3e0f0' }}
+            >
+              <option value="">All channels</option>
+              {(channels ?? []).map((ch: Channel) => (
+                <option key={ch.id} value={ch.id}>{ch.title}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+
+          {/* Search */}
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search videos…"
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              className="w-full pl-10 pr-4 bg-white rounded-2xl py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all placeholder:text-gray-400"
+              style={{ border: '1.5px solid #e3e0f0' }}
+            />
+          </div>
+        </div>
+
+        {/* Status tabs */}
+        <div className="flex gap-2 flex-wrap">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              className="px-4 py-2 rounded-2xl text-sm font-semibold transition-all"
+              style={
+                statusFilter === tab.id
+                  ? { background: '#f5f2fd', border: '2px solid #6D4AE0', color: '#6D4AE0' }
+                  : { background: '#faf9ff', border: '1.5px solid #e3ddf8', color: '#374151' }
+              }
+            >
+              {tab.label}
+              {tab.id === 'FAILED' && summary && summary.failed > 0 && (
+                <span
+                  className="ml-1.5 rounded-full text-[11px] font-bold px-2.5 py-0.5"
+                  style={{ background: '#fef2f2', color: '#b91c1c' }}
+                >
+                  {summary.failed}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Video list */}
+        <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
+          {isFetching && allVideos.length === 0 ? (
+            <div>
+              {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
+            </div>
+          ) : allVideos.length === 0 ? (
+            <div className="py-16 text-center">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg, #f0edf9, #e3ddf8)' }}>
+                <Upload className="w-7 h-7" style={{ color: '#6D4AE0' }} />
+              </div>
+              <p className="text-base font-extrabold text-gray-900 mb-1">Nothing here yet</p>
+              <p className="text-sm text-gray-400">{EMPTY_MESSAGES[statusFilter]}</p>
+            </div>
+          ) : (
+            <div>
+              {allVideos.map(video => (
+                <VideoRow key={video.id} video={video} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Load more */}
+        {canLoadMore && (
+          <div className="text-center">
+            <button
+              onClick={() => setSkip(prev => prev + PAGE_SIZE)}
+              disabled={isFetching}
+              className="px-6 py-2.5 rounded-2xl text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 mx-auto transition-colors"
+              style={{ border: '1.5px solid #e3ddf8' }}
+            >
+              {isFetching && <Loader2 className="w-4 h-4 animate-spin" />}
+              Load more ({page!.total - allVideos.length} remaining)
+            </button>
           </div>
         )}
       </div>
-
-      {/* Load more */}
-      {canLoadMore && (
-        <div className="text-center">
-          <button
-            onClick={() => setSkip(prev => prev + PAGE_SIZE)}
-            disabled={isFetching}
-            className="px-6 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 mx-auto"
-          >
-            {isFetching && <Loader2 className="w-4 h-4 animate-spin" />}
-            Load more ({page!.total - allVideos.length} remaining)
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -41,13 +41,14 @@ const MONTH_LABELS = (count: number): string[] => {
 };
 
 function ProviderStatusChip({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    ACTIVE: 'bg-green-100 text-green-700',
-    DEGRADED: 'bg-amber-100 text-amber-700',
-    DISABLED: 'bg-gray-100 text-gray-500',
+  const styleMap: Record<string, React.CSSProperties> = {
+    ACTIVE: { background: '#ecfdf5', color: '#065f46' },
+    DEGRADED: { background: '#fff7ed', color: '#c2410c' },
+    DISABLED: { background: '#f3f4f6', color: '#4b5563' },
   };
+  const chipStyle: React.CSSProperties = styleMap[status] ?? { background: '#f3f4f6', color: '#4b5563' };
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${styles[status] ?? 'bg-gray-100 text-gray-500'}`}>
+    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold" style={chipStyle}>
       {status}
     </span>
   );
@@ -123,178 +124,182 @@ export default function AdminDashboardPage() {
 
   if (forbidden) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center h-full text-center">
+      <div className="min-h-full bg-[#faf9ff] flex flex-col items-center justify-center text-center p-8">
         <ShieldAlert className="w-10 h-10 text-gray-300 mb-3" />
         <p className="text-sm font-semibold text-gray-600">Admin access required</p>
-        <p className="text-xs text-gray-500 mt-1">This dashboard is available to platform owners and super admins.</p>
+        <p className="text-xs text-gray-400 mt-1">This dashboard is available to platform owners and super admins.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Enterprise Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Revenue, AI economics, forecasts and provider health</p>
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">Enterprise Dashboard</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Revenue, AI economics, forecasts and provider health</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { void load(); }}
+            className="flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-semibold text-gray-600 transition-colors"
+            style={{ border: '1.5px solid #e3ddf8' }}
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => { void load(); }}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm font-medium text-gray-700 transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>
-      )}
+        {error && (
+          <div className="bg-red-50 text-red-600 text-sm rounded-2xl px-4 py-3" style={{ border: '1.5px solid #fecaca' }}>{error}</div>
+        )}
 
-      {loading && !metrics ? (
-        <p className="text-sm text-gray-500 py-16 text-center">Loading enterprise metrics…</p>
-      ) : metrics ? (
-        <>
-          {/* ── North star (docs4/01: published videos / active channel) ──── */}
-          <div className="grid grid-cols-1">
-            <StatCard
-              tone="lilac"
-              icon={<Star className="w-5 h-5" />}
-              label="North star — published videos per active channel (30d)"
-              value={(metrics.northStar?.perActiveChannel ?? 0).toFixed(1)}
-              sub={`${metrics.northStar?.publishedVideos30d ?? 0} published · ${metrics.northStar?.activeChannels30d ?? 0} active channels`}
-              subClassName="text-gray-600"
-            />
-          </div>
-
-          {/* ── KPI cards ─────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard tone="lilac" icon={<DollarSign className="w-5 h-5" />} label="MRR" value={money(metrics.mrr)} sub={`ARR ${money(metrics.arr)}`} subClassName="text-gray-600" />
-            <StatCard tone="pink" icon={<Users className="w-5 h-5" />} label="ARPU (30d)" value={money(metrics.arpu)} sub={`LTV ${money(metrics.ltv)}`} subClassName="text-gray-600" />
-            <StatCard tone="cream" icon={<TrendingUp className="w-5 h-5" />} label="Churn (30d)" value={pct(metrics.churn)} sub="cancelled / active" subClassName="text-gray-600" />
-            <StatCard tone="periwinkle" icon={<PiggyBank className="w-5 h-5" />} label="Cache savings (30d)" value={usd(metrics.cacheSavingsUsd)} sub={`AI cost ${usd(metrics.aiCostUsd)}`} subClassName="text-gray-600" />
-          </div>
-
-          {/* ── Revenue + models ──────────────────────────────────────────── */}
-          <div className="grid lg:grid-cols-2 gap-4">
-            <section className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <BarChart2 className="w-4 h-4 text-[#9d6ff0]" /> Revenue — last 6 periods
-              </h2>
-              <PastelBars
-                data={metrics.revenueByMonth.map((v, i) => ({
-                  label: MONTH_LABELS(metrics.revenueByMonth.length)[i],
-                  value: v / 100,
-                }))}
-                formatValue={(v) => `$${Math.round(v).toLocaleString()}`}
+        {loading && !metrics ? (
+          <p className="text-sm text-gray-400 py-16 text-center">Loading enterprise metrics…</p>
+        ) : metrics ? (
+          <>
+            {/* ── North star (docs4/01: published videos / active channel) ──── */}
+            <div className="grid grid-cols-1">
+              <StatCard
+                tone="lilac"
+                icon={<Star className="w-5 h-5" />}
+                label="North star — published videos per active channel (30d)"
+                value={(metrics.northStar?.perActiveChannel ?? 0).toFixed(1)}
+                sub={`${metrics.northStar?.publishedVideos30d ?? 0} published · ${metrics.northStar?.activeChannels30d ?? 0} active channels`}
+                subClassName="text-gray-600"
               />
-            </section>
+            </div>
 
-            <section className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Cpu className="w-4 h-4 text-[#9d6ff0]" /> Most-used AI models (30d, by cost)
-              </h2>
-              {metrics.topModels.length === 0 ? (
-                <p className="text-sm text-gray-500 py-8 text-center">No AI usage yet</p>
+            {/* ── KPI cards ─────────────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard tone="lilac" icon={<DollarSign className="w-5 h-5" />} label="MRR" value={money(metrics.mrr)} sub={`ARR ${money(metrics.arr)}`} subClassName="text-gray-600" />
+              <StatCard tone="pink" icon={<Users className="w-5 h-5" />} label="ARPU (30d)" value={money(metrics.arpu)} sub={`LTV ${money(metrics.ltv)}`} subClassName="text-gray-600" />
+              <StatCard tone="cream" icon={<TrendingUp className="w-5 h-5" />} label="Churn (30d)" value={pct(metrics.churn)} sub="cancelled / active" subClassName="text-gray-600" />
+              <StatCard tone="periwinkle" icon={<PiggyBank className="w-5 h-5" />} label="Cache savings (30d)" value={usd(metrics.cacheSavingsUsd)} sub={`AI cost ${usd(metrics.aiCostUsd)}`} subClassName="text-gray-600" />
+            </div>
+
+            {/* ── Revenue + models ──────────────────────────────────────────── */}
+            <div className="grid lg:grid-cols-2 gap-4">
+              <section className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                  <BarChart2 className="w-4 h-4 text-[#9d6ff0]" /> Revenue — last 6 periods
+                </h2>
+                <PastelBars
+                  data={metrics.revenueByMonth.map((v, i) => ({
+                    label: MONTH_LABELS(metrics.revenueByMonth.length)[i],
+                    value: v / 100,
+                  }))}
+                  formatValue={(v) => `$${Math.round(v).toLocaleString()}`}
+                />
+              </section>
+
+              <section className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                  <Cpu className="w-4 h-4 text-[#9d6ff0]" /> Most-used AI models (30d, by cost)
+                </h2>
+                {metrics.topModels.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-8 text-center">No AI usage yet</p>
+                ) : (
+                  <ul className="divide-y divide-gray-50">
+                    {metrics.topModels.map((m) => (
+                      <li key={m.model} className="flex items-center justify-between py-2.5">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{m.model}</p>
+                          <p className="text-[11px] text-gray-500 tabular-nums">
+                            {((m.tokensIn + m.tokensOut) / 1000).toFixed(1)}k tokens
+                          </p>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-700 tabular-nums">{usd(m.costUsd)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </div>
+
+            {/* ── Forecasts ─────────────────────────────────────────────────── */}
+            <section className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <TrendingUp className="w-4 h-4 text-[#9d6ff0]" /> Forecasts
+                </h2>
+                <button
+                  type="button"
+                  disabled={generating}
+                  onClick={() => { void handleGenerateForecasts(); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-semibold text-[#6D4AE0] transition-colors disabled:opacity-50"
+                  style={{ border: '1.5px solid #e3ddf8' }}
+                >
+                  <RefreshCw className={`w-3 h-3 ${generating ? 'animate-spin' : ''}`} />
+                  {generating ? 'Generating…' : 'Generate now'}
+                </button>
+              </div>
+              {forecasts.length === 0 ? (
+                <p className="text-sm text-gray-400 py-6 text-center">
+                  No forecasts yet — they generate daily, or trigger one now.
+                </p>
               ) : (
-                <ul className="divide-y divide-gray-50">
-                  {metrics.topModels.map((m) => (
-                    <li key={m.model} className="flex items-center justify-between py-2.5">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{m.model}</p>
-                        <p className="text-[11px] text-gray-500 tabular-nums">
-                          {((m.tokensIn + m.tokensOut) / 1000).toFixed(1)}k tokens
-                        </p>
-                      </div>
-                      <span className="text-sm font-semibold text-gray-700 tabular-nums">{usd(m.costUsd)}</span>
-                    </li>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  {forecasts.map((f) => (
+                    <div key={f.id} className="bg-[#faf9ff] rounded-2xl p-4" style={{ border: '1.5px solid #e3ddf8' }}>
+                      <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">{FORECAST_LABELS[f.metric] ?? f.metric}</p>
+                      <p className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+                        {formatForecastValue(f.metric, f.predictedValue)}
+                      </p>
+                      <p className="text-[11px] text-gray-500 mt-1 tabular-nums">
+                        {formatForecastValue(f.metric, f.confidenceLow)} – {formatForecastValue(f.metric, f.confidenceHigh)}
+                        {' · '}{f.method.replace('_', ' ')}
+                      </p>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </section>
-          </div>
 
-          {/* ── Forecasts ─────────────────────────────────────────────────── */}
-          <section className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                <TrendingUp className="w-4 h-4 text-[#9d6ff0]" /> Forecasts
+            {/* ── Provider health ───────────────────────────────────────────── */}
+            <section className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+                <Activity className="w-4 h-4 text-[#9d6ff0]" /> AI providers
               </h2>
-              <button
-                type="button"
-                disabled={generating}
-                onClick={() => { void handleGenerateForecasts(); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f0eafc] hover:bg-[#e5dbf9] text-xs font-semibold text-[#7c4fd8] transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3 h-3 ${generating ? 'animate-spin' : ''}`} />
-                {generating ? 'Generating…' : 'Generate now'}
-              </button>
-            </div>
-            {forecasts.length === 0 ? (
-              <p className="text-sm text-gray-500 py-6 text-center">
-                No forecasts yet — they generate daily, or trigger one now.
-              </p>
-            ) : (
-              <div className="grid sm:grid-cols-3 gap-3">
-                {forecasts.map((f) => (
-                  <div key={f.id} className="bg-gray-50 rounded-xl p-4">
-                    <p className="text-xs font-medium text-gray-500">{FORECAST_LABELS[f.metric] ?? f.metric}</p>
-                    <p className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
-                      {formatForecastValue(f.metric, f.predictedValue)}
-                    </p>
-                    <p className="text-[11px] text-gray-500 mt-1 tabular-nums">
-                      {formatForecastValue(f.metric, f.confidenceLow)} – {formatForecastValue(f.metric, f.confidenceHigh)}
-                      {' · '}{f.method.replace('_', ' ')}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* ── Provider health ───────────────────────────────────────────── */}
-          <section className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
-              <Activity className="w-4 h-4 text-[#9d6ff0]" /> AI providers
-            </h2>
-            {providers.length === 0 ? (
-              <p className="text-sm text-gray-500 py-6 text-center">Provider registry unavailable for your role</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500">
-                      <th className="py-2 pr-4 font-semibold">Provider</th>
-                      <th className="py-2 pr-4 font-semibold">Status</th>
-                      <th className="py-2 pr-4 font-semibold">Health</th>
-                      <th className="py-2 pr-4 font-semibold">Failure rate</th>
-                      <th className="py-2 pr-4 font-semibold">Quality</th>
-                      <th className="py-2 font-semibold">Cost ($/1M in · out)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {providers.map((p) => (
-                      <tr key={p.id}>
-                        <td className="py-2.5 pr-4 font-medium text-gray-800">{p.name}</td>
-                        <td className="py-2.5 pr-4"><ProviderStatusChip status={p.status} /></td>
-                        <td className="py-2.5 pr-4 tabular-nums text-gray-600">{p.avgHealthScore.toFixed(0)}</td>
-                        <td className="py-2.5 pr-4 tabular-nums text-gray-600">{pct(p.failureRate)}</td>
-                        <td className="py-2.5 pr-4 tabular-nums text-gray-600">{p.qualityScore.toFixed(2)}</td>
-                        <td className="py-2.5 tabular-nums text-gray-600">
-                          {p.costRates[0]
-                            ? `$${p.costRates[0].inputCost} · $${p.costRates[0].outputCost}`
-                            : '—'}
-                        </td>
+              {providers.length === 0 ? (
+                <p className="text-sm text-gray-400 py-6 text-center">Provider registry unavailable for your role</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="py-2 pr-4 text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Provider</th>
+                        <th className="py-2 pr-4 text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Status</th>
+                        <th className="py-2 pr-4 text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Health</th>
+                        <th className="py-2 pr-4 text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Failure rate</th>
+                        <th className="py-2 pr-4 text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Quality</th>
+                        <th className="py-2 text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Cost ($/1M in · out)</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        </>
-      ) : null}
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {providers.map((p) => (
+                        <tr key={p.id}>
+                          <td className="py-2.5 pr-4 font-medium text-gray-800">{p.name}</td>
+                          <td className="py-2.5 pr-4"><ProviderStatusChip status={p.status} /></td>
+                          <td className="py-2.5 pr-4 tabular-nums text-gray-600">{p.avgHealthScore.toFixed(0)}</td>
+                          <td className="py-2.5 pr-4 tabular-nums text-gray-600">{pct(p.failureRate)}</td>
+                          <td className="py-2.5 pr-4 tabular-nums text-gray-600">{p.qualityScore.toFixed(2)}</td>
+                          <td className="py-2.5 tabular-nums text-gray-600">
+                            {p.costRates[0]
+                              ? `$${p.costRates[0].inputCost} · $${p.costRates[0].outputCost}`
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

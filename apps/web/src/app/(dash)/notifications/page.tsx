@@ -26,7 +26,7 @@ function notifIcon(type: string) {
   if (['TRIAL_EXPIRING', 'CREDITS_LOW'].includes(type))
     return <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />;
   if (type === 'APPROVAL_REQUEST')
-    return <Clock className="w-5 h-5 text-violet-500 shrink-0 mt-0.5" />;
+    return <Clock className="w-5 h-5 shrink-0 mt-0.5" style={{ color: '#6D4AE0' }} />;
   return <Bell className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />;
 }
 
@@ -93,99 +93,112 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
-          {unreadCount > 0 && (
-            <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-violet-100 text-violet-700 text-xs font-semibold">
-              {unreadCount} unread
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          disabled={unreadCount === 0 || markAllMutation.isPending}
-          onClick={() => markAllMutation.mutate()}
-          className="text-sm font-medium text-[#7b5ec7] hover:underline disabled:opacity-40 disabled:no-underline flex items-center gap-1"
-        >
-          {markAllMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-          Mark all read
-        </button>
-      </div>
-
-      {/* Filter tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5 overflow-x-auto">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 min-w-max py-1.5 px-3 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
-              activeTab === tab.id
-                ? 'bg-white shadow text-[#7b5ec7]'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Notification list */}
-      {isLoading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 className="w-7 h-7 animate-spin text-[#7b5ec7]" />
-        </div>
-      ) : allItems.length === 0 ? (
-        <div className="flex flex-col items-center py-20 gap-3 text-gray-400">
-          <Bell className="w-12 h-12 opacity-30" />
-          <p className="text-sm">You&apos;re all caught up</p>
-        </div>
-      ) : (
-        <div className="bg-white border border-gray-200 rounded-2xl divide-y divide-gray-100 overflow-hidden">
-          {allItems.map((n) => (
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">Notifications</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Stay up to date with approvals, jobs, and system alerts</p>
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            {unreadCount > 0 && (
+              <span className="inline-flex items-center justify-center rounded-full text-[11px] font-bold px-2.5 py-0.5" style={{ background: '#f5f2fd', color: '#6D4AE0' }}>
+                {unreadCount} unread
+              </span>
+            )}
             <button
-              key={n.id}
               type="button"
-              onClick={() => handleRowClick(n)}
-              className={`w-full text-left flex items-start gap-3 px-5 py-4 transition-colors hover:bg-gray-50 ${
-                !n.readAt ? 'bg-violet-50/40' : 'bg-white'
-              }`}
+              disabled={unreadCount === 0 || markAllMutation.isPending}
+              onClick={() => markAllMutation.mutate()}
+              className="text-sm font-bold hover:underline disabled:opacity-40 disabled:no-underline flex items-center gap-1"
+              style={{ color: '#6D4AE0' }}
             >
-              {notifIcon(n.type)}
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm leading-snug ${!n.readAt ? 'font-semibold text-gray-900' : 'font-normal text-gray-700'}`}>
-                  {n.title}
-                </p>
-                {n.body && (
-                  <p className="text-xs text-gray-500 mt-0.5 leading-snug line-clamp-2">{n.body}</p>
-                )}
-                <p className="text-[11px] text-gray-400 mt-1">{relativeTime(n.createdAt)}</p>
-              </div>
-              {!n.readAt && (
-                <span className="mt-1.5 shrink-0 w-2 h-2 rounded-full bg-[#7b5ec7]" aria-hidden="true" />
-              )}
+              {markAllMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Mark all read
+            </button>
+          </div>
+        </div>
+
+        {/* Filter tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-0.5">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className="flex-shrink-0 py-1.5 px-4 text-sm font-semibold rounded-2xl transition-all whitespace-nowrap"
+              style={activeTab === tab.id
+                ? { background: '#f5f2fd', border: '2px solid #6D4AE0', color: '#6D4AE0' }
+                : { background: '#faf9ff', border: '1.5px solid #e3ddf8', color: '#374151' }}
+            >
+              {tab.label}
             </button>
           ))}
         </div>
-      )}
 
-      {/* Load more */}
-      {hasNextPage && (
-        <div className="flex justify-center mt-5">
-          <button
-            type="button"
-            disabled={isFetchingNextPage}
-            onClick={() => { void fetchNextPage(); }}
-            className="flex items-center gap-2 px-5 py-2 rounded-full border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-          >
-            {isFetchingNextPage && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {isFetchingNextPage ? 'Loading…' : 'Load more'}
-          </button>
-        </div>
-      )}
+        {/* Notification list */}
+        {isLoading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="w-7 h-7 animate-spin" style={{ color: '#6D4AE0' }} />
+          </div>
+        ) : allItems.length === 0 ? (
+          <div className="bg-white rounded-3xl flex flex-col items-center py-16 gap-4" style={{ border: '1.5px solid #e3ddf8' }}>
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #f0edf9, #e3ddf8)' }}>
+              <Bell className="w-8 h-8" style={{ color: '#6D4AE0' }} />
+            </div>
+            <div className="text-center">
+              <p className="text-base font-extrabold text-gray-900">You&apos;re all caught up</p>
+              <p className="text-sm text-gray-400 mt-1">No notifications in this category</p>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
+            {allItems.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                onClick={() => handleRowClick(n)}
+                className="w-full text-left flex items-start gap-3 px-5 py-4 transition-colors hover:bg-[#faf9ff]"
+                style={{
+                  background: !n.readAt ? 'rgba(109,74,224,0.03)' : 'white',
+                  borderBottom: '1px solid #f0edf9',
+                }}
+              >
+                {notifIcon(n.type)}
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm leading-snug ${!n.readAt ? 'font-semibold text-gray-900' : 'font-normal text-gray-700'}`}>
+                    {n.title}
+                  </p>
+                  {n.body && (
+                    <p className="text-xs text-gray-500 mt-0.5 leading-snug line-clamp-2">{n.body}</p>
+                  )}
+                  <p className="text-[11px] text-gray-400 mt-1">{relativeTime(n.createdAt)}</p>
+                </div>
+                {!n.readAt && (
+                  <span className="mt-1.5 shrink-0 w-2 h-2 rounded-full" style={{ background: '#6D4AE0' }} aria-hidden="true" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Load more */}
+        {hasNextPage && (
+          <div className="flex justify-center mt-5">
+            <button
+              type="button"
+              disabled={isFetchingNextPage}
+              onClick={() => { void fetchNextPage(); }}
+              className="flex items-center gap-2 px-5 py-2 rounded-2xl text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              style={{ border: '1.5px solid #e3ddf8' }}
+            >
+              {isFetchingNextPage && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {isFetchingNextPage ? 'Loading…' : 'Load more'}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

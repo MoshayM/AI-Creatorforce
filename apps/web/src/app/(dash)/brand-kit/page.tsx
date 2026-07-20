@@ -174,158 +174,174 @@ export default function BrandKitPage() {
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="flex items-center gap-3 mb-8">
-        <Palette className="w-7 h-7 text-brand-600" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Brand Kit</h1>
-          <p className="text-sm text-gray-500">Visual identity and voice profile used across all AI-generated assets</p>
-        </div>
-      </div>
-
-      {/* Channel selector */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <span className="block text-sm font-medium text-gray-700 mb-2">Channel</span>
-        <div className="flex gap-2">
-          {channels.map(ch => (
-            <button
-              key={ch.id}
-              onClick={() => selectChannel(ch)}
-              className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${selected?.id === ch.id ? 'bg-brand-50 border-brand-300 text-brand-700 font-medium' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
-            >
-              {ch.title}
-            </button>
-          ))}
-          {channels.length === 0 && (
-            <p className="text-sm text-gray-500">No channels connected — go to Settings → Connect YouTube.</p>
-          )}
-        </div>
-      </div>
-
-      {selected && (
-        <div className="space-y-6">
-          {/* Niche */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-900 mb-4">Channel Niche</h2>
-            <input
-              type="text"
-              value={niche}
-              onChange={e => setNiche(e.target.value)}
-              placeholder="e.g. AI, Technology, Personal Finance, Health…"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
+        {/* Page header */}
+        <div className="flex items-center gap-3">
+          <Palette className="w-7 h-7" style={{ color: '#6D4AE0' }} />
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">Brand Kit</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Visual identity and voice profile used across all AI-generated assets</p>
           </div>
+        </div>
 
-          {/* AI Generate */}
-          <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl border border-violet-200 p-5">
-            <div className="flex items-start gap-3 mb-3">
-              <Wand2 className="w-5 h-5 text-violet-600 mt-0.5 shrink-0" />
-              <div>
-                <h2 className="font-semibold text-gray-900">AI Generate Brand Identity</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Let AI suggest colors, mood, and thumbnail style based on your niche.</p>
-              </div>
-            </div>
-            {aiGenerated && (
-              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800 mb-3">
-                <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
-                Brand identity generated from niche analysis!
-              </div>
+        {/* Channel selector */}
+        <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+          <span className="block text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Channel</span>
+          <div className="flex gap-2 flex-wrap">
+            {channels.map(ch => (
+              <button
+                key={ch.id}
+                onClick={() => selectChannel(ch)}
+                className="px-3 py-1.5 rounded-2xl text-sm font-semibold transition-all"
+                style={selected?.id === ch.id
+                  ? { background: '#f5f2fd', color: '#6D4AE0', border: '1.5px solid #6D4AE0' }
+                  : { background: 'white', color: '#4b5563', border: '1.5px solid #e3ddf8' }
+                }
+              >
+                {ch.title}
+              </button>
+            ))}
+            {channels.length === 0 && (
+              <p className="text-sm text-gray-400">No channels connected — go to Settings → Connect YouTube.</p>
             )}
-            <button
-              type="button"
-              onClick={() => { void generateBrandIdentity(); }}
-              disabled={aiGenerating || !niche.trim()}
-              className="flex items-center gap-2 px-4 py-2 border-2 border-violet-500 text-violet-700 rounded-lg text-sm font-semibold hover:bg-violet-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {aiGenerating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-              {aiGenerating ? 'Generating…' : 'Generate Brand Identity'}
-            </button>
           </div>
-
-          {/* Brand colors */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-900 mb-4">Brand Colors</h2>
-            <div className="grid grid-cols-3 gap-4">
-              {[
-                { label: 'Primary', value: primaryColor, set: setPrimaryColor },
-                { label: 'Accent', value: accentColor, set: setAccentColor },
-                { label: 'Background', value: bgColor, set: setBgColor },
-              ].map(({ label, value, set }) => (
-                <div key={label}>
-                  <label className="block text-xs text-gray-500 mb-1">{label}</label>
-                  <div className="flex items-center gap-2">
-                    <input type="color" value={value} onChange={e => set(e.target.value)} className="w-8 h-8 rounded border border-gray-200 cursor-pointer" />
-                    <input type="text" value={value} onChange={e => set(e.target.value)} className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs font-mono" />
-                  </div>
-                </div>
-              ))}
-            </div>
-            {/* Preview */}
-            <div className="mt-4 rounded-lg overflow-hidden border border-gray-200">
-              <div style={{ backgroundColor: bgColor }} className="p-4 flex items-center justify-center h-20 relative">
-                <span style={{ color: primaryColor, fontFamily: 'sans-serif', fontWeight: 700, fontSize: 18 }}>Your Channel Title</span>
-                <div style={{ backgroundColor: accentColor }} className="absolute bottom-2 right-2 px-2 py-0.5 rounded text-white text-xs">CTA</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Typography & Style */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-900 mb-4">Visual Style</h2>
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="brand-font-style" className="block text-xs text-gray-500 mb-1">Font Style</label>
-                <input id="brand-font-style" type="text" value={fontStyle} onChange={e => setFontStyle(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label htmlFor="brand-visual-mood" className="block text-xs text-gray-500 mb-1">Visual Mood</label>
-                <input id="brand-visual-mood" type="text" value={visualMood} onChange={e => setVisualMood(e.target.value)} placeholder="e.g. professional, clean, modern" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label htmlFor="brand-thumbnail-style" className="block text-xs text-gray-500 mb-1">Thumbnail Style</label>
-                <input id="brand-thumbnail-style" type="text" value={thumbnailStyle} onChange={e => setThumbnailStyle(e.target.value)} placeholder="e.g. Bold text overlay, reaction shot" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-              </div>
-            </div>
-          </div>
-
-          {/* Voice Profile */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-900 mb-1 flex items-center gap-2"><Mic className="w-4 h-4 text-brand-500" /> Voice Profile</h2>
-            <p className="text-xs text-gray-500 mb-4">Used by VoiceAgent to generate per-section TTS specifications</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: 'Narrator Name', value: voiceName, set: setVoiceName, placeholder: 'e.g. Alex' },
-                { label: 'Style', value: voiceStyle, set: setVoiceStyle, placeholder: 'conversational / formal / energetic' },
-                { label: 'Tone', value: voiceTone, set: setVoiceTone, placeholder: 'engaging, confident, warm' },
-                { label: 'Pace', value: voicePace, set: setVoicePace, placeholder: 'slow / moderate / fast' },
-                { label: 'TTS Provider', value: voiceProvider, set: setVoiceProvider, placeholder: 'elevenlabs / openai / azure' },
-              ].map(({ label, value, set, placeholder }) => (
-                <div key={label}>
-                  <label className="block text-xs text-gray-500 mb-1">{label}</label>
-                  <input
-                    type="text"
-                    value={value}
-                    onChange={e => set(e.target.value)}
-                    placeholder={placeholder}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {error && <p className="text-sm text-red-500">{error}</p>}
-
-          <button
-            onClick={save}
-            disabled={saving}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 disabled:opacity-50"
-          >
-            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Brand Kit'}
-          </button>
         </div>
-      )}
+
+        {selected && (
+          <>
+            {/* Niche */}
+            <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+              <h2 className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Channel Niche</h2>
+              <input
+                type="text"
+                value={niche}
+                onChange={e => setNiche(e.target.value)}
+                placeholder="e.g. AI, Technology, Personal Finance, Health…"
+                className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+                style={{ border: '1.5px solid #e3e0f0' }}
+              />
+            </div>
+
+            {/* AI Generate */}
+            <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8', background: 'linear-gradient(135deg, #faf9ff 0%, #f5f2fd 100%)' }}>
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, #f0edf9, #e3ddf8)' }}>
+                  <Wand2 className="w-4 h-4" style={{ color: '#6D4AE0' }} />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-gray-900">AI Generate Brand Identity</h2>
+                  <p className="text-sm text-gray-400 mt-0.5">Let AI suggest colors, mood, and thumbnail style based on your niche.</p>
+                </div>
+              </div>
+              {aiGenerated && (
+                <div className="flex items-center gap-2 rounded-2xl px-3 py-2 text-sm mb-3" style={{ background: '#ecfdf5', color: '#065f46', border: '1.5px solid #a7f3d0' }}>
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  Brand identity generated from niche analysis!
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => { void generateBrandIdentity(); }}
+                disabled={aiGenerating || !niche.trim()}
+                className="flex items-center gap-2 px-4 py-2 rounded-2xl font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:opacity-90 active:scale-[0.98]"
+                style={{ border: '1.5px solid #6D4AE0', color: '#6D4AE0', background: 'white' }}
+              >
+                {aiGenerating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                {aiGenerating ? 'Generating…' : 'Generate Brand Identity'}
+              </button>
+            </div>
+
+            {/* Brand colors */}
+            <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+              <h2 className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-4">Brand Colors</h2>
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: 'Primary', value: primaryColor, set: setPrimaryColor },
+                  { label: 'Accent', value: accentColor, set: setAccentColor },
+                  { label: 'Background', value: bgColor, set: setBgColor },
+                ].map(({ label, value, set }) => (
+                  <div key={label}>
+                    <label className="block text-xs text-gray-400 mb-1">{label}</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={value} onChange={e => set(e.target.value)} className="w-8 h-8 rounded-lg cursor-pointer" style={{ border: '1.5px solid #e3ddf8' }} />
+                      <input type="text" value={value} onChange={e => set(e.target.value)} className="flex-1 rounded-xl px-2 py-1 text-xs font-mono bg-white outline-none focus:ring-2 focus:ring-[#6D4AE0]/20" style={{ border: '1.5px solid #e3e0f0' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Preview */}
+              <div className="mt-4 rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
+                <div style={{ backgroundColor: bgColor }} className="p-4 flex items-center justify-center h-20 relative">
+                  <span style={{ color: primaryColor, fontFamily: 'sans-serif', fontWeight: 700, fontSize: 18 }}>Your Channel Title</span>
+                  <div style={{ backgroundColor: accentColor }} className="absolute bottom-2 right-2 px-2 py-0.5 rounded-lg text-white text-xs">CTA</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Typography & Style */}
+            <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+              <h2 className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-4">Visual Style</h2>
+              <div className="space-y-3">
+                <div>
+                  <label htmlFor="brand-font-style" className="block text-xs text-gray-400 mb-1">Font Style</label>
+                  <input id="brand-font-style" type="text" value={fontStyle} onChange={e => setFontStyle(e.target.value)} className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all" style={{ border: '1.5px solid #e3e0f0' }} />
+                </div>
+                <div>
+                  <label htmlFor="brand-visual-mood" className="block text-xs text-gray-400 mb-1">Visual Mood</label>
+                  <input id="brand-visual-mood" type="text" value={visualMood} onChange={e => setVisualMood(e.target.value)} placeholder="e.g. professional, clean, modern" className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all" style={{ border: '1.5px solid #e3e0f0' }} />
+                </div>
+                <div>
+                  <label htmlFor="brand-thumbnail-style" className="block text-xs text-gray-400 mb-1">Thumbnail Style</label>
+                  <input id="brand-thumbnail-style" type="text" value={thumbnailStyle} onChange={e => setThumbnailStyle(e.target.value)} placeholder="e.g. Bold text overlay, reaction shot" className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all" style={{ border: '1.5px solid #e3e0f0' }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Voice Profile */}
+            <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+              <div className="flex items-center gap-2 mb-1">
+                <Mic className="w-4 h-4" style={{ color: '#6D4AE0' }} />
+                <h2 className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Voice Profile</h2>
+              </div>
+              <p className="text-xs text-gray-400 mb-4">Used by VoiceAgent to generate per-section TTS specifications</p>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Narrator Name', value: voiceName, set: setVoiceName, placeholder: 'e.g. Alex' },
+                  { label: 'Style', value: voiceStyle, set: setVoiceStyle, placeholder: 'conversational / formal / energetic' },
+                  { label: 'Tone', value: voiceTone, set: setVoiceTone, placeholder: 'engaging, confident, warm' },
+                  { label: 'Pace', value: voicePace, set: setVoicePace, placeholder: 'slow / moderate / fast' },
+                  { label: 'TTS Provider', value: voiceProvider, set: setVoiceProvider, placeholder: 'elevenlabs / openai / azure' },
+                ].map(({ label, value, set, placeholder }) => (
+                  <div key={label}>
+                    <label className="block text-xs text-gray-400 mb-1">{label}</label>
+                    <input
+                      type="text"
+                      value={value}
+                      onChange={e => set(e.target.value)}
+                      placeholder={placeholder}
+                      className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+                      style={{ border: '1.5px solid #e3e0f0' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {error && <p className="text-sm text-red-500">{error}</p>}
+
+            <button
+              onClick={save}
+              disabled={saving}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-bold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+              style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
+            >
+              {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Brand Kit'}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

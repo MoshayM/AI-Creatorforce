@@ -62,8 +62,16 @@ function ImpactBadge({ impact }: { impact: 'positive' | 'negative' | 'neutral' }
 }
 
 function PriorityBadge({ priority }: { priority: 'high' | 'medium' | 'low' }) {
-  const colors = { high: 'bg-red-100 text-red-700', medium: 'bg-amber-100 text-amber-700', low: 'bg-gray-100 text-gray-600' };
-  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[priority]}`}>{priority}</span>;
+  const styles: Record<string, React.CSSProperties> = {
+    high: { background: '#fef2f2', color: '#b91c1c' },
+    medium: { background: '#fff7ed', color: '#c2410c' },
+    low: { background: '#f3f4f6', color: '#4b5563' },
+  };
+  return (
+    <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={styles[priority]}>
+      {priority}
+    </span>
+  );
 }
 
 export default function AnalyticsPage() {
@@ -147,408 +155,433 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex items-center gap-3 mb-8">
-        <BarChart2 className="w-7 h-7 text-brand-600" />
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
+        {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Analytics & Growth</h1>
-          <p className="text-sm text-gray-500">AI-powered channel diagnostics and next-video recommendations</p>
+          <h1 className="text-2xl font-extrabold text-gray-900 leading-tight flex items-center gap-2">
+            <BarChart2 className="w-6 h-6" style={{ color: '#6D4AE0' }} />
+            Analytics &amp; Growth
+          </h1>
+          <p className="text-sm text-gray-400 mt-0.5">AI-powered channel diagnostics and next-video recommendations</p>
         </div>
-      </div>
 
-      {/* AI Usage card */}
-      {activeView === 'usage' && <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
-        <h2 className="font-semibold text-gray-900 mb-3">AI Usage (30 days)</h2>
-        {tokenUsage === 'unavailable' ? (
-          <p className="text-sm text-gray-500">unavailable</p>
-        ) : tokenUsage === null ? (
-          <p className="text-sm text-gray-500">Loading…</p>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Total cost</p>
-              <p className="text-lg font-semibold text-gray-900">${tokenUsage.totals.costUsd.toFixed(2)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Tokens in</p>
-              <p className="text-lg font-semibold text-gray-900">{tokenUsage.totals.tokensIn.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Tokens out</p>
-              <p className="text-lg font-semibold text-gray-900">{tokenUsage.totals.tokensOut.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Provider calls</p>
-              <p className="text-lg font-semibold text-gray-900">{tokenUsage.totals.calls.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Copilot cache-hit rate</p>
-              <p className="text-lg font-semibold text-gray-900">
-                {tokenUsage.copilot.cacheHitRate != null
-                  ? `${(tokenUsage.copilot.cacheHitRate * 100).toFixed(0)}%`
-                  : '—'}
-              </p>
-            </div>
+        {/* AI Usage card */}
+        {activeView === 'usage' && (
+          <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+            <h2 className="font-bold text-gray-900 mb-3">AI Usage (30 days)</h2>
+            {tokenUsage === 'unavailable' ? (
+              <p className="text-sm text-gray-400">unavailable</p>
+            ) : tokenUsage === null ? (
+              <p className="text-sm text-gray-400">Loading…</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-0.5">Total cost</p>
+                  <p className="text-lg font-bold text-gray-900">${tokenUsage.totals.costUsd.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-0.5">Tokens in</p>
+                  <p className="text-lg font-bold text-gray-900">{tokenUsage.totals.tokensIn.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-0.5">Tokens out</p>
+                  <p className="text-lg font-bold text-gray-900">{tokenUsage.totals.tokensOut.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-0.5">Provider calls</p>
+                  <p className="text-lg font-bold text-gray-900">{tokenUsage.totals.calls.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-0.5">Copilot cache-hit rate</p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {tokenUsage.copilot.cacheHitRate != null
+                      ? `${(tokenUsage.copilot.cacheHitRate * 100).toFixed(0)}%`
+                      : '—'}
+                  </p>
+                </div>
+              </div>
+            )}
+            {tokenUsage !== 'unavailable' && tokenUsage !== null && (tokenUsage.byVideo ?? []).length > 0 && (
+              <div className="mt-4 pt-4" style={{ borderTop: '1px solid #f0edf9' }}>
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-2">Cost by video</p>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left">
+                      <th className="pb-1 text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Video</th>
+                      <th className="pb-1 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 text-right">Calls</th>
+                      <th className="pb-1 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 text-right">Tokens</th>
+                      <th className="pb-1 text-[10px] font-extrabold uppercase tracking-widest text-gray-400 text-right">Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tokenUsage.byVideo.map((v) => (
+                      <tr key={v.importedVideoId} className="hover:bg-[#faf9ff]" style={{ borderBottom: '1px solid #f0edf9' }}>
+                        <td className="py-1.5 text-gray-800 truncate max-w-[280px]" title={v.title}>{v.title}</td>
+                        <td className="py-1.5 text-right text-gray-500">{v.calls}</td>
+                        <td className="py-1.5 text-right text-gray-500">{(v.tokensIn + v.tokensOut).toLocaleString()}</td>
+                        <td className="py-1.5 text-right font-bold text-gray-900">${v.costUsd.toFixed(3)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
-        {tokenUsage !== 'unavailable' && tokenUsage !== null && (tokenUsage.byVideo ?? []).length > 0 && (
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cost by video</p>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-gray-500">
-                  <th className="pb-1 font-medium">Video</th>
-                  <th className="pb-1 font-medium text-right">Calls</th>
-                  <th className="pb-1 font-medium text-right">Tokens</th>
-                  <th className="pb-1 font-medium text-right">Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tokenUsage.byVideo.map((v) => (
-                  <tr key={v.importedVideoId} className="border-t border-gray-50">
-                    <td className="py-1.5 text-gray-800 truncate max-w-[280px]" title={v.title}>{v.title}</td>
-                    <td className="py-1.5 text-right text-gray-600">{v.calls}</td>
-                    <td className="py-1.5 text-right text-gray-600">{(v.tokensIn + v.tokensOut).toLocaleString()}</td>
-                    <td className="py-1.5 text-right font-medium text-gray-900">${v.costUsd.toFixed(3)}</td>
-                  </tr>
+
+        {/* Channel selector + run — only show run button on analytics tab */}
+        <div className="bg-white rounded-2xl p-5 no-print" style={{ border: '1.5px solid #e3ddf8' }}>
+          <label htmlFor="analytics-channel" className="block text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-2">Select Channel</label>
+          <div className="flex gap-3">
+            {channels.length > 0 ? (
+              <select
+                id="analytics-channel"
+                value={channelId}
+                onChange={e => setChannelId(e.target.value)}
+                className="flex-1 bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+                style={{ border: '1.5px solid #e3e0f0' }}
+              >
+                <option value="">Choose a channel…</option>
+                {channels.map(c => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+            ) : (
+              <input
+                id="analytics-channel"
+                type="text"
+                value={channelId}
+                onChange={e => setChannelId(e.target.value)}
+                placeholder="Channel ID (connect a channel in Settings)"
+                className="flex-1 bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+                style={{ border: '1.5px solid #e3e0f0' }}
+              />
+            )}
+            {activeView === 'analytics' && (
+              <button
+                onClick={runAnalytics}
+                disabled={!channelId || loadingAnalytics}
+                className="flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-bold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+                style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
+              >
+                {loadingAnalytics ? <RefreshCw className="w-4 h-4 animate-spin" /> : <BarChart2 className="w-4 h-4" />}
+                {loadingAnalytics ? 'Analyzing…' : 'Run Analytics'}
+              </button>
+            )}
           </div>
-        )}
-      </div>}
-
-      {/* Channel selector + run — only show run button on analytics tab */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 no-print">
-        <label htmlFor="analytics-channel" className="block text-sm font-medium text-gray-700 mb-2">Select Channel</label>
-        <div className="flex gap-3">
-          {channels.length > 0 ? (
-            <select
-              id="analytics-channel"
-              value={channelId}
-              onChange={e => setChannelId(e.target.value)}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">Choose a channel…</option>
-              {channels.map(c => (
-                <option key={c.id} value={c.id}>{c.title}</option>
-              ))}
-            </select>
-          ) : (
-            <input
-              id="analytics-channel"
-              type="text"
-              value={channelId}
-              onChange={e => setChannelId(e.target.value)}
-              placeholder="Channel ID (connect a channel in Settings)"
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
-          )}
-          {activeView === 'analytics' && (
-            <button
-              onClick={runAnalytics}
-              disabled={!channelId || loadingAnalytics}
-              className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
-            >
-              {loadingAnalytics ? <RefreshCw className="w-4 h-4 animate-spin" /> : <BarChart2 className="w-4 h-4" />}
-              {loadingAnalytics ? 'Analyzing…' : 'Run Analytics'}
-            </button>
-          )}
+          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
         </div>
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
-      </div>
 
-      {/* Tab bar */}
-      <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
-        {(['scorecard', 'analytics', 'usage'] as const).map(v => (
-          <button
-            key={v}
-            onClick={() => setActiveView(v)}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${
-              activeView === v ? 'bg-white shadow text-violet-700' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {v === 'scorecard' ? 'Scorecard' : v === 'analytics' ? 'AI Analysis' : 'AI Usage'}
-          </button>
-        ))}
-      </div>
+        {/* Tab bar */}
+        <div className="flex gap-2">
+          {(['scorecard', 'analytics', 'usage'] as const).map(v => (
+            <button
+              key={v}
+              onClick={() => setActiveView(v)}
+              className="flex-1 py-2.5 text-sm font-semibold rounded-2xl transition-all"
+              style={
+                activeView === v
+                  ? { background: '#f5f2fd', border: '2px solid #6D4AE0', color: '#6D4AE0' }
+                  : { background: '#faf9ff', border: '1.5px solid #e3ddf8', color: '#374151' }
+              }
+            >
+              {v === 'scorecard' ? 'Scorecard' : v === 'analytics' ? 'AI Analysis' : 'AI Usage'}
+            </button>
+          ))}
+        </div>
 
-      {/* Scorecard tab */}
-      {activeView === 'scorecard' && (
-        <div className="space-y-6">
-          {!channelId && (
-            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-gray-500 text-sm">
-              Select a channel above to see its performance scorecard.
-            </div>
-          )}
-          {channelId && scorecardLoading && (
-            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-              <RefreshCw className="w-5 h-5 animate-spin text-violet-500 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">Loading scorecard…</p>
-            </div>
-          )}
-          {channelId && !scorecardLoading && scorecard && (
-            <>
-              {/* Publishing KPIs */}
-              <div>
-                <h2 className="font-semibold text-gray-900 mb-3">Publishing</h2>
-                <div className="grid grid-cols-3 gap-4">
-                  <StatCard tone="lilac" icon={<Video className="w-5 h-5" />} label="Published" value={scorecard.publishing?.published ?? '—'} sub="videos uploaded" subClassName="text-gray-500" />
-                  <StatCard tone="cream" icon={<Gauge className="w-5 h-5" />} label="Scheduled" value={scorecard.publishing?.scheduled ?? '—'} sub="queued for publish" subClassName="text-gray-500" />
-                  <StatCard tone="pink" icon={<AlertTriangle className="w-5 h-5" />} label="Failed" value={scorecard.publishing?.failed ?? '—'} sub="publish errors" subClassName={scorecard.publishing?.failed ? 'text-red-500' : 'text-gray-500'} />
+        {/* Scorecard tab */}
+        {activeView === 'scorecard' && (
+          <div className="space-y-5">
+            {!channelId && (
+              <div className="bg-white rounded-3xl p-12 text-center" style={{ border: '1.5px solid #e3ddf8' }}>
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg, #f0edf9, #e3ddf8)' }}>
+                  <BarChart2 className="w-8 h-8" style={{ color: '#6D4AE0' }} />
                 </div>
+                <p className="text-base font-extrabold text-gray-900 mb-1">No channel selected</p>
+                <p className="text-sm text-gray-400">Select a channel above to see its performance scorecard.</p>
               </div>
-
-              {/* Autonomy KPIs */}
-              <div>
-                <h2 className="font-semibold text-gray-900 mb-3">AI Autonomy</h2>
-                <div className="grid grid-cols-3 gap-4">
-                  <StatCard tone="periwinkle" icon={<BarChart2 className="w-5 h-5" />} label="Proposals" value={scorecard.calendar?.total ?? '—'} sub="calendar entries" subClassName="text-gray-500" />
-                  <StatCard tone="lilac" icon={<TrendingUp className="w-5 h-5" />} label="Approval Rate" value={scorecard.calendar ? `${Math.round(scorecard.calendar.approvalRate)}%` : '—'} sub="of proposals approved" subClassName={scorecard.calendar && scorecard.calendar.approvalRate >= 50 ? 'text-green-600' : 'text-amber-500'} />
-                  <StatCard tone="cream" icon={<Gauge className="w-5 h-5" />} label="Upcoming (7d)" value={scorecard.calendar?.upcoming7d ?? '—'} sub="approved slots" subClassName="text-gray-500" />
+            )}
+            {channelId && scorecardLoading && (
+              <div className="bg-white rounded-2xl p-8 text-center" style={{ border: '1.5px solid #e3ddf8' }}>
+                <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" style={{ color: '#6D4AE0' }} />
+                <p className="text-sm text-gray-400">Loading scorecard…</p>
+              </div>
+            )}
+            {channelId && !scorecardLoading && scorecard && (
+              <>
+                {/* Publishing KPIs */}
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Publishing</p>
+                  <div className="grid grid-cols-3 gap-4">
+                    <StatCard tone="lilac" icon={<Video className="w-5 h-5" />} label="Published" value={scorecard.publishing?.published ?? '—'} sub="videos uploaded" subClassName="text-gray-500" />
+                    <StatCard tone="cream" icon={<Gauge className="w-5 h-5" />} label="Scheduled" value={scorecard.publishing?.scheduled ?? '—'} sub="queued for publish" subClassName="text-gray-500" />
+                    <StatCard tone="pink" icon={<AlertTriangle className="w-5 h-5" />} label="Failed" value={scorecard.publishing?.failed ?? '—'} sub="publish errors" subClassName={scorecard.publishing?.failed ? 'text-red-500' : 'text-gray-500'} />
+                  </div>
                 </div>
-              </div>
 
-              {/* Performance Grade */}
-              {scorecard.publishing && scorecard.calendar && (() => {
-                const pub = scorecard.publishing!;
-                const cal = scorecard.calendar!;
-                const failureRate = (pub.failed + pub.published) > 0 ? pub.failed / (pub.failed + pub.published) : 0;
-                const score = (cal.approvalRate * 0.4) + (Math.min(pub.published / 10, 1) * 40) + ((1 - failureRate) * 20);
-                const grade = score >= 80 ? 'A' : score >= 60 ? 'B' : score >= 40 ? 'C' : 'D';
-                const gradeColors = { A: 'bg-green-100 text-green-700', B: 'bg-blue-100 text-blue-700', C: 'bg-amber-100 text-amber-700', D: 'bg-red-100 text-red-700' };
-                const gradeLabels = { A: 'Excellent', B: 'Good', C: 'Developing', D: 'Needs Work' };
-                return (
-                  <div className="bg-white rounded-2xl border border-gray-200 p-5 flex items-center gap-6">
-                    <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black shrink-0 ${gradeColors[grade]}`}>
-                      {grade}
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-gray-900">Performance Grade: {gradeLabels[grade]}</p>
-                      <p className="text-sm text-gray-500 mt-1">Composite score based on approval rate, publish volume, and failure rate.</p>
-                      <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                        <span>Autonomy rate: {Math.round(cal.approvalRate)}%</span>
-                        <span>Published: {pub.published}</span>
-                        <span>Failure rate: {(failureRate * 100).toFixed(0)}%</span>
+                {/* Autonomy KPIs */}
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">AI Autonomy</p>
+                  <div className="grid grid-cols-3 gap-4">
+                    <StatCard tone="periwinkle" icon={<BarChart2 className="w-5 h-5" />} label="Proposals" value={scorecard.calendar?.total ?? '—'} sub="calendar entries" subClassName="text-gray-500" />
+                    <StatCard tone="lilac" icon={<TrendingUp className="w-5 h-5" />} label="Approval Rate" value={scorecard.calendar ? `${Math.round(scorecard.calendar.approvalRate)}%` : '—'} sub="of proposals approved" subClassName={scorecard.calendar && scorecard.calendar.approvalRate >= 50 ? 'text-green-600' : 'text-amber-500'} />
+                    <StatCard tone="cream" icon={<Gauge className="w-5 h-5" />} label="Upcoming (7d)" value={scorecard.calendar?.upcoming7d ?? '—'} sub="approved slots" subClassName="text-gray-500" />
+                  </div>
+                </div>
+
+                {/* Performance Grade */}
+                {scorecard.publishing && scorecard.calendar && (() => {
+                  const pub = scorecard.publishing!;
+                  const cal = scorecard.calendar!;
+                  const failureRate = (pub.failed + pub.published) > 0 ? pub.failed / (pub.failed + pub.published) : 0;
+                  const score = (cal.approvalRate * 0.4) + (Math.min(pub.published / 10, 1) * 40) + ((1 - failureRate) * 20);
+                  const grade = score >= 80 ? 'A' : score >= 60 ? 'B' : score >= 40 ? 'C' : 'D';
+                  const gradeStyles: Record<string, React.CSSProperties> = {
+                    A: { background: '#ecfdf5', color: '#065f46' },
+                    B: { background: '#eff6ff', color: '#1d4ed8' },
+                    C: { background: '#fff7ed', color: '#c2410c' },
+                    D: { background: '#fef2f2', color: '#b91c1c' },
+                  };
+                  const gradeLabels = { A: 'Excellent', B: 'Good', C: 'Developing', D: 'Needs Work' };
+                  return (
+                    <div className="bg-white rounded-2xl p-5 flex items-center gap-6" style={{ border: '1.5px solid #e3ddf8' }}>
+                      <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black shrink-0" style={gradeStyles[grade]}>
+                        {grade}
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-gray-900">Performance Grade: {gradeLabels[grade]}</p>
+                        <p className="text-sm text-gray-400 mt-1">Composite score based on approval rate, publish volume, and failure rate.</p>
+                        <div className="flex gap-4 mt-2 text-xs text-gray-400">
+                          <span>Autonomy rate: {Math.round(cal.approvalRate)}%</span>
+                          <span>Published: {pub.published}</span>
+                          <span>Failure rate: {(failureRate * 100).toFixed(0)}%</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })()}
-            </>
-          )}
-        </div>
-      )}
-
-      {activeView === 'analytics' && loadingAnalytics && (
-        <AiWorkingCard
-          title="Analyzing channel performance"
-          steps={[
-            'Fetching channel metrics',
-            'Diagnosing CTR and retention patterns',
-            'Writing insights and suggestions',
-          ]}
-        />
-      )}
-
-      {/* Analytics report */}
-      {activeView === 'analytics' && analytics && !loadingAnalytics && (
-        <div className="space-y-6 fade-in">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-500">
-              {analyticsDurationMs != null && `Report generated in ${formatDuration(analyticsDurationMs)}`}
-              {growthDurationMs != null && ` · growth report in ${formatDuration(growthDurationMs)}`}
-            </p>
-            <ResultActions
-              data={growth ? { analytics, growth } : analytics}
-              filename={`analytics-${analytics.channelId}`}
-            />
+                  );
+                })()}
+              </>
+            )}
           </div>
+        )}
 
-          {/* Pastel KPI stat cards (design ref: analyse.jpg) */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              tone="lilac"
-              icon={<Gauge className="w-5 h-5" />}
-              label="Overall Score"
-              value={<>{analytics.overallScore}<span className="text-base text-gray-500 font-medium">/100</span></>}
-              sub={analytics.overallScore >= 70 ? 'Healthy channel' : analytics.overallScore >= 40 ? 'Room to grow' : 'Needs attention'}
-              subClassName={analytics.overallScore >= 70 ? 'text-green-600' : analytics.overallScore >= 40 ? 'text-amber-500' : 'text-red-500'}
-            />
-            <StatCard
-              tone="pink"
-              icon={<Video className="w-5 h-5" />}
-              label="Videos Analysed"
-              value={analytics.topPerformers.length}
-              sub={analytics.period}
-              subClassName="text-gray-600"
-            />
-            <StatCard
-              tone="cream"
-              icon={<AlertTriangle className="w-5 h-5" />}
-              label="Retention Issues"
-              value={analytics.retentionIssues.length}
-              sub="drop-off points detected"
-              subClassName={analytics.retentionIssues.length > 0 ? 'text-amber-600' : 'text-green-600'}
-            />
-            <StatCard
-              tone="periwinkle"
-              icon={<MousePointerClick className="w-5 h-5" />}
-              label="Avg CTR"
-              value={(() => {
-                const ctrs = analytics.topPerformers.map((v) => v.ctr).filter((c) => Number.isFinite(c));
-                return ctrs.length ? `${((ctrs.reduce((s, c) => s + c, 0) / ctrs.length) * 100).toFixed(1)}%` : '—';
-              })()}
-              sub="across top performers"
-              subClassName="text-gray-600"
-            />
-          </div>
+        {activeView === 'analytics' && loadingAnalytics && (
+          <AiWorkingCard
+            title="Analyzing channel performance"
+            steps={[
+              'Fetching channel metrics',
+              'Diagnosing CTR and retention patterns',
+              'Writing insights and suggestions',
+            ]}
+          />
+        )}
 
-          {/* Charts row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <h2 className="font-semibold text-gray-900 mb-2">Performance Overview</h2>
-              <p className="text-xs text-gray-500 mb-2">Click-through rate per top video</p>
-              {analytics.topPerformers.some((v) => Number.isFinite(v.ctr) && v.ctr > 0) ? (
-                <PastelBars
-                  data={analytics.topPerformers.map((v, i) => ({
-                    label: `V${i + 1}`,
-                    value: Number.isFinite(v.ctr) ? v.ctr * 100 : 0,
-                    title: `${v.title} — CTR ${Number.isFinite(v.ctr) ? (v.ctr * 100).toFixed(1) : '?'}%`,
-                  }))}
-                  formatValue={(v) => `${v.toFixed(1)}%`}
-                />
-              ) : (
-                <p className="text-sm text-gray-500 py-8 text-center">No CTR data available for this channel yet</p>
-              )}
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <h2 className="font-semibold text-gray-900 mb-2">Insight Breakdown</h2>
-              <p className="text-xs text-gray-500 mb-4">Impact of the findings across your channel</p>
-              <PastelDonut
-                segments={[
-                  { label: 'Positive', value: analytics.insights.filter((i) => i.impact === 'positive').length, color: '#9fd8a5' },
-                  { label: 'Negative', value: analytics.insights.filter((i) => i.impact === 'negative').length, color: '#f2a3c6' },
-                  { label: 'Neutral', value: analytics.insights.filter((i) => i.impact === 'neutral').length, color: '#c9d2e3' },
-                ]}
+        {/* Analytics report */}
+        {activeView === 'analytics' && analytics && !loadingAnalytics && (
+          <div className="space-y-5 fade-in">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-400">
+                {analyticsDurationMs != null && `Report generated in ${formatDuration(analyticsDurationMs)}`}
+                {growthDurationMs != null && ` · growth report in ${formatDuration(growthDurationMs)}`}
+              </p>
+              <ResultActions
+                data={growth ? { analytics, growth } : analytics}
+                filename={`analytics-${analytics.channelId}`}
               />
             </div>
-          </div>
 
-          {/* Summary */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <h2 className="font-semibold text-gray-900 mb-2">Summary</h2>
-            <p className="text-sm text-gray-600">{analytics.summary}</p>
-          </div>
-
-          {/* Insights */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <h2 className="font-semibold text-gray-900 mb-4">Key Insights</h2>
-            <div className="space-y-3">
-              {analytics.insights.map((insight, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-[#f7f4fd]">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 mt-0.5 ${
-                    insight.impact === 'positive' ? 'bg-[#9fd8a5]' : insight.impact === 'negative' ? 'bg-[#f2a3c6]' : 'bg-[#c9d2e3]'
-                  }`}>
-                    {insight.impact === 'positive' ? <TrendingUp className="w-4 h-4" /> : insight.impact === 'negative' ? <TrendingDown className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{insight.metric}</span>
-                      <ImpactBadge impact={insight.impact} />
-                    </div>
-                    <p className="text-sm text-gray-800 mb-1">{insight.finding}</p>
-                    <p className="text-xs text-brand-600 flex items-center gap-1"><ChevronRight className="w-3 h-3" />{insight.suggestion}</p>
-                  </div>
-                </div>
-              ))}
+            {/* Pastel KPI stat cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
+                tone="lilac"
+                icon={<Gauge className="w-5 h-5" />}
+                label="Overall Score"
+                value={<>{analytics.overallScore}<span className="text-base text-gray-500 font-medium">/100</span></>}
+                sub={analytics.overallScore >= 70 ? 'Healthy channel' : analytics.overallScore >= 40 ? 'Room to grow' : 'Needs attention'}
+                subClassName={analytics.overallScore >= 70 ? 'text-green-600' : analytics.overallScore >= 40 ? 'text-amber-500' : 'text-red-500'}
+              />
+              <StatCard
+                tone="pink"
+                icon={<Video className="w-5 h-5" />}
+                label="Videos Analysed"
+                value={analytics.topPerformers.length}
+                sub={analytics.period}
+                subClassName="text-gray-600"
+              />
+              <StatCard
+                tone="cream"
+                icon={<AlertTriangle className="w-5 h-5" />}
+                label="Retention Issues"
+                value={analytics.retentionIssues.length}
+                sub="drop-off points detected"
+                subClassName={analytics.retentionIssues.length > 0 ? 'text-amber-600' : 'text-green-600'}
+              />
+              <StatCard
+                tone="periwinkle"
+                icon={<MousePointerClick className="w-5 h-5" />}
+                label="Avg CTR"
+                value={(() => {
+                  const ctrs = analytics.topPerformers.map((v) => v.ctr).filter((c) => Number.isFinite(c));
+                  return ctrs.length ? `${((ctrs.reduce((s, c) => s + c, 0) / ctrs.length) * 100).toFixed(1)}%` : '—';
+                })()}
+                sub="across top performers"
+                subClassName="text-gray-600"
+              />
             </div>
-          </div>
 
-          {/* Top performers */}
-          {analytics.topPerformers.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <h2 className="font-semibold text-gray-900 mb-4">Top Performers</h2>
-              <div className="space-y-2">
-                {analytics.topPerformers.map((v, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-[#f7f4fd]">
-                    <p className="text-sm font-medium text-gray-800 flex-1 truncate">{v.title}</p>
-                    <div className="flex gap-4 text-xs text-gray-500 ml-4 shrink-0">
-                      <span>CTR {(v.ctr * 100).toFixed(1)}%</span>
-                      <span>Avg {Math.round(v.avgWatchTimeSecs)}s</span>
+            {/* Charts row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+                <h2 className="font-bold text-gray-900 mb-1">Performance Overview</h2>
+                <p className="text-xs text-gray-400 mb-3">Click-through rate per top video</p>
+                {analytics.topPerformers.some((v) => Number.isFinite(v.ctr) && v.ctr > 0) ? (
+                  <PastelBars
+                    data={analytics.topPerformers.map((v, i) => ({
+                      label: `V${i + 1}`,
+                      value: Number.isFinite(v.ctr) ? v.ctr * 100 : 0,
+                      title: `${v.title} — CTR ${Number.isFinite(v.ctr) ? (v.ctr * 100).toFixed(1) : '?'}%`,
+                    }))}
+                    formatValue={(v) => `${v.toFixed(1)}%`}
+                  />
+                ) : (
+                  <p className="text-sm text-gray-400 py-8 text-center">No CTR data available for this channel yet</p>
+                )}
+              </div>
+              <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+                <h2 className="font-bold text-gray-900 mb-1">Insight Breakdown</h2>
+                <p className="text-xs text-gray-400 mb-4">Impact of the findings across your channel</p>
+                <PastelDonut
+                  segments={[
+                    { label: 'Positive', value: analytics.insights.filter((i) => i.impact === 'positive').length, color: '#9fd8a5' },
+                    { label: 'Negative', value: analytics.insights.filter((i) => i.impact === 'negative').length, color: '#f2a3c6' },
+                    { label: 'Neutral', value: analytics.insights.filter((i) => i.impact === 'neutral').length, color: '#c9d2e3' },
+                  ]}
+                />
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+              <h2 className="font-bold text-gray-900 mb-2">Summary</h2>
+              <p className="text-sm text-gray-600">{analytics.summary}</p>
+            </div>
+
+            {/* Insights */}
+            <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+              <h2 className="font-bold text-gray-900 mb-4">Key Insights</h2>
+              <div className="space-y-3">
+                {analytics.insights.map((insight, i) => (
+                  <div key={i} className="flex items-start gap-3 p-3 rounded-2xl" style={{ background: '#faf9ff' }}>
+                    <div className={`w-9 h-9 rounded-2xl flex items-center justify-center text-white shrink-0 mt-0.5 ${
+                      insight.impact === 'positive' ? 'bg-[#9fd8a5]' : insight.impact === 'negative' ? 'bg-[#f2a3c6]' : 'bg-[#c9d2e3]'
+                    }`}>
+                      {insight.impact === 'positive' ? <TrendingUp className="w-4 h-4" /> : insight.impact === 'negative' ? <TrendingDown className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">{insight.metric}</span>
+                        <ImpactBadge impact={insight.impact} />
+                      </div>
+                      <p className="text-sm text-gray-800 mb-1">{insight.finding}</p>
+                      <p className="text-xs flex items-center gap-1" style={{ color: '#6D4AE0' }}><ChevronRight className="w-3 h-3" />{insight.suggestion}</p>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          )}
 
-          {/* Growth button */}
-          {loadingGrowth && (
-            <AiWorkingCard
-              title="Generating growth report"
-              steps={[
-                'Reviewing your analytics report',
-                'Ranking next-topic opportunities',
-                'Prioritizing optimization actions',
-              ]}
-            />
-          )}
-          {!growth && !loadingGrowth && (
-            <button
-              onClick={runGrowth}
-              disabled={loadingGrowth}
-              className="no-print w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-brand-300 rounded-xl text-brand-600 font-medium hover:bg-brand-50 disabled:opacity-50"
-            >
-              {loadingGrowth ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
-              {loadingGrowth ? 'Generating growth recommendations…' : 'Generate Growth Report & Next Topics'}
-            </button>
-          )}
-
-          {/* Growth report */}
-          {growth && !loadingGrowth && (
-            <div className="space-y-4 fade-in">
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h2 className="font-semibold text-gray-900 mb-2 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-brand-600" /> Growth Summary</h2>
-                <p className="text-sm text-gray-600">{growth.summary}</p>
-              </div>
-
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2"><Lightbulb className="w-4 h-4 text-amber-500" /> Next Video Ideas</h2>
-                <div className="space-y-3">
-                  {growth.nextTopics.map((t, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:border-brand-200 transition-colors">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${t.opportunityScore >= 70 ? 'bg-green-100 text-green-700' : t.opportunityScore >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {t.opportunityScore}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{t.topic}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{t.rationale}</p>
+            {/* Top performers */}
+            {analytics.topPerformers.length > 0 && (
+              <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+                <h2 className="font-bold text-gray-900 mb-4">Top Performers</h2>
+                <div className="space-y-2">
+                  {analytics.topPerformers.map((v, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-2xl" style={{ background: '#faf9ff' }}>
+                      <p className="text-sm font-medium text-gray-800 flex-1 truncate">{v.title}</p>
+                      <div className="flex gap-4 text-xs text-gray-400 ml-4 shrink-0">
+                        <span>CTR {(v.ctr * 100).toFixed(1)}%</span>
+                        <span>Avg {Math.round(v.avgWatchTimeSecs)}s</span>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
+            )}
 
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h2 className="font-semibold text-gray-900 mb-4">Optimization Actions</h2>
-                <div className="space-y-3">
-                  {growth.optimizationActions.map((a, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
-                      <PriorityBadge priority={a.priority} />
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">{a.area}</p>
-                        <p className="text-sm text-gray-800">{a.action}</p>
-                        <p className="text-xs text-brand-600 mt-0.5">{a.expectedImpact}</p>
+            {/* Growth button */}
+            {loadingGrowth && (
+              <AiWorkingCard
+                title="Generating growth report"
+                steps={[
+                  'Reviewing your analytics report',
+                  'Ranking next-topic opportunities',
+                  'Prioritizing optimization actions',
+                ]}
+              />
+            )}
+            {!growth && !loadingGrowth && (
+              <button
+                onClick={runGrowth}
+                disabled={loadingGrowth}
+                className="no-print w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl font-bold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+                style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
+              >
+                {loadingGrowth ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                {loadingGrowth ? 'Generating growth recommendations…' : 'Generate Growth Report & Next Topics'}
+              </button>
+            )}
+
+            {/* Growth report */}
+            {growth && !loadingGrowth && (
+              <div className="space-y-4 fade-in">
+                <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+                  <h2 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4" style={{ color: '#6D4AE0' }} /> Growth Summary
+                  </h2>
+                  <p className="text-sm text-gray-600">{growth.summary}</p>
+                </div>
+
+                <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+                  <h2 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-amber-500" /> Next Video Ideas
+                  </h2>
+                  <div className="space-y-3">
+                    {growth.nextTopics.map((t, i) => (
+                      <div key={i} className="flex items-start gap-3 p-3 rounded-2xl hover:bg-[#faf9ff] transition-colors" style={{ border: '1.5px solid #e3ddf8' }}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${t.opportunityScore >= 70 ? 'bg-green-100 text-green-700' : t.opportunityScore >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {t.opportunityScore}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{t.topic}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{t.rationale}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
+                  <h2 className="font-bold text-gray-900 mb-4">Optimization Actions</h2>
+                  <div className="space-y-3">
+                    {growth.optimizationActions.map((a, i) => (
+                      <div key={i} className="flex items-start gap-3 p-3 rounded-2xl" style={{ background: '#faf9ff' }}>
+                        <PriorityBadge priority={a.priority} />
+                        <div>
+                          <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">{a.area}</p>
+                          <p className="text-sm text-gray-800">{a.action}</p>
+                          <p className="text-xs mt-0.5" style={{ color: '#6D4AE0' }}>{a.expectedImpact}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

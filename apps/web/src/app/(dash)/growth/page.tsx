@@ -31,27 +31,27 @@ function daysUntil(dateStr: string): number {
 
 function statusChipStyle(s: string): string {
   switch (s) {
-    case 'ACTIVE': return 'bg-green-50 text-green-700 border-green-200';
+    case 'ACTIVE': return 'bg-[#ecfdf5] text-[#065f46]';
     case 'EXPIRED': return 'bg-red-50 text-red-700 border-red-200';
-    case 'CONVERTED': return 'bg-purple-50 text-purple-700 border-purple-200';
-    case 'PENDING_REVIEW': return 'bg-amber-50 text-amber-700 border-amber-200';
-    case 'REVOKED': return 'bg-gray-100 text-gray-500 border-gray-200';
+    case 'CONVERTED': return 'bg-[#f5f2fd] text-[#6D4AE0]';
+    case 'PENDING_REVIEW': return 'bg-[#fff7ed] text-[#c2410c]';
+    case 'REVOKED': return 'bg-[#f3f4f6] text-[#4b5563]';
     case 'PENDING': return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-    case 'QUALIFIED': return 'bg-green-50 text-green-700 border-green-200';
-    case 'REWARDED': return 'bg-purple-50 text-purple-700 border-purple-200';
+    case 'QUALIFIED': return 'bg-[#ecfdf5] text-[#065f46]';
+    case 'REWARDED': return 'bg-[#f5f2fd] text-[#6D4AE0]';
     case 'FLAGGED': return 'bg-red-50 text-red-700 border-red-200';
-    default: return 'bg-gray-100 text-gray-600 border-gray-200';
+    default: return 'bg-[#f3f4f6] text-[#4b5563]';
   }
 }
 
 function offerTypeBadge(type: string): string {
   switch (type) {
     case 'FIRST_RECHARGE': return 'bg-blue-50 text-blue-700 border-blue-200';
-    case 'WELCOME': return 'bg-purple-50 text-purple-700 border-purple-200';
+    case 'WELCOME': return 'bg-[#f5f2fd] text-[#6D4AE0]';
     case 'LOYALTY': return 'bg-amber-50 text-amber-700 border-amber-200';
     case 'WINBACK': return 'bg-orange-50 text-orange-700 border-orange-200';
     case 'LOW_CREDIT': return 'bg-red-50 text-red-700 border-red-200';
-    default: return 'bg-gray-100 text-gray-600 border-gray-200';
+    default: return 'bg-[#f3f4f6] text-[#4b5563]';
   }
 }
 
@@ -76,8 +76,8 @@ function TrialStatusCard() {
   });
 
   if (isLoading) return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <Loader2 className="w-5 h-5 animate-spin text-brand-600" />
+    <div className="bg-white rounded-2xl p-4" style={{ border: '1.5px solid #e3ddf8' }}>
+      <Loader2 className="w-5 h-5 animate-spin text-[#6D4AE0]" />
     </div>
   );
   if (isError || !data?.hasTrial) return null;
@@ -90,7 +90,7 @@ function TrialStatusCard() {
 
   if (status === 'CONVERTED') {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3">
+      <div className="bg-white rounded-2xl p-4 flex items-center gap-3" style={{ border: '1.5px solid #e3ddf8' }}>
         <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
         <div>
           <span className="text-sm font-semibold text-gray-800">Trial converted</span>
@@ -103,9 +103,9 @@ function TrialStatusCard() {
   const expiryColor = days === null ? '' : days <= 0 ? 'text-red-600' : days <= 3 ? 'text-amber-600' : 'text-gray-500';
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="flex items-center gap-2">
-        <Clock className="w-4 h-4 text-brand-600" />
+        <Clock className="w-4 h-4 text-[#6D4AE0]" />
         <span className="text-sm font-semibold text-gray-800">Free Trial</span>
         {status && (
           <span className={`text-[11px] font-medium border rounded-full px-2 py-0.5 ${statusChipStyle(status)}`}>
@@ -121,7 +121,7 @@ function TrialStatusCard() {
           </div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${pct > 30 ? 'bg-brand-500' : pct > 10 ? 'bg-amber-400' : 'bg-red-400'}`}
+              className={`h-full rounded-full transition-all ${pct > 30 ? 'bg-[#6D4AE0]' : pct > 10 ? 'bg-amber-400' : 'bg-red-400'}`}
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -158,18 +158,18 @@ function UpgradeNudges() {
   return (
     <section className="space-y-2">
       {recs.map((rec) => (
-        <div key={rec.id} className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 flex items-center gap-3">
-          <AlertCircle className="w-4 h-4 text-brand-600 shrink-0" />
+        <div key={rec.id} className="bg-[#f5f2fd] rounded-2xl px-4 py-3 flex items-center gap-3" style={{ border: '1.5px solid #e3ddf8' }}>
+          <AlertCircle className="w-4 h-4 text-[#6D4AE0] shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm text-gray-800">{reasonLabel(rec.reasonCode)}</p>
             <p className="text-xs text-gray-500 mt-0.5">
               Recommended plan: <span className="font-semibold">{rec.recommendedPlan}</span>
             </p>
           </div>
-          <a href="/wallet" className="shrink-0 text-xs font-semibold text-brand-700 hover:underline px-2 py-1 rounded">
+          <a href="/wallet" className="shrink-0 text-xs font-semibold text-[#6D4AE0] hover:underline px-2 py-1 rounded-2xl">
             Upgrade
           </a>
-          <button onClick={() => dismissMutation.mutate(rec.id)} aria-label="Dismiss" className="shrink-0 text-gray-500 hover:text-gray-600 p-1 rounded">
+          <button onClick={() => dismissMutation.mutate(rec.id)} aria-label="Dismiss" className="shrink-0 text-gray-500 hover:text-gray-600 p-1 rounded-2xl">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -198,13 +198,17 @@ function OfferCenter() {
     },
   });
 
-  if (isLoading) return <div className="bg-white border border-gray-200 rounded-xl p-4"><Loader2 className="w-5 h-5 animate-spin text-brand-600" /></div>;
+  if (isLoading) return (
+    <div className="bg-white rounded-2xl p-4" style={{ border: '1.5px solid #e3ddf8' }}>
+      <Loader2 className="w-5 h-5 animate-spin text-[#6D4AE0]" />
+    </div>
+  );
   if (offers.length === 0) return null;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
       <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-        <Gift className="w-4 h-4 text-brand-600" />
+        <Gift className="w-4 h-4 text-[#6D4AE0]" />
         <span className="text-sm font-semibold text-gray-800">Offer Center</span>
       </div>
       <div className="divide-y divide-gray-50">
@@ -234,7 +238,8 @@ function OfferCenter() {
                 <button
                   onClick={() => redeemMutation.mutate(offer.id)}
                   disabled={redeemMutation.isPending && redeemMutation.variables === offer.id}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-2xl font-bold text-white text-xs disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
                 >
                   {redeemMutation.isPending && redeemMutation.variables === offer.id && <Loader2 className="w-3 h-3 animate-spin" />}
                   Redeem
@@ -315,24 +320,25 @@ function ReferralCenter() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
+      <div className="bg-white rounded-2xl p-4 space-y-4" style={{ border: '1.5px solid #e3ddf8' }}>
         <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-brand-600" />
+          <Users className="w-4 h-4 text-[#6D4AE0]" />
           <span className="text-sm font-semibold text-gray-800">Referral Center</span>
         </div>
 
-        {codeLoading && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
+        {codeLoading && <Loader2 className="w-5 h-5 animate-spin text-[#6D4AE0]" />}
 
         {codeData && (
           <>
             <div className="space-y-2">
               <p className="text-xs text-gray-500">Your referral code</p>
               <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold tracking-widest text-brand-700 font-mono">{codeData.code}</span>
+                <span className="text-2xl font-bold tracking-widest text-[#6D4AE0] font-mono">{codeData.code}</span>
                 <button
                   onClick={() => void copyCode(codeData.code)}
                   aria-label="Copy referral code"
-                  className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-brand-600 hover:border-brand-300 transition-colors"
+                  className="p-1.5 rounded-2xl text-gray-500 hover:text-[#6D4AE0] transition-colors"
+                  style={{ border: '1.5px solid #e3ddf8' }}
                 >
                   {copied ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                 </button>
@@ -347,12 +353,14 @@ function ReferralCenter() {
                   readOnly
                   value={shareUrl}
                   onFocus={(e) => e.target.select()}
-                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-700 focus:outline-none"
+                  className="flex-1 text-xs rounded-2xl px-3 py-2 bg-gray-50 text-gray-700 focus:outline-none"
+                  style={{ border: '1.5px solid #e3e0f0' }}
                 />
                 <button
                   onClick={() => void copyCode(shareUrl)}
                   aria-label="Copy share link"
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-gray-500 hover:text-brand-600 hover:border-brand-300 transition-colors text-xs"
+                  className="px-3 py-2 rounded-2xl text-gray-500 hover:text-[#6D4AE0] transition-colors text-xs font-semibold"
+                  style={{ border: '1.5px solid #e3ddf8' }}
                 >
                   {copied ? 'Copied!' : 'Copy'}
                 </button>
@@ -377,24 +385,24 @@ function ReferralCenter() {
           </>
         )}
 
-        {earningsLoading && <Loader2 className="w-4 h-4 animate-spin text-brand-600" />}
+        {earningsLoading && <Loader2 className="w-4 h-4 animate-spin text-[#6D4AE0]" />}
         {earnings && (
           <div className="flex flex-wrap gap-3">
-            <div className="flex flex-col bg-gray-50 rounded-lg px-3 py-2 min-w-[80px]">
+            <div className="flex flex-col bg-gray-50 rounded-2xl px-3 py-2 min-w-[80px]">
               <span className="text-xs text-gray-500">Total earned</span>
               <span className="text-lg font-bold text-gray-800">{fmtCredits(earnings.totalCredits)}</span>
               <span className="text-[10px] text-gray-500">credits</span>
             </div>
-            <div className="flex flex-col bg-green-50 rounded-lg px-3 py-2 min-w-[80px]">
+            <div className="flex flex-col bg-[#ecfdf5] rounded-2xl px-3 py-2 min-w-[80px]">
               <span className="text-xs text-gray-500">Qualified</span>
-              <span className="text-lg font-bold text-green-700">{earnings.qualifiedCount}</span>
+              <span className="text-lg font-bold text-[#065f46]">{earnings.qualifiedCount}</span>
             </div>
-            <div className="flex flex-col bg-yellow-50 rounded-lg px-3 py-2 min-w-[80px]">
+            <div className="flex flex-col bg-yellow-50 rounded-2xl px-3 py-2 min-w-[80px]">
               <span className="text-xs text-gray-500">Pending</span>
               <span className="text-lg font-bold text-yellow-700">{earnings.pendingCount}</span>
             </div>
             {earnings.flaggedCount > 0 && (
-              <div className="flex flex-col bg-red-50 rounded-lg px-3 py-2 min-w-[80px]">
+              <div className="flex flex-col bg-red-50 rounded-2xl px-3 py-2 min-w-[80px]">
                 <span className="text-xs text-gray-500">Under review</span>
                 <span className="text-lg font-bold text-red-600">{earnings.flaggedCount}</span>
               </div>
@@ -430,7 +438,7 @@ function ReferralCenter() {
         )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
         <p className="text-sm font-semibold text-gray-800">Have a referral code?</p>
         <div className="flex gap-2">
           <input
@@ -439,12 +447,14 @@ function ReferralCenter() {
             onChange={(e) => { setRedeemInput(e.target.value); setRedeemError(''); setRedeemSuccess(false); }}
             placeholder="Enter code"
             aria-label="Referral code input"
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="flex-1 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
+            style={{ border: '1.5px solid #e3e0f0' }}
           />
           <button
             onClick={() => { if (redeemInput.trim()) redeemMutation.mutate(redeemInput.trim()); }}
             disabled={!redeemInput.trim() || redeemMutation.isPending}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl font-bold text-white text-sm disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
           >
             {redeemMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             Apply
@@ -465,15 +475,15 @@ function ReferralCenter() {
       </div>
 
       {!lbLoading && leaderboard.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
             <Trophy className="w-4 h-4 text-amber-500" />
             <span className="text-sm font-semibold text-gray-800">Referral Leaderboard</span>
-            <span className="text-xs text-gray-500">(top 10)</span>
+            <span className="text-xs text-gray-400">(top 10)</span>
           </div>
           <div className="divide-y divide-gray-50">
             {leaderboard.slice(0, 10).map((entry) => (
-              <div key={entry.rank} className={`flex items-center gap-3 px-4 py-2.5 ${entry.userLabel.includes('(you)') ? 'bg-brand-50' : ''}`}>
+              <div key={entry.rank} className={`flex items-center gap-3 px-4 py-2.5 ${entry.userLabel.includes('(you)') ? 'bg-[#f5f2fd]' : ''}`}>
                 <span className={`text-sm font-bold w-6 text-center ${entry.rank <= 3 ? 'text-amber-500' : 'text-gray-500'}`}>
                   {entry.rank}
                 </span>
@@ -513,7 +523,7 @@ function ScorecardTab() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {statItems.map((s) => (
-          <div key={s.label} className={`${s.bg} rounded-xl p-4`}>
+          <div key={s.label} className={`${s.bg} rounded-2xl p-4`}>
             {pubLoading ? (
               <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
             ) : (
@@ -525,7 +535,7 @@ function ScorecardTab() {
       </div>
 
       {pubSummary && pubSummary.failed > 0 && (
-        <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
           <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
           <p className="text-sm text-red-700">
             <span className="font-semibold">{pubSummary.failed} failed</span> publishes — <Link href="/publishing" className="underline">review in Publishing</Link>
@@ -535,7 +545,7 @@ function ScorecardTab() {
 
       <OfferCenter />
 
-      <div className="bg-gradient-to-r from-brand-600 to-violet-600 rounded-2xl p-6 text-white">
+      <div className="rounded-2xl p-6 text-white" style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)' }}>
         <div className="flex items-center gap-3 mb-3">
           <Zap className="w-5 h-5" />
           <span className="font-semibold text-lg">Unlock More Power</span>
@@ -543,7 +553,7 @@ function ScorecardTab() {
         <p className="text-sm text-white/80 mb-4">
           Upgrade to Pro for advanced analytics, unlimited AI generations, priority rendering, and multi-channel management.
         </p>
-        <Link href="/wallet" className="inline-flex items-center gap-2 bg-white text-brand-700 font-semibold px-4 py-2 rounded-xl text-sm hover:bg-brand-50 transition-colors">
+        <Link href="/wallet" className="inline-flex items-center gap-2 bg-white text-[#6D4AE0] font-semibold px-4 py-2 rounded-2xl text-sm hover:bg-[#f5f2fd] transition-colors">
           <TrendingUp className="w-4 h-4" /> View Plans
         </Link>
       </div>
@@ -587,7 +597,7 @@ function CreditsTab() {
 
   return (
     <div className="space-y-5">
-      <div className="bg-gradient-to-br from-violet-600 to-indigo-700 rounded-2xl p-6 text-white">
+      <div className="rounded-2xl p-6 text-white" style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #4f35a8 100%)' }}>
         <div className="flex items-center gap-2 mb-1">
           <Coins className="w-5 h-5" />
           <span className="text-sm font-medium text-white/80">Current Balance</span>
@@ -600,12 +610,12 @@ function CreditsTab() {
             <p className="text-sm text-white/70 mt-1">credits{balance?.tier ? ` · ${balance.tier} plan` : ''}</p>
           </>
         )}
-        <Link href="/wallet" className="inline-flex items-center gap-2 mt-4 bg-white/20 hover:bg-white/30 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+        <Link href="/wallet" className="inline-flex items-center gap-2 mt-4 bg-white/20 hover:bg-white/30 text-white text-sm font-medium px-4 py-2 rounded-2xl transition-colors">
           <Zap className="w-3.5 h-3.5" /> Add Credits
         </Link>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+      <div className="bg-white rounded-2xl p-5 space-y-4" style={{ border: '1.5px solid #e3ddf8' }}>
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-gray-500" />
           <span className="text-sm font-semibold text-gray-800">Usage by Action (last 30 days)</span>
@@ -644,7 +654,7 @@ function CreditsTab() {
         )}
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
         <p className="text-sm font-semibold text-amber-800 mb-1">Credit-saving tips</p>
         <ul className="text-xs text-amber-700 space-y-1 list-disc list-inside">
           <li>Use dry-run mode on the AI Calendar before generating full proposals</li>
@@ -713,21 +723,22 @@ function GoalsTab() {
 
   return (
     <div className="space-y-5">
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-5">
+      <div className="bg-white rounded-2xl p-5 space-y-5" style={{ border: '1.5px solid #e3ddf8' }}>
         <div className="flex items-center gap-2">
-          <Target className="w-4 h-4 text-brand-600" />
+          <Target className="w-4 h-4 text-[#6D4AE0]" />
           <span className="text-sm font-semibold text-gray-800">Content Goals</span>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-medium text-gray-600 block mb-2">Weekly video target</label>
+            <label className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 block mb-2">Weekly video target</label>
             <div className="flex gap-2 flex-wrap">
               {[1, 2, 3, 4, 5, 6, 7].map((n) => (
                 <button
                   key={n}
                   onClick={() => setGoals((g) => ({ ...g, weeklyVideos: n }))}
-                  className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-colors ${goals.weeklyVideos === n ? 'bg-brand-600 text-white border-brand-600' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-brand-300'}`}
+                  className={`w-9 h-9 rounded-2xl text-sm font-semibold border transition-colors ${goals.weeklyVideos === n ? 'text-white' : 'bg-gray-50 text-gray-700 hover:border-[#6D4AE0]/40'}`}
+                  style={goals.weeklyVideos === n ? { background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', border: 'none' } : { border: '1.5px solid #e3ddf8' }}
                 >
                   {n}
                 </button>
@@ -736,13 +747,14 @@ function GoalsTab() {
           </div>
 
           <div>
-            <label className="text-xs font-medium text-gray-600 block mb-2">Monthly Shorts target</label>
+            <label className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 block mb-2">Monthly Shorts target</label>
             <div className="flex gap-2 flex-wrap">
               {[0, 2, 4, 8, 12, 16, 20].map((n) => (
                 <button
                   key={n}
                   onClick={() => setGoals((g) => ({ ...g, monthlyShortsTarget: n }))}
-                  className={`px-3 h-9 rounded-lg text-sm font-semibold border transition-colors ${goals.monthlyShortsTarget === n ? 'bg-brand-600 text-white border-brand-600' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-brand-300'}`}
+                  className={`px-3 h-9 rounded-2xl text-sm font-semibold border transition-colors ${goals.monthlyShortsTarget === n ? 'text-white' : 'bg-gray-50 text-gray-700 hover:border-[#6D4AE0]/40'}`}
+                  style={goals.monthlyShortsTarget === n ? { background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', border: 'none' } : { border: '1.5px solid #e3ddf8' }}
                 >
                   {n === 0 ? 'None' : n}
                 </button>
@@ -752,7 +764,8 @@ function GoalsTab() {
 
           <button
             onClick={saveGoals}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl font-bold text-white text-sm"
+            style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
           >
             {saved ? <CheckCircle2 className="w-4 h-4" /> : <Target className="w-4 h-4" />}
             {saved ? 'Saved!' : 'Save Goals'}
@@ -760,7 +773,7 @@ function GoalsTab() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+      <div className="bg-white rounded-2xl p-5 space-y-4" style={{ border: '1.5px solid #e3ddf8' }}>
         <div className="flex items-center gap-2">
           <Flame className="w-4 h-4 text-orange-500" />
           <span className="text-sm font-semibold text-gray-800">This Month</span>
@@ -774,7 +787,7 @@ function GoalsTab() {
             </div>
             <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${videoProgress >= 100 ? 'bg-green-500' : videoProgress >= 50 ? 'bg-brand-500' : 'bg-amber-400'}`}
+                className={`h-full rounded-full transition-all ${videoProgress >= 100 ? 'bg-green-500' : videoProgress >= 50 ? 'bg-[#6D4AE0]' : 'bg-amber-400'}`}
                 style={{ width: `${videoProgress}%` }}
               />
             </div>
@@ -799,7 +812,7 @@ function GoalsTab() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+      <div className="bg-white rounded-2xl p-5 space-y-3" style={{ border: '1.5px solid #e3ddf8' }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-amber-500" />
@@ -808,14 +821,14 @@ function GoalsTab() {
           <button
             onClick={() => void loadTip()}
             disabled={tipLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs hover:bg-amber-100 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-2xl text-xs hover:bg-amber-100 disabled:opacity-50"
           >
             {tipLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
             Get Tip
           </button>
         </div>
         {tip ? (
-          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
             <p className="text-sm text-amber-800">{tip}</p>
           </div>
         ) : (
@@ -841,32 +854,34 @@ export default function GrowthPage() {
   const [tab, setTab] = useState<Tab>('scorecard');
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <TrendingUp className="w-7 h-7 text-brand-600" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Growth</h1>
-          <p className="text-sm text-gray-500">Track performance, referrals, credits, and content goals</p>
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
+        <div className="flex items-center gap-3">
+          <TrendingUp className="w-7 h-7 text-[#6D4AE0]" />
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">Growth</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Track performance, referrals, credits, and content goals</p>
+          </div>
         </div>
-      </div>
 
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-6 w-fit">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-      </div>
+        <div className="flex gap-1 bg-[#f0edf9] p-1 rounded-2xl w-fit">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-medium transition-all ${tab === t.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-      {tab === 'scorecard' && <ScorecardTab />}
-      {tab === 'referrals' && <ReferralCenter />}
-      {tab === 'credits' && <CreditsTab />}
-      {tab === 'goals' && <GoalsTab />}
+        {tab === 'scorecard' && <ScorecardTab />}
+        {tab === 'referrals' && <ReferralCenter />}
+        {tab === 'credits' && <CreditsTab />}
+        {tab === 'goals' && <GoalsTab />}
+      </div>
     </div>
   );
 }

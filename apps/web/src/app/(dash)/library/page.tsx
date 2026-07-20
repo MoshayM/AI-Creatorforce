@@ -134,162 +134,174 @@ function LibraryPageInner() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full px-8 py-6 max-w-7xl mx-auto w-full">
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <ListVideo className="w-6 h-6 text-brand-600" />
-            Media Control
-          </h1>
-          <p className="text-gray-500 mt-1 text-sm">All videos, shorts and playlists for your channel</p>
+    <div className="min-h-full bg-[#faf9ff]">
+      <div className="p-5 lg:p-7 max-w-5xl mx-auto space-y-5">
+        {/* Page header */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 leading-tight flex items-center gap-2">
+              <ListVideo className="w-6 h-6" style={{ color: '#6D4AE0' }} />
+              Media Control
+            </h1>
+            <p className="text-sm text-gray-400 mt-0.5">All videos, shorts and playlists for your channel</p>
+          </div>
+          {tab !== 'channels' && (
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Channel selector */}
+              <select
+                value={channelId}
+                onChange={(e) => { handleChannelChange(e.target.value); }}
+                className="bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+                style={{ border: '1.5px solid #e3e0f0' }}
+                aria-label="Select channel"
+              >
+                <option value="">Select a channel…</option>
+                {channels.map((c) => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
+                ))}
+              </select>
+              {/* Sync controls */}
+              {channelId && <SyncBadge channelId={channelId} />}
+            </div>
+          )}
         </div>
-        {tab !== 'channels' && (
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Channel selector */}
-            <select
-              value={channelId}
-              onChange={(e) => { handleChannelChange(e.target.value); }}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
-              aria-label="Select channel"
+
+        {/* Tabs — Channel Access works without a selected channel */}
+        <div className="flex gap-2 flex-wrap">
+          {([['videos', 'Videos'], ['playlists', 'Playlists'], ['channels', 'Channel Access']] as Array<[TabId, string]>).map(([t, label]) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => { setTab(t); }}
+              className="px-4 py-2 text-sm font-semibold rounded-2xl transition-all"
+              style={
+                tab === t
+                  ? { background: '#f5f2fd', border: '2px solid #6D4AE0', color: '#6D4AE0' }
+                  : { background: '#faf9ff', border: '1.5px solid #e3ddf8', color: '#374151' }
+              }
             >
-              <option value="">Select a channel…</option>
-              {channels.map((c) => (
-                <option key={c.id} value={c.id}>{c.title}</option>
-              ))}
-            </select>
-            {/* Sync controls */}
-            {channelId && <SyncBadge channelId={channelId} />}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'channels' && (
+          <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
+            <ChannelAccessPanel />
           </div>
         )}
-      </div>
 
-      {/* Tabs — Channel Access works without a selected channel */}
-      <div className="flex gap-1 mb-5 border-b border-gray-100">
-        {([['videos', 'Videos'], ['playlists', 'Playlists'], ['channels', 'Channel Access']] as Array<[TabId, string]>).map(([t, label]) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => { setTab(t); }}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-              tab === t
-                ? 'bg-white border border-b-white border-gray-100 text-gray-900 shadow-sm -mb-px'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+        {tab !== 'channels' && !channelId && (
+          <div className="bg-white rounded-3xl p-16 flex flex-col items-center justify-center text-center" style={{ border: '1.5px solid #e3ddf8' }}>
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg, #f0edf9, #e3ddf8)' }}>
+              <ListVideo className="w-8 h-8" style={{ color: '#6D4AE0' }} />
+            </div>
+            <p className="text-base font-extrabold text-gray-900 mb-1">No channel selected</p>
+            <p className="text-sm text-gray-400">Select a channel above to browse its library.</p>
+          </div>
+        )}
 
-      {tab === 'channels' && (
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <ChannelAccessPanel />
-        </div>
-      )}
-
-      {tab !== 'channels' && !channelId && (
-        <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
-          <ListVideo className="w-12 h-12 mb-3 opacity-30" />
-          <p>Select a channel above to browse its library.</p>
-        </div>
-      )}
-
-      {tab !== 'channels' && channelId && (
-        <>
-
-          {/* Videos tab */}
-          {tab === 'videos' && (
-            <div className="flex flex-col flex-1 min-h-0 gap-4">
-              {/* Filter bar */}
-              <div className="flex items-center gap-3 flex-wrap">
-                {/* Search */}
-                <div className="relative flex-1 min-w-[200px] max-w-xs">
-                  <svg
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z" />
-                  </svg>
-                  <input
-                    type="search"
-                    value={searchInput}
-                    onChange={(e) => { setSearchInput(e.target.value); }}
-                    placeholder="Search videos…"
-                    aria-label="Search videos"
-                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm bg-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-300"
-                  />
-                </div>
-
-                {/* Type toggle */}
-                <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
-                  {(['all', 'video', 'short'] as VideoType[]).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => { setVideoType(t); }}
-                      className={`px-3 py-2 capitalize transition-colors ${
-                        videoType === t
-                          ? 'bg-brand-600 text-white font-medium'
-                          : 'bg-white text-gray-600 hover:bg-gray-50'
-                      }`}
+        {tab !== 'channels' && channelId && (
+          <>
+            {/* Videos tab */}
+            {tab === 'videos' && (
+              <div className="flex flex-col gap-4">
+                {/* Filter bar */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Search */}
+                  <div className="relative flex-1 min-w-[200px] max-w-xs">
+                    <svg
+                      className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
                     >
-                      {t === 'all' ? 'All' : t === 'video' ? 'Videos' : 'Shorts'}
-                    </button>
-                  ))}
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z" />
+                    </svg>
+                    <input
+                      type="search"
+                      value={searchInput}
+                      onChange={(e) => { setSearchInput(e.target.value); }}
+                      placeholder="Search videos…"
+                      aria-label="Search videos"
+                      className="w-full pl-10 pr-4 bg-white rounded-2xl py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all placeholder:text-gray-400"
+                      style={{ border: '1.5px solid #e3e0f0' }}
+                    />
+                  </div>
+
+                  {/* Type toggle */}
+                  <div className="flex gap-1.5">
+                    {(['all', 'video', 'short'] as VideoType[]).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => { setVideoType(t); }}
+                        className="px-3 py-2 text-sm font-semibold rounded-2xl transition-all"
+                        style={
+                          videoType === t
+                            ? { background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', color: '#fff', border: '1.5px solid transparent', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }
+                            : { background: '#faf9ff', border: '1.5px solid #e3ddf8', color: '#374151' }
+                        }
+                      >
+                        {t === 'all' ? 'All' : t === 'video' ? 'Videos' : 'Shorts'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Sort */}
+                  <select
+                    value={videoSort}
+                    onChange={(e) => { setVideoSort(e.target.value as VideoSort); }}
+                    aria-label="Sort videos"
+                    className="bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+                    style={{ border: '1.5px solid #e3e0f0' }}
+                  >
+                    <option value="recent">Recent</option>
+                    <option value="title">Title</option>
+                  </select>
                 </div>
 
-                {/* Sort */}
-                <select
-                  value={videoSort}
-                  onChange={(e) => { setVideoSort(e.target.value as VideoSort); }}
-                  aria-label="Sort videos"
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
-                >
-                  <option value="recent">Recent</option>
-                  <option value="title">Title</option>
-                </select>
+                {/* Grid / empty state */}
+                {videosLoading && (
+                  <div className="flex items-center gap-2 py-20 justify-center text-gray-400">
+                    <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#6D4AE0' }} /> Loading library…
+                  </div>
+                )}
+
+                {!videosLoading && allVideos.length === 0 && (
+                  <div className="bg-white rounded-3xl p-16 flex flex-col items-center justify-center text-center" style={{ border: '1.5px solid #e3ddf8' }}>
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg, #f0edf9, #e3ddf8)' }}>
+                      <ListVideo className="w-8 h-8" style={{ color: '#6D4AE0' }} />
+                    </div>
+                    <p className="text-base font-extrabold text-gray-900 mb-1">No videos synced yet</p>
+                    <p className="text-sm text-gray-400 mb-4">Sync your channel to see videos here.</p>
+                    <SyncBadge channelId={channelId} />
+                  </div>
+                )}
+
+                {!videosLoading && allVideos.length > 0 && (
+                  <div>
+                    <VirtualVideoGrid
+                      videos={allVideos}
+                      hasNextPage={!!hasNextPage}
+                      isFetchingNextPage={isFetchingNextPage}
+                      fetchNextPage={handleFetchNextPage}
+                    />
+                  </div>
+                )}
               </div>
+            )}
 
-              {/* Grid / empty state */}
-              {videosLoading && (
-                <div className="flex items-center gap-2 py-20 justify-center text-gray-500">
-                  <Loader2 className="w-5 h-5 animate-spin" /> Loading library…
-                </div>
-              )}
-
-              {!videosLoading && allVideos.length === 0 && (
-                <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4 py-20">
-                  <ListVideo className="w-12 h-12 opacity-30" />
-                  <p className="text-sm">No videos synced yet.</p>
-                  <SyncBadge channelId={channelId} />
-                </div>
-              )}
-
-              {!videosLoading && allVideos.length > 0 && (
-                <div className="flex-1 min-h-0">
-                  <VirtualVideoGrid
-                    videos={allVideos}
-                    hasNextPage={!!hasNextPage}
-                    isFetchingNextPage={isFetchingNextPage}
-                    fetchNextPage={handleFetchNextPage}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Playlists tab */}
-          {tab === 'playlists' && (
-            <div className="flex-1 overflow-y-auto min-h-0">
-              <PlaylistsTab channelId={channelId} />
-            </div>
-          )}
-        </>
-      )}
+            {/* Playlists tab */}
+            {tab === 'playlists' && (
+              <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
+                <PlaylistsTab channelId={channelId} />
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
