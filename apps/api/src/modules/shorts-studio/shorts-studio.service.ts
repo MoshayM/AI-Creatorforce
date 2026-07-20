@@ -237,6 +237,7 @@ export class ShortsStudioService {
         renderAsset: {
           select: { id: true, createdAt: true, versions: { orderBy: { version: 'desc' }, take: 1, select: { id: true, sizeBytes: true, durationMs: true } } },
         },
+        timeline: { select: { updatedAt: true } },
       },
     });
     const renderJob = await this.prisma.shortsRenderJob.findFirst({
@@ -244,12 +245,16 @@ export class ShortsStudioService {
       orderBy: { createdAt: 'desc' },
     });
     const version = clip?.renderAsset?.versions[0];
+    const renderCreatedAt = clip?.renderAsset?.createdAt ?? null;
+    const timelineUpdatedAt = clip?.timeline?.updatedAt ?? null;
+    const timelineStale = !!(renderCreatedAt && timelineUpdatedAt && timelineUpdatedAt > renderCreatedAt);
     return {
       clipStatus: clip?.status ?? null,
       renderJob,
       render: version
         ? { assetId: clip!.renderAsset!.id, versionId: version.id, sizeBytes: Number(version.sizeBytes), durationMs: version.durationMs }
         : null,
+      timelineStale,
     };
   }
 

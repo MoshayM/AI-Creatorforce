@@ -59,12 +59,19 @@ export class ShortsExportService {
         renderAsset: { include: { versions: { orderBy: { version: 'desc' }, take: 1 } } },
         thumbnails: { where: { isPrimary: true }, include: { asset: { include: { versions: { orderBy: { version: 'desc' }, take: 1 } } } } },
         exports: { orderBy: { createdAt: 'desc' }, take: 1, include: { exportAsset: true } },
+        timeline: { select: { updatedAt: true } },
       },
     });
     if (!clip) throw new NotFoundException('Clip not found');
     const renderVersion = clip.renderAsset?.versions[0];
     if (!renderVersion?.r2Key || !this.storage.exists(renderVersion.r2Key)) {
       throw new BadRequestException('Clip is not rendered yet — render it before exporting');
+    }
+
+    // Block when the timeline was edited after the last render — the render no longer
+    // reflects the current edit state and must be regenerated first.
+    if (clip.timeline && clip.renderAsset && clip.timeline.updatedAt > clip.renderAsset.createdAt) {
+      throw new BadRequestException('Timeline has been edited since the last render — click "Re-render" to produce the updated video before exporting');
     }
 
     // Skip when the latest export already packages the current render

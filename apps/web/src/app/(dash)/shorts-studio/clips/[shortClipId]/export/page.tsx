@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, Upload, ShieldCheck, Package, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, Upload, ShieldCheck, Package, ExternalLink, AlertTriangle } from 'lucide-react';
 import { api, apiClient } from '@/lib/api';
 import { JobErrorCard } from '@/components/job-error-card';
 
@@ -11,6 +11,7 @@ interface RenderStatus {
   clipStatus: string | null;
   renderJob: { status: 'QUEUED' | 'RUNNING' | 'CHECKPOINTED' | 'COMPLETE' | 'FAILED'; ffmpegPass: number; checkpointData: { segmentsDone?: number; total?: number } | null } | null;
   render: { assetId: string; versionId: string; sizeBytes: number; durationMs: number | null } | null;
+  timelineStale: boolean;
 }
 
 interface Thumb {
@@ -110,6 +111,7 @@ export default function ClipExportPage() {
   const rendering = status?.clipStatus === 'RENDERING' || status?.renderJob?.status === 'RUNNING' || status?.renderJob?.status === 'CHECKPOINTED';
   const failed = status?.renderJob?.status === 'FAILED';
   const checkpoint = status?.renderJob?.checkpointData;
+  const timelineStale = status?.timelineStale === true;
 
   const download = async () => {
     if (!status?.render) return;
@@ -142,6 +144,17 @@ export default function ClipExportPage() {
         </button>
       </div>
 
+      {/* Stale render warning — shown when timeline was edited after the last render */}
+      {timelineStale && !rendering && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+          <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">Your edits haven't been rendered yet</p>
+            <p className="text-xs text-amber-700 mt-0.5">The clip was edited after the last render. Click <strong>Re-render</strong> above to produce the updated video before exporting or publishing.</p>
+          </div>
+        </div>
+      )}
+
       {/* Status */}
       <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm mb-6 flex items-center gap-3">
         {rendering ? (
@@ -164,10 +177,11 @@ export default function ClipExportPage() {
           </div>
         ) : status?.render ? (
           <>
-            <CheckCircle2 className="w-5 h-5 text-green-500" />
+            <CheckCircle2 className={`w-5 h-5 ${timelineStale ? 'text-amber-400' : 'text-green-500'}`} />
             <p className="text-sm text-gray-700">
               Rendered · {(status.render.sizeBytes / 1024 / 1024).toFixed(1)} MB
               {status.render.durationMs ? ` · ${Math.round(status.render.durationMs / 1000)}s` : ''}
+              {timelineStale && <span className="ml-2 text-amber-600 font-medium">(outdated — re-render needed)</span>}
             </p>
             <button onClick={() => void download()} className="ml-auto flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 rounded-lg text-sm hover:bg-brand-50">
               <Download className="w-4 h-4" /> Download MP4
@@ -202,11 +216,12 @@ export default function ClipExportPage() {
             </p>
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Step 1: export package */}
+              {/* Step 1: export package — disabled when timeline is stale */}
               <button
                 onClick={() => exportMutation.mutate()}
-                disabled={exportMutation.isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                disabled={exportMutation.isPending || timelineStale}
+                title={timelineStale ? 'Re-render the clip first — the timeline was edited after the last render' : undefined}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {exportMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
                 {pub?.clipStatus === 'RENDERED' ? '1. Build export package' : 'Re-export package'}
