@@ -71,17 +71,17 @@ export function AuthPillInput({
 // ─── Split-screen login shell ──────────────────────────────────────────────────
 
 const LOGIN_FEATURES = [
+  { icon: '✂️', text: 'Shorts from Long Videos' },
+  { icon: '📱', text: 'Vertical Auto-Format' },
+  { icon: '🎯', text: 'Hook Generator' },
   { icon: '🧠', text: 'AI Script Writing' },
   { icon: '📈', text: 'SEO Intelligence' },
-  { icon: '🎯', text: 'Trend Discovery' },
-  { icon: '🚀', text: 'Smart Publishing' },
-  { icon: '📊', text: 'Deep Analytics' },
-  { icon: '✅', text: 'Compliance Check' },
+  { icon: '🚀', text: 'Multi-Platform Publish' },
 ];
 
 const LOGIN_STATS = [
   { value: '10K+', label: 'Creators' },
-  { value: '500K+', label: 'Videos' },
+  { value: '500K+', label: 'Shorts Made' },
   { value: '4.8★', label: 'Rating' },
 ];
 

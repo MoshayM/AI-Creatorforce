@@ -1,17 +1,13 @@
 'use client';
 import React from 'react';
 
-/**
- * Pastel KPI stat card (design ref: analyse.jpg): soft tinted card with a
- * rounded icon tile, label, big value, and an optional delta/subtitle line.
- */
 export type StatTone = 'lilac' | 'pink' | 'cream' | 'periwinkle';
 
-const TONES: Record<StatTone, { card: string; tile: string }> = {
-  lilac: { card: 'bg-[#f0eafc]', tile: 'bg-[#b39df3]' },
-  pink: { card: 'bg-[#fceaf2]', tile: 'bg-[#f2a3c6]' },
-  cream: { card: 'bg-[#fdf5dd]', tile: 'bg-[#eec95c]' },
-  periwinkle: { card: 'bg-[#e9edfc]', tile: 'bg-[#93a8ef]' },
+const TONES: Record<StatTone, { cardBg: string; cardBorder: string; tileBg: string }> = {
+  lilac:      { cardBg: '#f5f2fd', cardBorder: '#e3ddf8', tileBg: '#6D4AE0' },
+  pink:       { cardBg: '#fdf2f8', cardBorder: '#f9d0ea', tileBg: '#e0196e' },
+  cream:      { cardBg: '#fefce8', cardBorder: '#fde68a', tileBg: '#d97706' },
+  periwinkle: { cardBg: '#eff6ff', cardBorder: '#bfdbfe', tileBg: '#3b82f6' },
 };
 
 export function StatCard({
@@ -20,7 +16,7 @@ export function StatCard({
   label,
   value,
   sub,
-  subClassName = 'text-green-800',
+  subClassName = 'text-gray-500',
 }: {
   tone: StatTone;
   icon: React.ReactNode;
@@ -29,14 +25,21 @@ export function StatCard({
   sub?: string;
   subClassName?: string;
 }) {
+  const t = TONES[tone];
   return (
-    <div className={`${TONES[tone].card} rounded-2xl p-5 shadow-sm`}>
-      <div className={`${TONES[tone].tile} w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm mb-3`}>
+    <div
+      className="rounded-2xl p-5"
+      style={{ background: t.cardBg, border: `1.5px solid ${t.cardBorder}` }}
+    >
+      <div
+        className="w-10 h-10 rounded-xl flex items-center justify-center text-white mb-3 shrink-0"
+        style={{ background: t.tileBg }}
+      >
         {icon}
       </div>
-      <p className="text-xs font-medium text-gray-600">{label}</p>
-      <p className="text-3xl font-bold text-gray-900 mt-0.5 tabular-nums">{value}</p>
-      {sub && <p className={`text-xs font-medium mt-1 ${subClassName}`}>{sub}</p>}
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className="text-3xl font-extrabold text-gray-900 mt-0.5 tabular-nums leading-none">{value}</p>
+      {sub && <p className={`text-xs mt-1.5 font-medium ${subClassName}`}>{sub}</p>}
     </div>
   );
 }
@@ -53,12 +56,18 @@ export function PastelBars({
 }) {
   const bars = data.slice(0, maxBars);
   const max = Math.max(...bars.map((b) => b.value), 0.0001);
-  const COLORS = ['#b39df3', '#f2a3c6', '#f5b969', '#f7d872', '#9fd8a5', '#8fb8ef', '#c9a3ef'];
+  const COLORS = ['#6D4AE0', '#f0c14d', '#10b981', '#3b82f6', '#ec4899', '#f97316', '#8b5cf6'];
   return (
     <div className="flex items-end justify-around gap-3 h-44 pt-2">
       {bars.map((b, i) => (
-        <div key={i} className="flex flex-col items-center gap-2 flex-1 min-w-0" title={b.title ?? `${b.label}: ${formatValue ? formatValue(b.value) : b.value}`}>
-          <span className="text-[10px] text-gray-500 tabular-nums">{formatValue ? formatValue(b.value) : b.value}</span>
+        <div
+          key={i}
+          className="flex flex-col items-center gap-2 flex-1 min-w-0"
+          title={b.title ?? `${b.label}: ${formatValue ? formatValue(b.value) : b.value}`}
+        >
+          <span className="text-[10px] text-gray-500 tabular-nums">
+            {formatValue ? formatValue(b.value) : b.value}
+          </span>
           <div
             className="w-6 rounded-full transition-all duration-500"
             style={{ height: `${Math.max((b.value / max) * 120, 8)}px`, backgroundColor: COLORS[i % COLORS.length] }}
