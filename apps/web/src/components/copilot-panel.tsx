@@ -290,14 +290,35 @@ export function CopilotPanel() {
 
   // ── Browser STT fallback ──────────────────────────────────────────────────
   // listening is set optimistically by toggleMic BEFORE this is called.
-  const startBrowserSTT = useCallback(() => {
+  const startBrowserSTT = useCallback(async () => {
     const rec = getBrowserRecognition();
     if (!rec) {
-      // Browser doesn't support Web Speech API (Firefox, some Safari)
       setListening(false);
-      setMicError('Voice input not supported in this browser — try Chrome');
+      setMicError('Voice not supported in this browser — use Chrome or Edge');
       return;
     }
+
+    // Check existing permission state before touching SpeechRecognition.
+    // SpeechRecognition's own prompt is a tiny address-bar icon that's easy
+    // to miss or accidentally block; getUserMedia shows a proper dialog and
+    // lets us give an actionable error when already blocked.
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop()); // release immediately — just needed the grant
+    } catch (err) {
+      setListening(false);
+      conversationRef.current = false;
+      const name = (err as { name?: string }).name;
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setMicError('Mic blocked — click the 🔒 icon in your address bar → allow microphone');
+      } else if (name === 'NotFoundError') {
+        setMicError('No microphone found — plug one in and try again');
+      } else {
+        setMicError('Could not access microphone — check your system settings');
+      }
+      return;
+    }
+
     recognitionRef.current = rec;
     rec.lang = lang;
     rec.interimResults = true;
@@ -327,12 +348,13 @@ export function CopilotPanel() {
     rec.onerror = (e) => {
       setListening(false);
       conversationRef.current = false;
-      if (e.error === 'not-allowed') setMicError('Microphone permission denied');
+      if (e.error === 'not-allowed') {
+        setMicError('Mic blocked — click the 🔒 icon in your address bar → allow microphone');
+      }
     };
     window.speechSynthesis?.cancel();
     try {
       rec.start();
-      // listening already set optimistically by toggleMic
     } catch {
       setListening(false);
       conversationRef.current = false;
@@ -343,7 +365,7 @@ export function CopilotPanel() {
   const startListening = useCallback(() => {
     setMicError(null);
     if (serverStt === true) void startServerSTT();
-    else startBrowserSTT();
+    else void startBrowserSTT();
   }, [serverStt, startServerSTT, startBrowserSTT]);
   startListeningRef.current = startListening;
 
@@ -367,7 +389,7 @@ export function CopilotPanel() {
   // Auto-clear mic errors after 3s
   useEffect(() => {
     if (!micError) return;
-    const id = setTimeout(() => setMicError(null), 3000);
+    const id = setTimeout(() => setMicError(null), 6000);
     return () => clearTimeout(id);
   }, [micError]);
 
