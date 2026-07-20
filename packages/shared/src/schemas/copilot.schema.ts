@@ -83,6 +83,20 @@ export const EXPENSIVE_ACTIONS: ReadonlyArray<CopilotCommand['action']> = [
   'generate_social_content',
 ];
 
+export const CopilotPlanStepSchema = z.object({
+  label: z.string(),
+  /** Which agent or service handles this step (display only). */
+  agentName: z.string().optional(),
+  status: z.enum(['pending', 'running', 'done', 'failed']).default('pending'),
+});
+export type CopilotPlanStep = z.infer<typeof CopilotPlanStepSchema>;
+
+export const CopilotPlanSchema = z.object({
+  goal: z.string(),
+  steps: z.array(CopilotPlanStepSchema),
+});
+export type CopilotPlan = z.infer<typeof CopilotPlanSchema>;
+
 export const CopilotDecisionSchema = z.object({
   /** What the copilot says back — always in the USER'S language. */
   reply: z.string(),
@@ -90,6 +104,16 @@ export const CopilotDecisionSchema = z.object({
   language: z.string().default('en-US'),
   /** The single command to execute, or null for a pure conversational answer. */
   command: CopilotCommandSchema.nullable(),
+  /**
+   * Multi-step task plan shown to the user before/during execution.
+   * The LLM emits this when the request involves multiple agents or steps.
+   */
+  plan: CopilotPlanSchema.optional(),
+  /**
+   * App route to navigate to after this response (e.g. "/shorts-studio").
+   * Frontend calls router.push() when present — no manual navigation needed.
+   */
+  navigate: z.string().optional(),
 });
 export type CopilotDecision = z.infer<typeof CopilotDecisionSchema>;
 

@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, Logger, NotFoundException } from '@nes
 import {
   callAIStructured, CopilotDecisionSchema, JobTypeSchema,
   type CopilotCommand, type CopilotChatRequest, type CopilotDecision, type JobType,
+  type CopilotPlan,
   EXPENSIVE_ACTIONS,
 } from '@cf/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -46,6 +47,9 @@ Rules:
 - Use ids from the CONTEXT block only. Never invent ids.
 - Confirmation-gated actions (production runs, video analysis, renders, approving content, changing the voiceover language) will require the user's yes — still emit the command; the platform handles the confirmation step.
 - reply is what the user reads/hears: say what you understood and what will happen, in one or two sentences. Plain language, no JSON.
+- For multi-step workflows (e.g. "analyze video and create shorts", "run full pipeline") include a "plan" object with a "goal" string and an ordered "steps" array. Each step: {"label":"...", "agentName":"...(optional)", "status":"pending"}. Example: plan:{"goal":"Create YouTube Shorts","steps":[{"label":"Analyze video for viral moments","agentName":"VideoAnalysisAgent","status":"pending"},{"label":"Generate clip candidates","agentName":"ClipsAgent","status":"pending"},{"label":"Render vertical video","agentName":"RenderAgent","status":"pending"}]}
+- Include "navigate" with the best app route when your response involves a specific page. Route map: /shorts-studio, /projects, /publishing, /analytics, /library, /research, /settings, /approvals. Omit for pure conversational replies.
+- JSON response format: {"reply":"...","language":"...","command":{...}|null,"plan":{...}|undefined,"navigate":"..."|undefined}
 
 Command palette:
 - list_projects — show the user's projects
@@ -100,6 +104,10 @@ export interface CopilotResponse {
   fromCache?: boolean;
   /** LLM tokens this turn actually consumed (0 on cache hits). */
   tokensUsed?: number;
+  /** Multi-step task plan shown to the user (emitted by the LLM when multi-agent work is needed). */
+  plan?: CopilotPlan;
+  /** App route to navigate to — frontend calls router.push() when present. */
+  navigate?: string;
 }
 
 type ActionSource = 'UI' | 'COPILOT' | 'VOICE';
@@ -210,7 +218,7 @@ export class CopilotService {
       // into the last user message — Anthropic (and most providers) reject
       // consecutive same-role messages, so adding a second 'user' turn after
       // the user's actual query causes a 400 on every first turn.
-      const contextSuffix = `\n\n---\nCONTEXT (current platform state — use ids from here only):\n${context}${pendingNote}\n\nRespond with valid JSON only: {"reply":"...","language":"...","command":{...}|null}`;
+      const contextSuffix = `\n\n---\nCONTEXT (current platform state — use ids from here only):\n${context}${pendingNote}\n\nRespond with valid JSON only: {"reply":"...","language":"...","command":{...}|null,"plan":{...}|undefined,"navigate":"..."|undefined}`;
       const rawMsgs = req.messages.slice(-8).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
       const lastUserIdx = rawMsgs.reduce<number>((acc, m, i) => (m.role === 'user' ? i : acc), -1);
       const llmMessages: Array<{ role: 'user' | 'assistant'; content: string }> =
@@ -260,7 +268,14 @@ export class CopilotService {
 
     if (!decision.command) {
       await this.record(userId, 'chat.reply', null, 'EXECUTED', { source, fromCache, tokensUsed, lastUserText }, false);
-      return { reply: decision.reply, language: decision.language, fromCache, tokensUsed };
+      return {
+        reply: decision.reply,
+        language: decision.language,
+        fromCache,
+        tokensUsed,
+        ...(decision.plan ? { plan: decision.plan } : {}),
+        ...(decision.navigate ? { navigate: decision.navigate } : {}),
+      };
     }
 
     // A spoken/typed "yes" to the pending command IS the confirmation —
@@ -284,6 +299,8 @@ export class CopilotService {
         estimatedCredits: quote?.creditCost ?? null,
         fromCache,
         tokensUsed,
+        ...(decision.plan ? { plan: decision.plan } : {}),
+        ...(decision.navigate ? { navigate: decision.navigate } : {}),
       };
     }
 
@@ -294,6 +311,8 @@ export class CopilotService {
       executed: { action: decision.command.action, result: result.data },
       fromCache,
       tokensUsed,
+      ...(decision.plan ? { plan: decision.plan } : {}),
+      ...(decision.navigate ? { navigate: decision.navigate } : {}),
     };
   }
 
@@ -693,6 +712,21 @@ export class CopilotService {
         };
       }
     }
+  }
+
+  /** Recent background jobs triggered by this user — surfaced in the copilot task queue panel. */
+  async listRecentJobs(userId: string, take = 10) {
+    const jobs = await this.prisma.agentJob.findMany({
+      where: { project: { userId } },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Math.max(take, 1), 50),
+      select: {
+        id: true, type: true, status: true, error: true, errorCode: true,
+        createdAt: true, startedAt: true, completedAt: true,
+        project: { select: { id: true, title: true } },
+      },
+    });
+    return { data: jobs };
   }
 
   private async assertProject(projectId: string, userId: string) {
