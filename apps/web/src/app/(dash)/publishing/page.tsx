@@ -156,7 +156,7 @@ export default function PublishingPage() {
     queryFn: () => api.channels.list().then(r => r.data as Channel[]),
   });
 
-  const { data: summary, refetch: refetchSummary } = useQuery({
+  const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery({
     queryKey: ['publishing-summary', channelId],
     queryFn: () => api.publishing.summary(channelId || undefined).then(r => r.data),
   });
@@ -232,7 +232,11 @@ export default function PublishingPage() {
               <Calendar className="w-4 h-4" style={{ color: '#6D4AE0' }} />
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Scheduled</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{summary?.scheduled ?? '—'}</p>
+            {summaryLoading ? (
+              <div className="h-8 w-12 bg-gray-100 rounded-xl animate-pulse mt-1" />
+            ) : (
+              <p className="text-2xl font-bold text-gray-900">{summary?.scheduled ?? 0}</p>
+            )}
             {summary?.upcoming7d !== undefined && (
               <p className="text-xs text-gray-400 mt-1">{summary.upcoming7d} in next 7d</p>
             )}
@@ -243,7 +247,11 @@ export default function PublishingPage() {
               <CheckCircle className="w-4 h-4 text-green-500" />
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Published</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{summary?.published ?? '—'}</p>
+            {summaryLoading ? (
+              <div className="h-8 w-12 bg-gray-100 rounded-xl animate-pulse mt-1" />
+            ) : (
+              <p className="text-2xl font-bold text-gray-900">{summary?.published ?? 0}</p>
+            )}
             {summary?.publishedThisMonth !== undefined && (
               <p className="text-xs text-gray-400 mt-1">{summary.publishedThisMonth} this month</p>
             )}
@@ -254,7 +262,11 @@ export default function PublishingPage() {
               <AlertCircle className="w-4 h-4 text-red-500" />
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Failed</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{summary?.failed ?? '—'}</p>
+            {summaryLoading ? (
+              <div className="h-8 w-12 bg-gray-100 rounded-xl animate-pulse mt-1" />
+            ) : (
+              <p className="text-2xl font-bold text-gray-900">{summary?.failed ?? 0}</p>
+            )}
             <p className="text-xs text-gray-400 mt-1">need attention</p>
           </div>
 
@@ -263,9 +275,13 @@ export default function PublishingPage() {
               <Film className="w-4 h-4 text-gray-400" />
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">Total</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">
-              {summary ? (summary.scheduled + summary.published + summary.failed) : '—'}
-            </p>
+            {summaryLoading ? (
+              <div className="h-8 w-12 bg-gray-100 rounded-xl animate-pulse mt-1" />
+            ) : (
+              <p className="text-2xl font-bold text-gray-900">
+                {summary ? (summary.scheduled + summary.published + summary.failed) : 0}
+              </p>
+            )}
             <p className="text-xs text-gray-400 mt-1">tracked videos</p>
           </div>
         </div>

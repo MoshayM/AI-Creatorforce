@@ -119,7 +119,7 @@ export default function SchedulerPage() {
   }
 
   // Summary cards
-  const { data: summary } = useQuery<PublishTrackingSummary>({
+  const { data: summary, isLoading: summaryLoading } = useQuery<PublishTrackingSummary>({
     queryKey: ['scheduler-summary', channelId],
     queryFn: () => api.publishing.summary(channelId || undefined).then((r) => r.data),
   });
@@ -185,7 +185,7 @@ export default function SchedulerPage() {
             tone="lilac"
             icon={<CalendarClock className="w-5 h-5" />}
             label="Scheduled"
-            value={summary?.scheduled ?? '—'}
+            value={summaryLoading ? <div className="h-8 w-12 bg-gray-100 rounded-xl animate-pulse mt-0.5" /> : (summary?.scheduled ?? 0)}
             sub={summary ? `${summary.upcoming7d} in the next 7 days` : undefined}
             subClassName="text-gray-600"
           />
@@ -193,13 +193,13 @@ export default function SchedulerPage() {
             tone="periwinkle"
             icon={<Clock className="w-5 h-5" />}
             label="Next 7 days"
-            value={summary?.upcoming7d ?? '—'}
+            value={summaryLoading ? <div className="h-8 w-12 bg-gray-100 rounded-xl animate-pulse mt-0.5" /> : (summary?.upcoming7d ?? 0)}
           />
           <StatCard
             tone="pink"
             icon={<CheckCircle2 className="w-5 h-5" />}
             label="Published"
-            value={summary?.published ?? '—'}
+            value={summaryLoading ? <div className="h-8 w-12 bg-gray-100 rounded-xl animate-pulse mt-0.5" /> : (summary?.published ?? 0)}
             sub={summary ? `${summary.publishedThisMonth} this month` : undefined}
             subClassName="text-gray-600"
           />
@@ -207,7 +207,7 @@ export default function SchedulerPage() {
             tone="cream"
             icon={<AlertTriangle className="w-5 h-5" />}
             label="Failed"
-            value={summary?.failed ?? '—'}
+            value={summaryLoading ? <div className="h-8 w-12 bg-gray-100 rounded-xl animate-pulse mt-0.5" /> : (summary?.failed ?? 0)}
             subClassName="text-red-700"
           />
         </div>

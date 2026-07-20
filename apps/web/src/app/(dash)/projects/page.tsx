@@ -1,10 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
   FolderOpen, Plus, Loader2, Youtube, Video, Zap, PlayCircle,
-  ChevronDown, ArrowRight, Bot, Clock,
+  ChevronDown, ArrowRight, Bot, Clock, MoreVertical,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { StatCard } from '@/components/stat-card';
@@ -114,12 +114,271 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 const inputCls = 'w-full bg-white rounded-2xl px-4 py-3 text-sm text-gray-800 outline-none transition-all focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] placeholder:text-gray-400';
 const inputStyle = { border: '1.5px solid #e3e0f0' };
 
+// ── Three-dot card menu ───────────────────────────────────────────────────────
+
+interface CardMenuProps {
+  onRename: () => void;
+  onDelete: () => void;
+}
+
+function CardMenu({ onRename, onDelete }: CardMenuProps) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleMouseDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative" style={{ zIndex: 10 }}>
+      <button
+        type="button"
+        aria-label="Project options"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="w-7 h-7 rounded-xl flex items-center justify-center text-gray-300 opacity-0 group-hover:opacity-100 hover:text-gray-600 hover:bg-gray-100 transition-all"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+
+      {open && (
+        <div
+          className="absolute right-0 top-8 bg-white rounded-2xl py-1 min-w-[130px] shadow-xl"
+          style={{ border: '1.5px solid #e3ddf8', zIndex: 20 }}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setOpen(false);
+              onRename();
+            }}
+            className="w-full text-left px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-[#f5f2fd] hover:text-[#6D4AE0] transition-colors"
+          >
+            Rename
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setOpen(false);
+              onDelete();
+            }}
+            className="w-full text-left px-4 py-2 text-sm font-semibold transition-colors"
+            style={{ color: '#dc2626' }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#fef2f2'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = ''; }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Rename modal ──────────────────────────────────────────────────────────────
+
+interface RenameModalProps {
+  project: Project;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function RenameModal({ project, onClose, onSuccess }: RenameModalProps) {
+  const [title, setTitle] = useState(project.title);
+
+  const renameMutation = useMutation({
+    mutationFn: () => api.projects.update(project.id, { title }),
+    onSuccess: () => {
+      onSuccess();
+      onClose();
+    },
+  });
+
+  const unchanged = title.trim() === project.title.trim();
+  const disabled = !title.trim() || unchanged || renameMutation.isPending;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(15,10,40,0.65)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden"
+        style={{ border: '1.5px solid #e3ddf8' }}
+      >
+        {/* Header */}
+        <div
+          className="px-7 py-5 flex items-center justify-between"
+          style={{ borderBottom: '1.5px solid #f0edf9' }}
+        >
+          <div>
+            <h2 className="text-lg font-extrabold text-gray-900">Rename project</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Update the title for this project</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-7 py-6">
+          <Field label="Project title">
+            <input
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !disabled) renameMutation.mutate(); }}
+              className={inputCls}
+              style={inputStyle}
+              placeholder="Enter a title…"
+            />
+          </Field>
+        </div>
+
+        {/* Footer */}
+        <div
+          className="px-7 py-5 flex items-center justify-between gap-3"
+          style={{ borderTop: '1.5px solid #f0edf9' }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => renameMutation.mutate()}
+            disabled={disabled}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+            style={{
+              background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)',
+              boxShadow: '0 4px 16px rgba(109,74,224,0.30)',
+            }}
+          >
+            {renameMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+            {renameMutation.isPending ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Delete confirmation modal ─────────────────────────────────────────────────
+
+interface DeleteModalProps {
+  project: Project;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function DeleteModal({ project, onClose, onSuccess }: DeleteModalProps) {
+  const deleteMutation = useMutation({
+    mutationFn: () => api.projects.delete(project.id),
+    onSuccess: () => {
+      onSuccess();
+      onClose();
+    },
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(15,10,40,0.65)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden"
+        style={{ border: '1.5px solid #e3ddf8' }}
+      >
+        {/* Header */}
+        <div
+          className="px-7 py-5 flex items-center justify-between"
+          style={{ borderBottom: '1.5px solid #f0edf9' }}
+        >
+          <h2 className="text-lg font-extrabold text-gray-900">Delete this project?</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-7 py-6 space-y-3">
+          <p className="text-sm font-semibold text-gray-800">
+            You are about to delete <span className="font-extrabold">&ldquo;{project.title}&rdquo;</span>.
+          </p>
+          <div
+            className="rounded-2xl px-4 py-3 text-sm font-semibold"
+            style={{ background: '#fef2f2', color: '#dc2626', border: '1.5px solid #fecaca' }}
+          >
+            This cannot be undone. All jobs and videos in this project will be removed.
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div
+          className="px-7 py-5 flex items-center justify-between gap-3"
+          style={{ borderTop: '1.5px solid #f0edf9' }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+            style={{
+              background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+              boxShadow: '0 4px 16px rgba(220,38,38,0.30)',
+            }}
+          >
+            {deleteMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+            {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProjectsPage() {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ channelId: '', title: '', niche: '', contentType: 'VIDEO' as ContentType });
+
+  // rename / delete modal state
+  const [renameProject, setRenameProject] = useState<Project | null>(null);
+  const [deleteProject, setDeleteProject] = useState<Project | null>(null);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ['projects'],
@@ -142,6 +401,10 @@ export default function ProjectsPage() {
       setForm({ channelId: '', title: '', niche: '', contentType: 'VIDEO' });
     },
   });
+
+  function invalidateProjects() {
+    void qc.invalidateQueries({ queryKey: ['projects'] });
+  }
 
   const activeCount = projects.filter((p) => p.status === 'ACTIVE').length;
   const totalJobs   = projects.reduce((s, p) => s + p._count.jobs, 0);
@@ -220,59 +483,68 @@ export default function ProjectsPage() {
               const ct = getContentType(p.id);
               const tile = CT_TILE[ct];
               return (
-                <Link
-                  key={p.id}
-                  href={`/projects/${p.id}`}
-                  className="group bg-white rounded-2xl p-5 transition-all hover:border-[#6D4AE0]/40 hover:shadow-lg hover:-translate-y-0.5"
-                  style={{ border: '1.5px solid #e3ddf8' }}
-                >
-                  {/* Top row */}
-                  <div className="flex items-start gap-3 mb-4">
-                    <div
-                      className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0"
-                      style={{ background: tile.tileBg }}
-                    >
-                      {CT_EMOJI[ct]}
+                <div key={p.id} className="relative group">
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="block bg-white rounded-2xl p-5 transition-all hover:border-[#6D4AE0]/40 hover:shadow-lg hover:-translate-y-0.5"
+                    style={{ border: '1.5px solid #e3ddf8' }}
+                  >
+                    {/* Top row */}
+                    <div className="flex items-start gap-3 mb-4">
+                      <div
+                        className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0"
+                        style={{ background: tile.tileBg }}
+                      >
+                        {CT_EMOJI[ct]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-extrabold text-gray-900 text-sm leading-tight truncate mb-1">
+                          {p.title}
+                        </h3>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                          <Youtube className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                          <span className="truncate">{p.channel.title}</span>
+                          {p.niche && <><span>·</span><span className="truncate">{p.niche}</span></>}
+                        </div>
+                      </div>
+                      <StatusBadge status={p.status} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-extrabold text-gray-900 text-sm leading-tight truncate mb-1">
-                        {p.title}
-                      </h3>
-                      <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                        <Youtube className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                        <span className="truncate">{p.channel.title}</span>
-                        {p.niche && <><span>·</span><span className="truncate">{p.niche}</span></>}
+
+                    {/* Divider */}
+                    <div className="h-px mb-3" style={{ background: '#f5f2fd' }} />
+
+                    {/* Bottom row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: tile.badgeBg, color: tile.badgeColor }}
+                        >
+                          {CT_LABEL[ct]}
+                        </span>
+                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                          <Zap className="w-3 h-3" /> {p._count.jobs} jobs
+                        </span>
+                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                          <Video className="w-3 h-3" /> {p._count.videos}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                        <Clock className="w-3 h-3" />
+                        {relativeTime(p.updatedAt)}
+                        <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#6D4AE0] transition-colors ml-1" />
                       </div>
                     </div>
-                    <StatusBadge status={p.status} />
-                  </div>
+                  </Link>
 
-                  {/* Divider */}
-                  <div className="h-px mb-3" style={{ background: '#f5f2fd' }} />
-
-                  {/* Bottom row */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <span
-                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: tile.badgeBg, color: tile.badgeColor }}
-                      >
-                        {CT_LABEL[ct]}
-                      </span>
-                      <span className="flex items-center gap-1 text-xs text-gray-400">
-                        <Zap className="w-3 h-3" /> {p._count.jobs} jobs
-                      </span>
-                      <span className="flex items-center gap-1 text-xs text-gray-400">
-                        <Video className="w-3 h-3" /> {p._count.videos}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
-                      <Clock className="w-3 h-3" />
-                      {relativeTime(p.updatedAt)}
-                      <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#6D4AE0] transition-colors ml-1" />
-                    </div>
+                  {/* Three-dot menu — floats above the card link */}
+                  <div className="absolute top-3 right-3" style={{ zIndex: 10 }}>
+                    <CardMenu
+                      onRename={() => setRenameProject(p)}
+                      onDelete={() => setDeleteProject(p)}
+                    />
                   </div>
-                </Link>
+                </div>
               );
             })}
           </div>
@@ -424,6 +696,24 @@ export default function ProjectsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Rename modal ──────────────────────────────────────────────────── */}
+      {renameProject && (
+        <RenameModal
+          project={renameProject}
+          onClose={() => setRenameProject(null)}
+          onSuccess={invalidateProjects}
+        />
+      )}
+
+      {/* ── Delete confirmation modal ─────────────────────────────────────── */}
+      {deleteProject && (
+        <DeleteModal
+          project={deleteProject}
+          onClose={() => setDeleteProject(null)}
+          onSuccess={invalidateProjects}
+        />
       )}
     </div>
   );
