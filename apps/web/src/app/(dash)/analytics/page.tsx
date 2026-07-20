@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { BarChart2, TrendingUp, TrendingDown, Minus, Lightbulb, RefreshCw, ChevronRight, Gauge, Video, AlertTriangle, MousePointerClick } from 'lucide-react';
+import { BarChart2, TrendingUp, TrendingDown, Minus, Lightbulb, RefreshCw, ChevronRight, ChevronDown, Gauge, Video, AlertTriangle, MousePointerClick } from 'lucide-react';
 import { ResultActions } from '@/components/result-actions';
 import { AiWorkingCard, formatDuration } from '@/components/ai-activity';
 import { StatCard, PastelBars, PastelDonut } from '@/components/stat-card';
@@ -92,14 +92,15 @@ export default function AnalyticsPage() {
   } | null>(null);
   const [scorecardLoading, setScorecardLoading] = useState(false);
 
-  useState(() => {
+  useEffect(() => {
     callApi<Array<{ id: string; title: string }>>('/channels')
       .then(setChannels)
       .catch(() => {});
     callApi<TokenUsageSummary>('/token-usage/summary')
       .then(setTokenUsage)
       .catch(() => setTokenUsage('unavailable'));
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function runAnalytics() {
     if (!channelId) return;
@@ -235,18 +236,21 @@ export default function AnalyticsPage() {
           <label htmlFor="analytics-channel" className="block text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-2">Select Channel</label>
           <div className="flex gap-3">
             {channels.length > 0 ? (
-              <select
-                id="analytics-channel"
-                value={channelId}
-                onChange={e => setChannelId(e.target.value)}
-                className="flex-1 bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
-                style={{ border: '1.5px solid #e3e0f0' }}
-              >
-                <option value="">Choose a channel…</option>
-                {channels.map(c => (
-                  <option key={c.id} value={c.id}>{c.title}</option>
-                ))}
-              </select>
+              <div className="relative flex-1">
+                <select
+                  id="analytics-channel"
+                  value={channelId}
+                  onChange={e => setChannelId(e.target.value)}
+                  className="w-full bg-white rounded-2xl px-4 py-3 pr-10 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all appearance-none"
+                  style={{ border: '1.5px solid #e3e0f0' }}
+                >
+                  <option value="">Choose a channel…</option>
+                  {channels.map(c => (
+                    <option key={c.id} value={c.id}>{c.title}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
             ) : (
               <input
                 id="analytics-channel"

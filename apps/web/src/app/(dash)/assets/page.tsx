@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Layers, Music, Video, Image, Mic, FileText, RefreshCw, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Layers, Music, Video, Image, Mic, FileText, RefreshCw, CheckCircle, Clock, AlertCircle, ChevronDown } from 'lucide-react';
 
 interface Asset {
   id: string;
@@ -92,18 +92,21 @@ export default function AssetsPage() {
         {/* Project selector */}
         <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
           <label htmlFor="assets-project" className="block text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-2">Select Project</label>
-          <select
-            id="assets-project"
-            value={selectedProject}
-            onChange={e => setSelectedProject(e.target.value)}
-            className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
-            style={{ border: '1.5px solid #e3e0f0' }}
-          >
-            <option value="">Choose a project…</option>
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>{p.title}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              id="assets-project"
+              value={selectedProject}
+              onChange={e => setSelectedProject(e.target.value)}
+              className="w-full bg-white rounded-2xl px-4 py-3 pr-10 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all appearance-none"
+              style={{ border: '1.5px solid #e3e0f0' }}
+            >
+              <option value="">Choose a project…</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.title}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
         </div>
 
         {loading && (

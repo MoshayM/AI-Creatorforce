@@ -101,15 +101,18 @@ export default function SeriesPlannerPage() {
 
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Niche <span className="text-red-400">*</span></label>
-              <select
-                value={niche}
-                onChange={(e) => setNiche(e.target.value)}
-                className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
-                style={{ border: '1.5px solid #e3e0f0' }}
-              >
-                <option value="">Select niche…</option>
-                {NICHES.map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <div className="relative">
+                <select
+                  value={niche}
+                  onChange={(e) => setNiche(e.target.value)}
+                  className="w-full bg-white rounded-2xl px-4 py-3 pr-10 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 appearance-none"
+                  style={{ border: '1.5px solid #e3e0f0' }}
+                >
+                  <option value="">Select niche…</option>
+                  {NICHES.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
             </div>
 
             <div>

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Activity, Loader2, AlertCircle, CheckCircle2, Clock, RefreshCw, Filter, X, Zap, Play } from 'lucide-react';
+import { Activity, Loader2, AlertCircle, CheckCircle2, Clock, RefreshCw, Filter, X, Zap, Play, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { StatCard } from '@/components/stat-card';
 import { apiClient } from '@/lib/api';
@@ -191,15 +191,18 @@ export default function MonitorPage() {
               </button>
             ))}
           </div>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 text-gray-700"
-            style={{ border: '1.5px solid #e3e0f0' }}
-          >
-            <option value="all">All types</option>
-            {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <div className="relative">
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="bg-white rounded-2xl px-4 py-3 pr-8 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 appearance-none"
+              style={{ border: '1.5px solid #e3e0f0' }}
+            >
+              <option value="all">All types</option>
+              {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          </div>
           {(statusFilter !== 'all' || typeFilter !== 'all') && (
             <button
               onClick={() => { setStatusFilter('all'); setTypeFilter('all'); }}

@@ -110,16 +110,19 @@ export default function AbTestingPage() {
           {channelsLoading ? (
             <div className="w-40 h-9 bg-gray-100 animate-pulse rounded-2xl" />
           ) : (
-            <select
-              value={channelId}
-              onChange={(e) => setSelectedChannelId(e.target.value)}
-              className="bg-white rounded-2xl px-4 py-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 min-w-[200px]"
-              style={{ border: '1.5px solid #e3e0f0' }}
-            >
-              {channels.map((c) => (
-                <option key={c.id} value={c.id}>{c.title}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={channelId}
+                onChange={(e) => setSelectedChannelId(e.target.value)}
+                className="bg-white rounded-2xl px-4 py-3 pr-9 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 min-w-[200px] appearance-none"
+                style={{ border: '1.5px solid #e3e0f0' }}
+              >
+                {channels.map((c) => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            </div>
           )}
         </div>
 

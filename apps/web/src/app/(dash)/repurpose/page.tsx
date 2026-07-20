@@ -67,7 +67,7 @@ function PlatformCard({ item }: { item: RepurposeItem }) {
   ].filter(Boolean).join('\n\n');
 
   return (
-    <div className={`rounded-2xl overflow-hidden ${meta.border}`} style={{ border: `1.5px solid` }}>
+    <div className={`rounded-2xl overflow-hidden border ${meta.border}`}>
       <div className={`flex items-center justify-between px-5 py-3.5 ${meta.bg}`}>
         <div className="flex items-center gap-2.5">
           <Icon className={`w-5 h-5 ${meta.color}`} />

@@ -142,17 +142,20 @@ export default function StrategyPage() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Channel</label>
-                <select
-                  value={channelId}
-                  onChange={(e) => setChannelId(e.target.value)}
-                  className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
-                  style={{ border: '1.5px solid #e3e0f0' }}
-                >
-                  <option value="">Select a channel…</option>
-                  {channels.map((c) => (
-                    <option key={c.id} value={c.id}>{c.title}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={channelId}
+                    onChange={(e) => setChannelId(e.target.value)}
+                    className="w-full bg-white rounded-2xl px-4 py-3 pr-10 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 appearance-none"
+                    style={{ border: '1.5px solid #e3e0f0' }}
+                  >
+                    <option value="">Select a channel…</option>
+                    {channels.map((c) => (
+                      <option key={c.id} value={c.id}>{c.title}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
               </div>
 
               <div>
@@ -169,17 +172,20 @@ export default function StrategyPage() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Timeframe</label>
-                <select
-                  value={timeframe}
-                  onChange={(e) => setTimeframe(Number(e.target.value))}
-                  className="w-full bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20"
-                  style={{ border: '1.5px solid #e3e0f0' }}
-                >
-                  <option value={4}>4 weeks (1 month)</option>
-                  <option value={8}>8 weeks (2 months)</option>
-                  <option value={12}>12 weeks (3 months)</option>
-                  <option value={16}>16 weeks (4 months)</option>
-                </select>
+                <div className="relative">
+                  <select
+                    value={timeframe}
+                    onChange={(e) => setTimeframe(Number(e.target.value))}
+                    className="w-full bg-white rounded-2xl px-4 py-3 pr-10 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 appearance-none"
+                    style={{ border: '1.5px solid #e3e0f0' }}
+                  >
+                    <option value={4}>4 weeks (1 month)</option>
+                    <option value={8}>8 weeks (2 months)</option>
+                    <option value={12}>12 weeks (3 months)</option>
+                    <option value={16}>16 weeks (4 months)</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
               </div>
             </div>
 
