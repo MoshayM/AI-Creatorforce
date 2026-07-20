@@ -365,7 +365,7 @@ export function CopilotPanel() {
             {/* Voice orb */}
             <div style={{ position: 'relative', width: '220px', height: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid rgba(139,92,246,.35)', animation: (listening || speaking) ? 'ripple 2.4s ease-out infinite' : 'none', opacity: (listening || speaking) ? 1 : 0, transition: 'opacity .4s' }} />
-              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid rgba(139,92,246,.25)', animation: (listening || speaking) ? 'ripple 2.4s ease-out infinite' : 'none', animationDelay: '1.2s', opacity: (listening || speaking) ? 1 : 0, transition: 'opacity .4s' }} />
+              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid rgba(139,92,246,.25)', animation: (listening || speaking) ? 'ripple 2.4s ease-out 1.2s infinite' : 'none', opacity: (listening || speaking) ? 1 : 0, transition: 'opacity .4s' }} />
               <div
                 style={{
                   position: 'relative', width: '132px', height: '132px', borderRadius: '50%',
@@ -389,8 +389,7 @@ export function CopilotPanel() {
                       height: (listening || speaking) ? bar.h : busy ? bar.h : '6px',
                       borderRadius: '6px',
                       background: speaking ? '#c4b5fd' : '#fff',
-                      animation: (listening || speaking) ? 'voiceBar 1s ease-in-out infinite' : 'none',
-                      animationDelay: bar.d,
+                      animation: (listening || speaking) ? `voiceBar 1s ease-in-out ${bar.d} infinite` : 'none',
                       transition: 'height .35s cubic-bezier(.4,0,.2,1)',
                       opacity: (listening || speaking) ? 1 : busy ? 0.6 : 0.35,
                     }}
