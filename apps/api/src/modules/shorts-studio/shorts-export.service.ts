@@ -6,6 +6,7 @@ import { ComplianceService } from '../compliance/compliance.service';
 import { PublishingService } from '../publishing/publishing.service';
 import { YouTubeReadService } from './youtube-read.service';
 import { CLIP_TYPE_PRESETS } from './clip-type-presets';
+import { MediaPipelineError } from '../media/media.errors';
 
 interface ClipMetadata {
   title: string;
@@ -198,7 +199,7 @@ export class ShortsExportService {
         payload: { path: ['shortClipId'], equals: shortClipId },
       },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true, error: true, result: true },
+      select: { id: true, status: true, error: true, errorCode: true, errorDetails: true, startedAt: true, result: true },
     });
     return {
       clipStatus: clip.status,
@@ -250,12 +251,17 @@ export class ShortsExportService {
     // Compliance hard gate (claude.md rule 1) — caption text is the spoken content
     onLog?.('Running compliance audit on metadata + captions…');
     const script = clip.timeline?.captions.map((c) => c.text).join(' ') || metadata.description;
-    await this.compliance.enforce({
-      title: metadata.title,
-      script,
-      description: metadata.description,
-      tags: metadata.tags,
-    });
+    try {
+      await this.compliance.enforce({
+        title: metadata.title,
+        script,
+        description: metadata.description,
+        tags: metadata.tags,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Compliance check failed';
+      throw new MediaPipelineError('COMPLIANCE_FAILED', 'Content failed the compliance audit', msg);
+    }
     onLog?.('Compliance passed ✓');
 
     // The existing publishing connector needs a Video row to track the upload
@@ -296,16 +302,22 @@ export class ShortsExportService {
     }
 
     onLog?.('Uploading to YouTube…');
-    const youtubeVideoId = await this.publishing.publish({
-      videoId: video.id,
-      channelId: clip.project.channelId,
-      title: metadata.title,
-      description: metadata.description,
-      tags: metadata.tags,
-      videoFilePath: this.storage.resolve(exportKey),
-      ...(originalAudioLanguage ? { defaultAudioLanguage: originalAudioLanguage } : {}),
-      containsSyntheticMedia,
-    }, approvalId);
+    let youtubeVideoId: string;
+    try {
+      youtubeVideoId = await this.publishing.publish({
+        videoId: video.id,
+        channelId: clip.project.channelId,
+        title: metadata.title,
+        description: metadata.description,
+        tags: metadata.tags,
+        videoFilePath: this.storage.resolve(exportKey),
+        ...(originalAudioLanguage ? { defaultAudioLanguage: originalAudioLanguage } : {}),
+        containsSyntheticMedia,
+      }, approvalId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'YouTube upload failed';
+      throw new MediaPipelineError('YOUTUBE_UPLOAD_FAILED', 'Upload to YouTube failed', msg, { originalError: msg });
+    }
 
     await this.prisma.shortsExportHistory.update({
       where: { id: exportId },

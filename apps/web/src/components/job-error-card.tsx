@@ -12,6 +12,8 @@ export type JobErrorCode =
   | 'SCENE_DETECTION_FAILED'
   | 'STORAGE_FAILED'
   | 'CHAPTER_SYNC_FAILED'
+  | 'YOUTUBE_UPLOAD_FAILED'
+  | 'COMPLIANCE_FAILED'
   | 'JOB_FAILED';
 
 interface ErrorCopy {
@@ -65,6 +67,16 @@ const CODE_COPY: Record<JobErrorCode, ErrorCopy> = {
     title: 'Chapter sync failed',
     desc: null, // use the server's sentence — it names the actual YouTube reason
     fix: 'If the channel is read-only, connect it with YouTube access (Channels page) and retry. Only channels you own can be synced.',
+  },
+  YOUTUBE_UPLOAD_FAILED: {
+    title: 'Upload to YouTube failed',
+    desc: null, // use the server error — it contains the YouTube API reason
+    fix: 'Retry the upload. If it keeps failing, re-connect your YouTube channel in Settings → Channels.',
+  },
+  COMPLIANCE_FAILED: {
+    title: 'Content failed the compliance audit',
+    desc: 'This clip did not pass the compliance check and cannot be published.',
+    fix: 'Review the script and metadata for policy violations, then re-export.',
   },
   JOB_FAILED: {
     title: 'Video processing failed',

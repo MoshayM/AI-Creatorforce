@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, Upload,
   ShieldCheck, Package, ExternalLink, AlertTriangle, CalendarClock, XCircle, X,
-  CheckCheck, Clock,
+  CheckCheck, Clock, ShieldAlert, Wifi,
 } from 'lucide-react';
 import { api, apiClient } from '@/lib/api';
 import { JobErrorCard } from '@/components/job-error-card';
@@ -27,7 +27,12 @@ interface Thumb {
 interface PublishState {
   clipStatus: string;
   approval: { id: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED'; expiresAt: string } | null;
-  publishJob: { id: string; status: string; error: string | null; errorCode?: string | null; retryable?: boolean; result: { youtubeVideoId?: string; url?: string } | null } | null;
+  publishJob: {
+    id: string; status: string; error: string | null;
+    errorCode?: string | null; errorDetails?: Record<string, unknown> | null; retryable?: boolean;
+    startedAt?: string | null;
+    result: { youtubeVideoId?: string; url?: string } | null;
+  } | null;
 }
 
 function useBlobUrl(versionId: string | null | undefined): string | null {
@@ -109,6 +114,80 @@ function InlineApprovalCard({ approvalId, onDone }: { approvalId: string; onDone
           {((approveMutation.error ?? rejectMutation.error) as { response?: { data?: { message?: string } } } | null)?.response?.data?.message ?? 'Action failed — please try again'}
         </p>
       )}
+    </div>
+  );
+}
+
+const PUBLISH_STEPS = [
+  { key: 'compliance', label: 'Compliance audit', icon: ShieldAlert, doneAfterSecs: 25 },
+  { key: 'upload',     label: 'Uploading to YouTube', icon: Wifi,        doneAfterSecs: 100 },
+  { key: 'processing', label: 'YouTube is processing', icon: Loader2,     doneAfterSecs: 9999 },
+] as const;
+
+function PublishStepTimeline({ startedAt, jobStatus }: { startedAt?: string | null; jobStatus: string }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (jobStatus === 'PENDING') return;
+    const t0 = startedAt ? new Date(startedAt).getTime() : Date.now();
+    const tick = () => setElapsed(Math.floor((Date.now() - t0) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startedAt, jobStatus]);
+
+  if (jobStatus === 'PENDING') {
+    return (
+      <div className="flex items-center gap-2 text-sm text-gray-600 py-1">
+        <Clock className="w-4 h-4 text-brand-500 shrink-0" />
+        Scheduled — waiting for publish time…
+      </div>
+    );
+  }
+
+  const activeIdx = PUBLISH_STEPS.findIndex((s) => elapsed < s.doneAfterSecs);
+  const currentIdx = activeIdx === -1 ? PUBLISH_STEPS.length - 1 : activeIdx;
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+          <Loader2 className="w-4 h-4 animate-spin text-brand-600" /> Publishing in progress
+        </p>
+        <span className="text-xs text-gray-400 font-mono tabular-nums">{fmt(elapsed)}</span>
+      </div>
+      <div className="space-y-1.5">
+        {PUBLISH_STEPS.map((step, i) => {
+          const done = i < currentIdx;
+          const active = i === currentIdx;
+          const StepIcon = step.icon;
+          return (
+            <div
+              key={step.key}
+              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${active ? 'bg-brand-50 border border-brand-100' : ''}`}
+            >
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${done ? 'bg-green-500' : active ? 'bg-brand-600' : 'bg-gray-100'}`}>
+                {done
+                  ? <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  : active
+                    ? <StepIcon className="w-3 h-3 text-white animate-spin" />
+                    : <span className="text-[10px] text-gray-400 font-bold">{i + 1}</span>}
+              </div>
+              <span className={`flex-1 ${done ? 'text-gray-400 line-through' : active ? 'text-brand-700 font-semibold' : 'text-gray-400'}`}>
+                {step.label}
+              </span>
+              {active && step.key === 'upload' && elapsed > 60 && (
+                <span className="text-[11px] text-gray-400">Large files may take 2–3 min</span>
+              )}
+              {active && step.key === 'processing' && (
+                <span className="text-[11px] text-gray-400">YouTube queued</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-gray-400 mt-3">This page refreshes automatically — no need to reload.</p>
     </div>
   );
 }
@@ -281,11 +360,7 @@ export default function ClipExportPage() {
 
           ) : publishJobActive ? (
             /* ── Job running / scheduled ── */
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              {pub?.publishJob?.status === 'PENDING'
-                ? <><Clock className="w-4 h-4 text-brand-500 shrink-0" /> Scheduled — waiting for publish time…</>
-                : <><Loader2 className="w-4 h-4 animate-spin text-brand-600 shrink-0" /> Publishing — compliance audit then upload…</>}
-            </div>
+            <PublishStepTimeline startedAt={pub?.publishJob?.startedAt} jobStatus={pub?.publishJob?.status ?? 'QUEUED'} />
 
           ) : (
             <div className="space-y-5">
@@ -461,6 +536,7 @@ export default function ClipExportPage() {
             <JobErrorCard
               error={pub.publishJob.error}
               errorCode={pub.publishJob.errorCode}
+              errorDetails={pub.publishJob.errorDetails}
               retryable={pub.publishJob.retryable}
               onRetry={() => { void publishMutation.mutate(); }}
               className="mt-4"
