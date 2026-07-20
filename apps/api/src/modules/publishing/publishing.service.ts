@@ -111,7 +111,7 @@ export class PublishingService {
         },
         status,
       },
-      media: { body: createReadStream(resolvedPath) },
+      media: { mimeType: 'video/mp4', body: createReadStream(resolvedPath) },
     });
 
     const youtubeVideoId = res.data.id!;

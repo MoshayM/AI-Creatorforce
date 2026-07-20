@@ -228,25 +228,32 @@ export class ShortsExportService {
 
   /** SHORTS_PUBLISH job body: compliance gate → YouTube upload → history. */
   async publishClip(shortClipId: string, approvalId: string, exportId: string, onLog?: (msg: string) => void) {
-    const clip = await this.prisma.shortClip.findUniqueOrThrow({
-      where: { id: shortClipId },
-      include: {
-        project: { select: { id: true, channelId: true } },
-        timeline: { include: { captions: { orderBy: { startMs: 'asc' } } } },
-        topicSegment: { select: { importedVideoId: true } },
-        chapter: { select: { importedVideoId: true } },
-      },
-    });
-    const history = await this.prisma.shortsExportHistory.findUniqueOrThrow({
-      where: { id: exportId },
-      include: { exportAsset: { include: { versions: { orderBy: { version: 'desc' }, take: 1 } } } },
-    });
-    const exportKey = history.exportAsset.versions[0]?.r2Key;
-    if (!exportKey || !this.storage.exists(exportKey)) {
-      throw new BadRequestException('Export package file is missing — re-run the export');
-    }
+    // Load clip + export history in parallel
+    const [clip, history] = await Promise.all([
+      this.prisma.shortClip.findUniqueOrThrow({
+        where: { id: shortClipId },
+        include: {
+          project: { select: { id: true, channelId: true } },
+          timeline: { include: { captions: { orderBy: { startMs: 'asc' } } } },
+          topicSegment: { select: { importedVideoId: true } },
+          chapter: { select: { importedVideoId: true } },
+        },
+      }),
+      this.prisma.shortsExportHistory.findUniqueOrThrow({
+        where: { id: exportId },
+        include: { exportAsset: { include: { versions: { orderBy: { version: 'desc' }, take: 1 } } } },
+      }),
+    ]);
 
-    const metadata = await this.buildMetadata(shortClipId);
+    const exportKey = history.exportAsset.versions[0]?.r2Key;
+    if (!exportKey) throw new BadRequestException('Export package file is missing — re-run the export');
+
+    // Build metadata + ensure the export file is available locally (R2 download if needed) in parallel
+    const [metadata, fileReady] = await Promise.all([
+      this.buildMetadata(shortClipId),
+      this.storage.ensure(exportKey),
+    ]);
+    if (!fileReady) throw new BadRequestException('Export package file is missing — re-run the export');
 
     // Compliance hard gate (claude.md rule 1) — caption text is the spoken content
     onLog?.('Running compliance audit on metadata + captions…');
@@ -264,38 +271,38 @@ export class ShortsExportService {
     }
     onLog?.('Compliance passed ✓');
 
-    // The existing publishing connector needs a Video row to track the upload
-    const video = await this.prisma.video.create({
-      data: {
-        projectId: clip.project.id,
-        channelId: clip.project.channelId,
-        title: metadata.title,
-        description: metadata.description,
-        tags: metadata.tags,
-        status: 'APPROVED',
-      },
-    });
-
-    // The Short keeps the SOURCE video's original audio language — YouTube
-    // must not present a different audio language to viewers unless they
-    // switch tracks manually. Unknown stays unset (no wrong guesses).
+    // After compliance: create the tracking Video row, resolve audio language, and count
+    // synthetic timeline items all in parallel — none depend on each other.
     const importedVideoId = clip.topicSegment?.importedVideoId ?? clip.chapter?.importedVideoId ?? null;
-    const originalAudioLanguage = importedVideoId
-      ? await this.resolveOriginalAudioLanguage(importedVideoId, clip.project.channelId, onLog)
-      : null;
+    const [video, originalAudioLanguage, syntheticItems] = await Promise.all([
+      this.prisma.video.create({
+        data: {
+          projectId: clip.project.id,
+          channelId: clip.project.channelId,
+          title: metadata.title,
+          description: metadata.description,
+          tags: metadata.tags,
+          status: 'APPROVED',
+        },
+      }),
+      // The Short keeps the SOURCE video's original audio language — YouTube
+      // must not present a different audio language to viewers unless they
+      // switch tracks manually. Unknown stays unset (no wrong guesses).
+      importedVideoId
+        ? this.resolveOriginalAudioLanguage(importedVideoId, clip.project.channelId, onLog)
+        : Promise.resolve(null),
+      // YouTube AI-disclosure policy (support.google.com/youtube/answer/14328491):
+      // AI voiceover, generated music, or generated imagery must be disclosed.
+      clip.timeline
+        ? this.prisma.shortsTimelineItem.count({
+            where: {
+              track: { timelineId: clip.timeline.id },
+              sourceAsset: { kind: { in: ['VOICE', 'SHORTS_VOICE', 'MUSIC', 'SHORTS_MUSIC', 'IMAGE'] } },
+            },
+          })
+        : Promise.resolve(0),
+    ]);
 
-    // YouTube AI-disclosure policy (support.google.com/youtube/answer/14328491):
-    // a Short cut from real footage with burned captions is a "minor edit" and
-    // needs no label, but AI voiceover, generated music, or generated imagery
-    // on the timeline is realistic synthetic media and must be disclosed.
-    const syntheticItems = clip.timeline
-      ? await this.prisma.shortsTimelineItem.count({
-          where: {
-            track: { timelineId: clip.timeline.id },
-            sourceAsset: { kind: { in: ['VOICE', 'SHORTS_VOICE', 'MUSIC', 'SHORTS_MUSIC', 'IMAGE'] } },
-          },
-        })
-      : 0;
     const containsSyntheticMedia = syntheticItems > 0;
     if (containsSyntheticMedia) {
       onLog?.('AI disclosure: timeline uses generated voice/music/imagery — setting the "Altered or synthetic content" label');
