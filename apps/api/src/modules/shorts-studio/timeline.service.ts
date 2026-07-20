@@ -108,7 +108,19 @@ export class TimelineService {
     return this.prisma.shortsTimeline.findUnique({
       where: { id: timelineId },
       include: {
-        tracks: { orderBy: { orderIndex: 'asc' }, include: { items: { orderBy: { startMs: 'asc' } } } },
+        tracks: {
+          orderBy: { orderIndex: 'asc' },
+          include: {
+            items: {
+              orderBy: { startMs: 'asc' },
+              include: {
+                sourceAsset: {
+                  select: { id: true, versions: { orderBy: { version: 'desc' }, take: 1, select: { id: true, durationMs: true } } },
+                },
+              },
+            },
+          },
+        },
         captions: { orderBy: { startMs: 'asc' } },
       },
     });

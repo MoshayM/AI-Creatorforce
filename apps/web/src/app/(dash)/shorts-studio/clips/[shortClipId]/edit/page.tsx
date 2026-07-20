@@ -92,6 +92,7 @@ export default function TimelineEditorPage() {
   const [pxPerSec, setPxPerSec] = useState(12);
   const [playing, setPlaying] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<{ capability: string; commands: Command[] } | null>(null);
   const [assistBusy, setAssistBusy] = useState<string | null>(null);
 
@@ -138,14 +139,17 @@ export default function TimelineEditorPage() {
     setSaving(true);
     try {
       const res = await api.shortsStudio.applyCommands(tl.id, commands);
+      setSaveError(null);
       // Server state is authoritative (SPLIT/DUPLICATE ids are server-generated)
       setTimeline((prev) => prev ? { ...(res.data as TimelineData), captions: (res.data as TimelineData).captions ?? prev.captions } : (res.data as TimelineData));
       // Flushed edits can no longer be undone locally
       setUndoStack([]);
       setRedoStack([]);
-    } catch {
+    } catch (err: unknown) {
       // Put commands back so the user can retry with Save
       setPending((p) => [...commands, ...p]);
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Save failed — please retry';
+      setSaveError(msg);
     } finally {
       setSaving(false);
     }
@@ -545,8 +549,13 @@ export default function TimelineEditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500">
+          {saveError && (
+            <span className="flex items-center gap-1 text-red-600">
+              <X className="w-3.5 h-3.5" /> {saveError}
+            </span>
+          )}
           {saving ? <span className="flex items-center gap-1"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</span>
-            : pending.length > 0 ? <button onClick={() => void flush()} className="flex items-center gap-1 text-brand-600 hover:underline"><Save className="w-3.5 h-3.5" /> {pending.length} unsaved</button>
+            : pending.length > 0 ? <button onClick={() => { setSaveError(null); void flush(); }} className="flex items-center gap-1 text-brand-600 hover:underline"><Save className="w-3.5 h-3.5" /> {pending.length} unsaved</button>
             : <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5 text-green-500" /> Saved</span>}
           <Link
             href={`/shorts-studio/clips/${shortClipId}/export`}

@@ -23,7 +23,6 @@ interface ImportedVideo {
   thumbnailUrl: string | null;
   transcriptStatus: 'PENDING' | 'YOUTUBE_CAPTIONS' | 'ASR_GENERATED' | 'FAILED';
   sourceAssetId: string | null;
-  notes: string | null;
   _count: { transcriptSegments: number; scenes: number; topicSegments: number };
 }
 

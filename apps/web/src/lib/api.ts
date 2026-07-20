@@ -703,8 +703,6 @@ export const api = {
       apiClient.get(`/shorts-studio/channels/${channelId}/imported`),
     deleteImported: (importedVideoId: string) =>
       apiClient.delete(`/shorts-studio/videos/${importedVideoId}`),
-    updateNotes: (importedVideoId: string, notes: string) =>
-      apiClient.patch(`/shorts-studio/videos/${importedVideoId}/notes`, { notes }),
     analyze: (importedVideoId: string) =>
       apiClient.post(`/shorts-studio/videos/${importedVideoId}/analyze`),
     analysisStatus: (importedVideoId: string) =>
