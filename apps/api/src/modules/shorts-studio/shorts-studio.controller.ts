@@ -324,7 +324,8 @@ export class ShortsStudioController {
   @Post('clips/:shortClipId/render')
   async renderClip(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
     const clip = await this.shorts.assertClipOwnership(shortClipId, user.sub);
-    return this.jobs.enqueue(clip.projectId, 'SHORTS_RENDER', { shortClipId });
+    // force=true so user-initiated re-renders always run, bypassing the staleness-skip optimisation
+    return this.jobs.enqueue(clip.projectId, 'SHORTS_RENDER', { shortClipId, force: true });
   }
 
   @Get('clips/:shortClipId/render-status')
@@ -349,6 +350,10 @@ export class ShortsStudioController {
   @Post('clips/:shortClipId/export')
   async exportClip(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
     const clip = await this.shorts.assertClipOwnership(shortClipId, user.sub);
+    const rs = await this.shorts.renderStatus(shortClipId);
+    if (rs.timelineStale) {
+      throw new BadRequestException('Timeline has been edited since the last render — click "Re-render" to produce the updated video before exporting');
+    }
     return this.jobs.enqueue(clip.projectId, 'SHORTS_EXPORT', { shortClipId });
   }
 

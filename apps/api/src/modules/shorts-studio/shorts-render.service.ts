@@ -42,7 +42,7 @@ export class ShortsRenderService {
     private readonly thumbnails: ThumbnailGenerationService,
   ) {}
 
-  async renderClip(shortClipId: string, jobId: string, onLog?: (msg: string) => void) {
+  async renderClip(shortClipId: string, jobId: string, onLog?: (msg: string) => void, force = false) {
     const clip = await this.prisma.shortClip.findUnique({
       where: { id: shortClipId },
       include: {
@@ -59,9 +59,10 @@ export class ShortsRenderService {
     });
     if (!clip?.timeline) throw new NotFoundException('Clip or timeline not found');
 
-    // Skip when the existing render is newer than the last timeline edit
+    // Skip when the existing render is newer than the last timeline edit.
+    // When `force` is true (user explicitly clicked Re-render) always proceed.
     const existingKey = clip.renderAsset?.versions[0]?.r2Key;
-    if (existingKey && this.storage.exists(existingKey) && clip.renderAsset!.createdAt > clip.timeline.updatedAt) {
+    if (!force && existingKey && this.storage.exists(existingKey) && clip.renderAsset!.createdAt > clip.timeline.updatedAt) {
       onLog?.('Render is up to date — reusing existing output');
       return { skipped: true, assetId: clip.renderAssetId, key: existingKey };
     }

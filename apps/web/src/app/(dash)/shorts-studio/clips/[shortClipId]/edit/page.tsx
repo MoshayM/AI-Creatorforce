@@ -75,10 +75,15 @@ export default function TimelineEditorPage() {
   const { shortClipId } = useParams<{ shortClipId: string }>();
   const qc = useQueryClient();
 
+  const [captionPending, setCaptionPending] = useState(false);
+
   const { data: clip, isLoading } = useQuery<ClipData>({
     queryKey: ['clip-timeline', shortClipId],
     queryFn: () => api.shortsStudio.clipTimeline(shortClipId).then((r) => r.data as ClipData),
     refetchOnWindowFocus: false,
+    // Poll every 3s while a caption job is in flight and no captions have arrived yet
+    refetchInterval: (q) =>
+      captionPending && (q.state.data?.timeline?.captions?.length ?? 0) === 0 ? 3000 : false,
   });
 
   // ── Local editable state + history ──────────────────────────────────────────
@@ -106,6 +111,14 @@ export default function TimelineEditorPage() {
   useEffect(() => {
     if (clip?.timeline && !timeline) setTimeline(clone(clip.timeline));
   }, [clip, timeline]);
+
+  // When captions arrive after a generation job, update local timeline and clear the pending flag
+  useEffect(() => {
+    if (captionPending && (clip?.timeline?.captions?.length ?? 0) > 0) {
+      setCaptionPending(false);
+      setTimeline(clone(clip!.timeline));
+    }
+  }, [captionPending, clip]);
 
   // Source video blob (streams through the authed media endpoint)
   useEffect(() => {
@@ -524,8 +537,8 @@ export default function TimelineEditorPage() {
   const genCaptions = useMutation({
     mutationFn: () => api.shortsStudio.generateCaptions(shortClipId),
     onSuccess: () => {
-      // Job runs in background; refetch after a delay to pick up captions
-      setTimeout(() => void qc.invalidateQueries({ queryKey: ['clip-timeline', shortClipId] }).then(() => setTimeline(null)), 8000);
+      // Switch the clip-timeline query into polling mode (every 3s) until captions land
+      setCaptionPending(true);
     },
   });
 
@@ -692,13 +705,17 @@ export default function TimelineEditorPage() {
             ))}
             <button
               onClick={() => genCaptions.mutate()}
-              disabled={genCaptions.isPending}
+              disabled={genCaptions.isPending || captionPending}
               className="w-full flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
-              {genCaptions.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Captions className="w-4 h-4 text-gray-500" />}
-              Generate captions
+              {(genCaptions.isPending || captionPending) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Captions className="w-4 h-4 text-gray-500" />}
+              {captionPending ? 'Generating captions…' : 'Generate captions'}
             </button>
-            {genCaptions.isSuccess && <p className="text-[11px] text-gray-500">Caption job queued — the track updates when it finishes.</p>}
+            {captionPending && (
+              <p className="text-[11px] text-brand-600 flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" /> Processing speech — captions will appear on the timeline when ready.
+              </p>
+            )}
           </div>
 
           {suggestions && (

@@ -1484,8 +1484,9 @@ Return a VideoScenePlanOutput with semanticMethod="cinematic-director", sceneCou
 
       case 'SHORTS_RENDER': {
         const shortClipId = payload['shortClipId'] as string;
+        const forceRender = payload['force'] === true;
         if (!shortClipId) throw new Error('SHORTS_RENDER requires payload.shortClipId');
-        return this.shortsRender.renderClip(shortClipId, jobId, (m) => this.log(jobId, projectId, m));
+        return this.shortsRender.renderClip(shortClipId, jobId, (m) => this.log(jobId, projectId, m), forceRender);
       }
 
       case 'SHORTS_EXPORT': {
