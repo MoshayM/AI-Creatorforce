@@ -54,7 +54,7 @@ type SpeechRecognitionLike = {
   continuous: boolean;
   onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> & { [i: number]: { isFinal: boolean } & ArrayLike<{ transcript: string }> } }) => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((e: { error?: string }) => void) | null;
   start: () => void;
   stop: () => void;
 };
@@ -110,6 +110,7 @@ export function CopilotPanel() {
   // Live streaming transcript while recording
   const [liveTranscript, setLiveTranscript] = useState('');
   const [recording, setRecording] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
   const conversationRef = useRef(false);
   const [lang, setLang] = useState<string>(() =>
     typeof navigator !== 'undefined' ? navigator.language : 'en-US');
@@ -220,13 +221,17 @@ export function CopilotPanel() {
   }, [messages, speak, pending, billingOrgId, router]);
 
   // ── Server STT (MediaRecorder → /copilot/transcribe) ─────────────────────
+  // listening is set optimistically by toggleMic BEFORE this is called.
   const startServerSTT = useCallback(async () => {
     if (typeof window === 'undefined') return;
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      return; // Mic permission denied
+      // Permission denied or hardware unavailable — roll back optimistic state
+      setListening(false);
+      setMicError('Microphone permission denied');
+      return;
     }
 
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
@@ -239,7 +244,6 @@ export function CopilotPanel() {
     mediaRecorderRef.current = recorder;
     audioChunksRef.current = [];
     setRecording(true);
-    setListening(true);
 
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) audioChunksRef.current.push(e.data);
@@ -250,7 +254,7 @@ export function CopilotPanel() {
       setListening(false);
       stream.getTracks().forEach((t) => t.stop());
       const blob = new Blob(audioChunksRef.current, { type: mimeType });
-      if (blob.size < 500) { setLiveTranscript(''); return; } // too short
+      if (blob.size < 500) { setLiveTranscript(''); return; }
 
       setLiveTranscript('Transcribing…');
       try {
@@ -275,7 +279,7 @@ export function CopilotPanel() {
       }
     };
 
-    recorder.start(250); // collect in 250ms chunks
+    recorder.start(250);
     window.speechSynthesis?.cancel();
   }, [lang, send]);
 
@@ -285,9 +289,15 @@ export function CopilotPanel() {
   }, []);
 
   // ── Browser STT fallback ──────────────────────────────────────────────────
+  // listening is set optimistically by toggleMic BEFORE this is called.
   const startBrowserSTT = useCallback(() => {
     const rec = getBrowserRecognition();
-    if (!rec) return;
+    if (!rec) {
+      // Browser doesn't support Web Speech API (Firefox, some Safari)
+      setListening(false);
+      setMicError('Voice input not supported in this browser — try Chrome');
+      return;
+    }
     recognitionRef.current = rec;
     rec.lang = lang;
     rec.interimResults = true;
@@ -314,20 +324,32 @@ export function CopilotPanel() {
         setLiveTranscript('');
       }
     };
-    rec.onerror = () => { setListening(false); conversationRef.current = false; };
+    rec.onerror = (e) => {
+      setListening(false);
+      conversationRef.current = false;
+      if (e.error === 'not-allowed') setMicError('Microphone permission denied');
+    };
     window.speechSynthesis?.cancel();
-    rec.start();
-    setListening(true);
+    try {
+      rec.start();
+      // listening already set optimistically by toggleMic
+    } catch {
+      setListening(false);
+      conversationRef.current = false;
+      setMicError('Could not start microphone — try again');
+    }
   }, [send, lang]);
 
   const startListening = useCallback(() => {
-    if (serverStt) startServerSTT();
+    setMicError(null);
+    if (serverStt === true) void startServerSTT();
     else startBrowserSTT();
   }, [serverStt, startServerSTT, startBrowserSTT]);
   startListeningRef.current = startListening;
 
   const toggleMic = useCallback(() => {
     if (listening || recording) {
+      // STOP
       conversationRef.current = false;
       if (mediaRecorderRef.current) stopServerSTT();
       else recognitionRef.current?.stop();
@@ -335,9 +357,19 @@ export function CopilotPanel() {
       setRecording(false);
       return;
     }
+    // START — set green immediately so the button responds at once
+    setListening(true);
+    setMicError(null);
     conversationRef.current = true;
     startListening();
   }, [listening, recording, startListening, stopServerSTT]);
+
+  // Auto-clear mic errors after 3s
+  useEffect(() => {
+    if (!micError) return;
+    const id = setTimeout(() => setMicError(null), 3000);
+    return () => clearTimeout(id);
+  }, [micError]);
 
   void setSpeakReplies; // speakReplies toggle preserved for future UI
 
@@ -405,11 +437,11 @@ export function CopilotPanel() {
               >
                 <span style={{
                   width: '9px', height: '9px', borderRadius: '50%', flexShrink: 0,
-                  background: listening ? '#4ADE80' : speaking ? '#A78BFA' : busy ? '#FBBF24' : 'rgba(255,255,255,.45)',
-                  boxShadow: listening ? '0 0 0 4px rgba(74,222,128,.25)' : speaking ? '0 0 0 4px rgba(167,139,250,.25)' : busy ? '0 0 0 4px rgba(251,191,36,.25)' : 'none',
+                  background: micError ? '#F87171' : listening ? '#4ADE80' : speaking ? '#A78BFA' : busy ? '#FBBF24' : 'rgba(255,255,255,.45)',
+                  boxShadow: micError ? '0 0 0 4px rgba(248,113,113,.25)' : listening ? '0 0 0 4px rgba(74,222,128,.25)' : speaking ? '0 0 0 4px rgba(167,139,250,.25)' : busy ? '0 0 0 4px rgba(251,191,36,.25)' : 'none',
                   transition: 'background .3s, box-shadow .3s',
                 }} />
-                {listening ? 'Listening…' : speaking ? 'Speaking…' : busy ? 'Processing…' : 'Copilot ready'}
+                {micError ? micError : listening ? 'Listening…' : speaking ? 'Speaking…' : busy ? 'Processing…' : 'Copilot ready'}
               </div>
               {/* Live transcript OR last message */}
               <p style={{ fontSize: '12.5px', color: 'rgba(30,27,46,.55)', fontWeight: 600, marginTop: '10px', maxWidth: '320px', textAlign: 'center' }}>
