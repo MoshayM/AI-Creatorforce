@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, CheckSquare, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Bell, Gauge, Gift, Building2, ChevronDown, Workflow, Film, Menu, X, CalendarClock, Sparkles, Home, Bot, Upload, BookOpen, Code2, Activity, BarChart2, Compass, ArrowRightLeft, Award, Target, FlaskConical, Layers, ListOrdered, Search } from 'lucide-react';
+import { FolderOpen, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Bell, Gauge, Gift, Building2, ChevronDown, Workflow, Film, Menu, X, Sparkles, Home, Bot, Upload, BookOpen, Code2, Activity, BarChart2, Compass, ArrowRightLeft, Award, Target, FlaskConical, Layers, ListOrdered, Search } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
@@ -32,8 +32,6 @@ const NAV: NavItem[] = [
     isGroup: true,
     dividerBefore: true,
     children: [
-      { href: '/approvals', icon: CheckSquare, label: 'Approvals' },
-      { href: '/scheduler', icon: CalendarClock, label: 'Scheduler' },
       { href: '/publishing', icon: Upload, label: 'Publishing' },
       { href: '/autonomy', icon: Sparkles, label: 'Autonomy' },
       { href: '/ab-testing', icon: FlaskConical, label: 'A/B Testing' },
