@@ -108,7 +108,7 @@ export class ApprovalsService {
           shortClipId: result.shortClipId,
           exportId: result.exportId,
           approvalId,
-        });
+        }, { idempotencyKey: `SHORTS_PUBLISH-${result.shortClipId}-${approvalId}` });
         this.logger.log(`Approved shorts export — auto-enqueued SHORTS_PUBLISH for clip ${result.shortClipId}`);
       }
     } catch (err) {

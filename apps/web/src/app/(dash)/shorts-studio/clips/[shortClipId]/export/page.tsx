@@ -3,7 +3,11 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, Upload, ShieldCheck, Package, ExternalLink, AlertTriangle, CalendarClock } from 'lucide-react';
+import {
+  ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, Upload,
+  ShieldCheck, Package, ExternalLink, AlertTriangle, CalendarClock, XCircle, X,
+  CheckCheck, Clock,
+} from 'lucide-react';
 import { api, apiClient } from '@/lib/api';
 import { JobErrorCard } from '@/components/job-error-card';
 
@@ -62,6 +66,53 @@ function ThumbCard({ thumb, onPick }: { thumb: Thumb; onPick: () => void }) {
   );
 }
 
+/** Inline review card — approve or reject without leaving the export page. */
+function InlineApprovalCard({ approvalId, onDone }: { approvalId: string; onDone: () => void }) {
+  const [notes, setNotes] = useState('');
+  const approveMutation = useMutation({ mutationFn: () => api.approvals.approve(approvalId, notes || undefined), onSuccess: onDone });
+  const rejectMutation = useMutation({ mutationFn: () => api.approvals.reject(approvalId, notes || undefined), onSuccess: onDone });
+  const busy = approveMutation.isPending || rejectMutation.isPending;
+
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <p className="text-sm font-semibold text-amber-800 flex items-center gap-1.5 mb-1">
+        <ShieldCheck className="w-4 h-4" /> Review before publishing
+      </p>
+      <p className="text-xs text-amber-700 mb-3">Check the video preview on the left — then approve or reject.</p>
+      <textarea
+        value={notes}
+        onChange={(e) => { setNotes(e.target.value); }}
+        placeholder="Optional notes for this review…"
+        className="w-full text-sm border border-amber-200 rounded-lg px-3 py-2 mb-3 resize-none bg-white focus:outline-none focus:ring-2 focus:ring-brand-200"
+        rows={2}
+      />
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => { void approveMutation.mutate(); }}
+          disabled={busy}
+          className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
+        >
+          {approveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
+          Approve
+        </button>
+        <button
+          onClick={() => { void rejectMutation.mutate(); }}
+          disabled={busy}
+          className="flex items-center gap-1.5 px-4 py-2 bg-white border border-red-200 text-red-700 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-50 transition-colors"
+        >
+          {rejectMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+          Reject
+        </button>
+      </div>
+      {(approveMutation.isError || rejectMutation.isError) && (
+        <p className="text-xs text-red-600 mt-2">
+          {((approveMutation.error ?? rejectMutation.error) as { response?: { data?: { message?: string } } } | null)?.response?.data?.message ?? 'Action failed — please try again'}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function ClipExportPage() {
   const { shortClipId } = useParams<{ shortClipId: string }>();
   const qc = useQueryClient();
@@ -81,16 +132,6 @@ export default function ClipExportPage() {
     refetchInterval: (q) => ((q.state.data?.length ?? 0) === 0 ? 5000 : false),
   });
 
-  const renderMutation = useMutation({
-    mutationFn: () => api.shortsStudio.render(shortClipId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['render-status', shortClipId] }),
-  });
-
-  const pickThumb = useMutation({
-    mutationFn: (id: string) => api.shortsStudio.setPrimaryThumbnail(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['clip-thumbs', shortClipId] }),
-  });
-
   const { data: pub } = useQuery<PublishState>({
     queryKey: ['publish-state', shortClipId],
     queryFn: () => api.shortsStudio.publishStatus(shortClipId).then((r) => r.data as PublishState),
@@ -102,19 +143,28 @@ export default function ClipExportPage() {
     },
   });
 
+  const invalidatePub = () => { void qc.invalidateQueries({ queryKey: ['publish-state', shortClipId] }); };
   const [scheduledAt, setScheduledAt] = useState('');
+  const [showSchedule, setShowSchedule] = useState(false);
 
-  const invalidatePub = () => void qc.invalidateQueries({ queryKey: ['publish-state', shortClipId] });
+  const renderMutation = useMutation({
+    mutationFn: () => api.shortsStudio.render(shortClipId),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['render-status', shortClipId] }); },
+  });
+  const pickThumb = useMutation({
+    mutationFn: (id: string) => api.shortsStudio.setPrimaryThumbnail(id),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['clip-thumbs', shortClipId] }); },
+  });
   const exportMutation = useMutation({ mutationFn: () => api.shortsStudio.exportClip(shortClipId), onSuccess: invalidatePub });
   const requestPublish = useMutation({ mutationFn: () => api.shortsStudio.requestPublish(shortClipId), onSuccess: invalidatePub });
   const publishMutation = useMutation({
     mutationFn: () => api.shortsStudio.publish(shortClipId, scheduledAt || undefined),
-    onSuccess: invalidatePub,
+    onSuccess: () => { setScheduledAt(''); setShowSchedule(false); invalidatePub(); },
   });
 
   const videoUrl = useBlobUrl(status?.render?.versionId);
   const rendering = status?.clipStatus === 'RENDERING' || status?.renderJob?.status === 'RUNNING' || status?.renderJob?.status === 'CHECKPOINTED';
-  const failed = status?.renderJob?.status === 'FAILED';
+  const renderFailed = status?.renderJob?.status === 'FAILED';
   const checkpoint = status?.renderJob?.checkpointData;
   const timelineStale = status?.timelineStale === true;
 
@@ -129,189 +179,302 @@ export default function ClipExportPage() {
     URL.revokeObjectURL(url);
   };
 
+  // ── Derived publish state ──────────────────────────────────────────────────
+  const clipStatus = pub?.clipStatus ?? '';
+  const isExported = !['RENDERED', 'CANDIDATE', 'IN_EDITING', 'READY_FOR_RENDER'].includes(clipStatus);
+  const approvalStatus = pub?.approval?.status;
+  const isApproved = approvalStatus === 'APPROVED';
+  const publishJobActive = pub?.publishJob && ['PENDING', 'QUEUED', 'RUNNING'].includes(pub.publishJob.status);
+  const publishedVideoId = pub?.publishJob?.result?.youtubeVideoId;
+
+  // ── Get error message from mutation ───────────────────────────────────────
+  const mutationErrMsg = (err: unknown): string =>
+    (err as { response?: { data?: { message?: string } } } | null)?.response?.data?.message ?? 'Action failed — please try again';
+
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto">
       <Link href={`/shorts-studio/clips/${shortClipId}/edit`} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-4">
         <ArrowLeft className="w-4 h-4" /> Back to editor
       </Link>
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Clapperboard className="w-6 h-6 text-brand-600" /> Export
+          <Clapperboard className="w-6 h-6 text-brand-600" /> Export &amp; Publish
         </h1>
         <button
-          onClick={() => renderMutation.mutate()}
+          onClick={() => { void renderMutation.mutate(); }}
           disabled={renderMutation.isPending || rendering}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-50 text-sm font-semibold transition-colors"
         >
           {rendering || renderMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           {status?.render ? 'Re-render' : 'Render clip'}
         </button>
       </div>
 
-      {/* Stale render warning — shown when timeline was edited after the last render */}
+      {/* Stale render warning */}
       {timelineStale && !rendering && (
         <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
           <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-amber-800">Your edits haven't been rendered yet</p>
-            <p className="text-xs text-amber-700 mt-0.5">The clip was edited after the last render. Click <strong>Re-render</strong> above to produce the updated video before exporting or publishing.</p>
+            <p className="text-sm font-semibold text-amber-800">Your edits haven't been rendered yet</p>
+            <p className="text-xs text-amber-700 mt-0.5">The clip was edited after the last render. Click <strong>Re-render</strong> to produce the updated video.</p>
           </div>
         </div>
       )}
 
-      {/* Status */}
-      <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm mb-6 flex items-center gap-3">
+      {/* Render status bar */}
+      <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm mb-5 flex items-center gap-3">
         {rendering ? (
           <>
-            <Loader2 className="w-5 h-5 animate-spin text-brand-600" />
+            <Loader2 className="w-5 h-5 animate-spin text-brand-600 shrink-0" />
             <div>
-              <p className="text-sm font-medium text-gray-800">Rendering…</p>
+              <p className="text-sm font-semibold text-gray-800">Rendering…</p>
               <p className="text-xs text-gray-500">
                 Pass {status?.renderJob?.ffmpegPass ?? 1}
                 {checkpoint?.total ? ` · segment ${checkpoint.segmentsDone ?? 0}/${checkpoint.total}` : ''}
               </p>
             </div>
           </>
-        ) : failed ? (
+        ) : renderFailed ? (
           <div className="flex-1">
-            <JobErrorCard
-              errorCode="FFMPEG_EXECUTION_FAILED"
-              onRetry={() => renderMutation.mutate()}
-            />
+            <JobErrorCard errorCode="FFMPEG_EXECUTION_FAILED" onRetry={() => { void renderMutation.mutate(); }} />
           </div>
         ) : status?.render ? (
           <>
-            <CheckCircle2 className={`w-5 h-5 ${timelineStale ? 'text-amber-400' : 'text-green-500'}`} />
+            <CheckCircle2 className={`w-5 h-5 shrink-0 ${timelineStale ? 'text-amber-400' : 'text-green-500'}`} />
             <p className="text-sm text-gray-700">
               Rendered · {(status.render.sizeBytes / 1024 / 1024).toFixed(1)} MB
               {status.render.durationMs ? ` · ${Math.round(status.render.durationMs / 1000)}s` : ''}
               {timelineStale && <span className="ml-2 text-amber-600 font-medium">(outdated — re-render needed)</span>}
             </p>
-            <button onClick={() => void download()} className="ml-auto flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 rounded-lg text-sm hover:bg-brand-50">
-              <Download className="w-4 h-4" /> Download MP4
+            <button onClick={() => { void download(); }} className="ml-auto flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 rounded-lg text-sm hover:bg-brand-50">
+              <Download className="w-4 h-4" /> Download
             </button>
           </>
         ) : (
-          <p className="text-sm text-gray-500">Not rendered yet — click "Render clip" to produce the vertical video.</p>
+          <p className="text-sm text-gray-500">Not rendered yet — click "Render clip" to start.</p>
         )}
       </div>
 
-      {/* Publish flow (ai.md §1.1: render → approval → export → publish) */}
+      {/* ── Publish to YouTube — integrated 3-step flow ── */}
       {status?.render && (
-        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm mb-6">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+        <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm mb-6">
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-5 flex items-center gap-1.5">
             <Upload className="w-4 h-4" /> Publish to YouTube
           </h2>
-          {pub?.publishJob?.result?.youtubeVideoId ? (
-            <div className="flex items-center gap-2 text-sm text-green-700">
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
-              Published!
-              <a
-                href={pub.publishJob.result.url ?? `https://youtube.com/shorts/${pub.publishJob.result.youtubeVideoId}`}
-                target="_blank" rel="noreferrer"
-                className="flex items-center gap-1 text-brand-600 hover:underline"
-              >
-                Watch on YouTube <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+
+          {/* ── Published ── */}
+          {publishedVideoId ? (
+            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-4">
+              <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-green-800">Published to YouTube!</p>
+                <a
+                  href={pub?.publishJob?.result?.url ?? `https://youtube.com/shorts/${publishedVideoId}`}
+                  target="_blank" rel="noreferrer"
+                  className="text-xs text-brand-600 hover:underline flex items-center gap-1 mt-0.5"
+                >
+                  Watch on YouTube <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
             </div>
-          ) : pub?.publishJob && ['PENDING', 'QUEUED', 'RUNNING'].includes(pub.publishJob.status) ? (
-            <p className="flex items-center gap-2 text-sm text-gray-600">
-              <Loader2 className="w-4 h-4 animate-spin text-brand-600" />
-              {pub.publishJob.status === 'PENDING'
-                ? 'Scheduled — waiting for publish time…'
-                : 'Publishing — compliance audit then upload…'}
-            </p>
+
+          ) : publishJobActive ? (
+            /* ── Job running / scheduled ── */
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              {pub?.publishJob?.status === 'PENDING'
+                ? <><Clock className="w-4 h-4 text-brand-500 shrink-0" /> Scheduled — waiting for publish time…</>
+                : <><Loader2 className="w-4 h-4 animate-spin text-brand-600 shrink-0" /> Publishing — compliance audit then upload…</>}
+            </div>
+
           ) : (
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Step 1: export package — disabled when timeline is stale */}
-              <button
-                onClick={() => exportMutation.mutate()}
-                disabled={exportMutation.isPending || timelineStale}
-                title={timelineStale ? 'Re-render the clip first — the timeline was edited after the last render' : undefined}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {exportMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
-                {pub?.clipStatus === 'RENDERED' ? '1. Build export package' : 'Re-export package'}
-              </button>
-              {/* Step 2: approval */}
-              {pub?.approval?.status === 'APPROVED' ? (
-                <span className="flex items-center gap-1 text-sm text-green-600"><ShieldCheck className="w-4 h-4" /> Approved</span>
-              ) : pub?.approval?.status === 'PENDING' ? (
-                <Link href="/approvals" className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-sm hover:bg-amber-200">
-                  <ShieldCheck className="w-4 h-4" /> 2. Awaiting review — open Approvals
-                </Link>
-              ) : (
-                <button
-                  onClick={() => requestPublish.mutate()}
-                  disabled={requestPublish.isPending || !['EXPORTED', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED'].includes(pub?.clipStatus ?? '')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {requestPublish.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  2. Request approval
-                </button>
-              )}
-              {/* Step 3: schedule or publish immediately */}
-              {pub?.approval?.status === 'APPROVED' ? (
-                <div className="flex items-center gap-2 flex-wrap mt-1 w-full border-t border-gray-100 pt-3">
-                  <label className="text-xs text-gray-500 shrink-0 flex items-center gap-1">
-                    <CalendarClock className="w-3.5 h-3.5" /> Publish at
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={scheduledAt}
-                    onChange={(e) => setScheduledAt(e.target.value)}
-                    min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
-                    className="flex-1 min-w-[180px] border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-200"
-                  />
-                  <button
-                    onClick={() => publishMutation.mutate()}
-                    disabled={publishMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
-                  >
-                    {publishMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : scheduledAt ? <CalendarClock className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
-                    {scheduledAt ? '3. Schedule' : '3. Publish now'}
-                  </button>
+            <div className="space-y-5">
+              {/* Step 1 — Export package */}
+              <div className="flex items-start gap-3">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${isExported ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                  {isExported ? <CheckCircle2 className="w-4 h-4" /> : '1'}
                 </div>
-              ) : (
-                <button
-                  disabled
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm opacity-40 cursor-not-allowed"
-                >
-                  <Upload className="w-4 h-4" /> 3. Publish
-                </button>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-800">Export package</p>
+                    {isExported && (
+                      <button
+                        onClick={() => { void exportMutation.mutate(); }}
+                        disabled={exportMutation.isPending || timelineStale}
+                        className="text-xs text-gray-400 hover:text-brand-600 underline disabled:no-underline disabled:opacity-50"
+                      >
+                        {exportMutation.isPending ? 'Rebuilding…' : 'Re-export'}
+                      </button>
+                    )}
+                  </div>
+                  {isExported
+                    ? <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Package ready</p>
+                    : (
+                      <button
+                        onClick={() => { void exportMutation.mutate(); }}
+                        disabled={exportMutation.isPending || timelineStale}
+                        title={timelineStale ? 'Re-render the clip first — the timeline was edited after the last render' : undefined}
+                        className="mt-2 flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {exportMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
+                        Build export package
+                      </button>
+                    )}
+                  {exportMutation.isError && (
+                    <p className="text-xs text-red-600 mt-1">{mutationErrMsg(exportMutation.error)}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 2 — Approval */}
+              {isExported && (
+                <div className="flex items-start gap-3">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
+                    isApproved ? 'bg-green-500 text-white' : approvalStatus === 'PENDING' ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {isApproved ? <CheckCircle2 className="w-4 h-4" /> : '2'}
+                  </div>
+                  <div className="flex-1">
+                    {isApproved ? (
+                      <p className="text-sm font-semibold text-green-700 flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4" /> Review approved
+                      </p>
+                    ) : approvalStatus === 'PENDING' && pub?.approval ? (
+                      <>
+                        <p className="text-sm font-semibold text-gray-800 mb-2">Review required</p>
+                        <InlineApprovalCard approvalId={pub.approval.id} onDone={invalidatePub} />
+                      </>
+                    ) : approvalStatus === 'REJECTED' ? (
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <p className="text-sm text-red-600">Review rejected.</p>
+                        <button
+                          onClick={() => { void requestPublish.mutate(); }}
+                          disabled={requestPublish.isPending}
+                          className="text-sm text-brand-600 hover:underline flex items-center gap-1"
+                        >
+                          {requestPublish.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                          Request new review
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-gray-800 mb-1">Request approval</p>
+                        <p className="text-xs text-gray-500 mb-2">An internal review ensures the clip meets YouTube policy before upload.</p>
+                        <button
+                          onClick={() => { void requestPublish.mutate(); }}
+                          disabled={requestPublish.isPending}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          {requestPublish.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                          Request approval
+                        </button>
+                      </>
+                    )}
+                    {requestPublish.isError && (
+                      <p className="text-xs text-red-600 mt-1">{mutationErrMsg(requestPublish.error)}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3 — Publish / Schedule */}
+              {isApproved && (
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                    3
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-gray-800 mb-3">Publish to YouTube</p>
+
+                    {!showSchedule ? (
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          onClick={() => { void publishMutation.mutate(); }}
+                          disabled={publishMutation.isPending}
+                          className="flex items-center gap-1.5 px-4 py-2 text-white rounded-xl text-sm font-semibold disabled:opacity-50 transition-colors shadow-sm"
+                          style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)' }}
+                        >
+                          {publishMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                          Publish Now
+                        </button>
+                        <button
+                          onClick={() => { setShowSchedule(true); }}
+                          className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <CalendarClock className="w-4 h-4" /> Schedule
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="bg-[#f5f2fd] rounded-xl p-4 border border-[#e3ddf8]">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                            <CalendarClock className="w-4 h-4" style={{ color: '#6D4AE0' }} /> Schedule for later
+                          </p>
+                          <button
+                            onClick={() => { setShowSchedule(false); setScheduledAt(''); }}
+                            className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-white/60 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <input
+                          type="datetime-local"
+                          value={scheduledAt}
+                          onChange={(e) => { setScheduledAt(e.target.value); }}
+                          min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                          className="w-full border border-[#e3ddf8] bg-white rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-200 mb-2"
+                        />
+                        <p className="text-[11px] text-gray-400 mb-3">
+                          The clip will be uploaded as private and set live at the scheduled time.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { void publishMutation.mutate(); }}
+                            disabled={publishMutation.isPending || !scheduledAt}
+                            className="flex items-center gap-1.5 px-4 py-2 text-white rounded-xl text-sm font-semibold disabled:opacity-50 transition-colors"
+                            style={{ background: scheduledAt ? 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)' : undefined, backgroundColor: !scheduledAt ? '#9ca3af' : undefined }}
+                          >
+                            {publishMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
+                            Confirm Schedule
+                          </button>
+                          <button
+                            onClick={() => { setShowSchedule(false); setScheduledAt(''); }}
+                            className="px-4 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {publishMutation.isError && (
+                      <p className="text-xs text-red-600 mt-2">{mutationErrMsg(publishMutation.error)}</p>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           )}
-          {pub?.publishJob?.status === 'FAILED' && (
+
+          {/* Publish job error (from previous failed job) */}
+          {pub?.publishJob?.status === 'FAILED' && !publishJobActive && !publishedVideoId && (
             <JobErrorCard
               error={pub.publishJob.error}
               errorCode={pub.publishJob.errorCode}
               retryable={pub.publishJob.retryable}
-              onRetry={() => publishMutation.mutate()}
-              className="mt-2"
+              onRetry={() => { void publishMutation.mutate(); }}
+              className="mt-4"
             />
           )}
-          {(publishMutation.isError || requestPublish.isError || exportMutation.isError) && (
-            <JobErrorCard
-              error={((publishMutation.error ?? requestPublish.error ?? exportMutation.error) as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Action failed'}
-              errorCode="JOB_FAILED"
-              onRetry={
-                exportMutation.isError ? () => exportMutation.mutate()
-                : requestPublish.isError ? () => requestPublish.mutate()
-                : () => publishMutation.mutate()
-              }
-              className="mt-2"
-            />
-          )}
-          <p className="text-[11px] text-gray-500 mt-2">
-            Publishing runs a compliance audit and requires human approval — no clip is uploaded without both.
+
+          <p className="text-[11px] text-gray-400 mt-4 border-t border-gray-50 pt-3">
+            Publishing runs a compliance audit and requires your review — no clip is uploaded without both.
           </p>
         </div>
       )}
 
+      {/* Preview + Thumbnails */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Preview */}
         <div>
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Preview</h2>
           <div className="bg-black rounded-2xl overflow-hidden aspect-[9/16] max-h-[560px] flex items-center justify-center">
@@ -322,7 +485,6 @@ export default function ClipExportPage() {
           </div>
         </div>
 
-        {/* Thumbnails */}
         <div>
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Thumbnail</h2>
           {thumbs.length === 0 ? (
@@ -330,7 +492,7 @@ export default function ClipExportPage() {
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {thumbs.map((t) => (
-                <ThumbCard key={t.id} thumb={t} onPick={() => pickThumb.mutate(t.id)} />
+                <ThumbCard key={t.id} thumb={t} onPick={() => { void pickThumb.mutate(t.id); }} />
               ))}
             </div>
           )}

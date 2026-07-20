@@ -136,6 +136,16 @@ export class PublishingService {
    * channel ownership. A video's effective date is publishedAt when set,
    * otherwise scheduledAt — the from/to range filters on that.
    */
+  /** Unified row shape returned by listTracked (videos + published shorts). */
+  private toTrackingItem<T extends {
+    id: string; title: string; status: VideoStatus; youtubeVideoId: string | null;
+    thumbnailUrl: string | null; scheduledAt: Date | null; publishedAt: Date | null;
+    viewCount: number; likeCount: number; commentCount: number; createdAt: Date;
+    channel: { id: string; title: string }; project: { id: string; title: string };
+  }>(v: T, source: 'VIDEO' | 'SHORT') {
+    return { ...v, source };
+  }
+
   async listTracked(
     userId: string,
     opts: {
@@ -156,51 +166,98 @@ export class PublishingService {
         ? { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lte: opts.to } : {}) }
         : undefined;
 
-    const where: Prisma.VideoWhereInput = {
+    const statusFilter: VideoStatus[] = opts.status?.length
+      ? opts.status
+      : ['SCHEDULED', 'PUBLISHED', 'FAILED'];
+    const includePublished = statusFilter.includes('PUBLISHED' as VideoStatus);
+
+    const videoWhere: Prisma.VideoWhereInput = {
       channel: { userId },
-      status: { in: opts.status?.length ? opts.status : ['SCHEDULED', 'PUBLISHED', 'FAILED'] },
+      status: { in: statusFilter },
       ...(opts.channelId ? { channelId: opts.channelId } : {}),
       ...(opts.q ? { title: { contains: opts.q, mode: 'insensitive' } } : {}),
       ...(dateRange
-        ? {
-            OR: [
-              { publishedAt: dateRange },
-              { publishedAt: null, scheduledAt: dateRange },
-            ],
-          }
+        ? { OR: [{ publishedAt: dateRange }, { publishedAt: null, scheduledAt: dateRange }] }
         : {}),
     };
 
-    const [total, data] = await this.prisma.$transaction([
-      this.prisma.video.count({ where }),
+    const [allVideos, allShorts] = await Promise.all([
       this.prisma.video.findMany({
-        where,
+        where: videoWhere,
         orderBy: [
           { publishedAt: { sort: 'desc', nulls: 'first' } },
           { scheduledAt: 'desc' },
           { updatedAt: 'desc' },
         ],
-        take,
-        skip,
+        take: 500,
         select: {
-          id: true,
-          title: true,
-          status: true,
-          youtubeVideoId: true,
-          thumbnailUrl: true,
-          scheduledAt: true,
-          publishedAt: true,
-          viewCount: true,
-          likeCount: true,
-          commentCount: true,
-          createdAt: true,
+          id: true, title: true, status: true, youtubeVideoId: true, thumbnailUrl: true,
+          scheduledAt: true, publishedAt: true, viewCount: true, likeCount: true,
+          commentCount: true, createdAt: true,
           channel: { select: { id: true, title: true } },
           project: { select: { id: true, title: true } },
         },
       }),
+      includePublished
+        ? this.prisma.shortClip.findMany({
+            where: {
+              project: {
+                channel: { userId },
+                ...(opts.channelId ? { channelId: opts.channelId } : {}),
+              },
+              status: 'PUBLISHED',
+              ...(opts.q
+                ? {
+                    OR: [
+                      { topicSegment: { title: { contains: opts.q, mode: 'insensitive' } } },
+                      { chapter: { title: { contains: opts.q, mode: 'insensitive' } } },
+                      { project: { title: { contains: opts.q, mode: 'insensitive' } } },
+                    ],
+                  }
+                : {}),
+              ...(dateRange ? { exports: { some: { publishedAt: dateRange } } } : {}),
+            },
+            select: {
+              id: true, status: true, createdAt: true, updatedAt: true,
+              project: { select: { id: true, title: true, channel: { select: { id: true, title: true } } } },
+              topicSegment: { select: { title: true } },
+              chapter: { select: { title: true } },
+              exports: { orderBy: { createdAt: 'desc' }, take: 1, select: { publishedAt: true, publishTargetId: true } },
+            },
+          })
+        : Promise.resolve([]),
     ]);
 
-    return { data, total, take, skip };
+    const videoItems = allVideos.map((v) => this.toTrackingItem(v, 'VIDEO'));
+
+    const shortItems = allShorts.map((clip) =>
+      this.toTrackingItem(
+        {
+          id: clip.id,
+          title: clip.topicSegment?.title ?? clip.chapter?.title ?? `${clip.project.title} (Short)`,
+          status: 'PUBLISHED' as VideoStatus,
+          youtubeVideoId: clip.exports[0]?.publishTargetId ?? null,
+          thumbnailUrl: null,
+          scheduledAt: null,
+          publishedAt: clip.exports[0]?.publishedAt ?? clip.updatedAt,
+          viewCount: 0,
+          likeCount: 0,
+          commentCount: 0,
+          createdAt: clip.createdAt,
+          channel: clip.project.channel,
+          project: { id: clip.project.id, title: clip.project.title },
+        },
+        'SHORT',
+      ),
+    );
+
+    const combined = [...videoItems, ...shortItems].sort((a, b) => {
+      const da = a.publishedAt ?? a.scheduledAt;
+      const db = b.publishedAt ?? b.scheduledAt;
+      return (db?.getTime() ?? 0) - (da?.getTime() ?? 0);
+    });
+
+    return { data: combined.slice(skip, skip + take), total: combined.length, take, skip };
   }
 
   /** Headline counts for the scheduler page, scoped like listTracked. */
@@ -209,10 +266,14 @@ export class PublishingService {
       channel: { userId },
       ...(channelId ? { channelId } : {}),
     };
+    const shortsBase: Prisma.ShortClipWhereInput = {
+      project: { channel: { userId }, ...(channelId ? { channelId } : {}) },
+      status: 'PUBLISHED',
+    };
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [scheduled, upcoming7d, published, publishedThisMonth, failed] =
+    const [scheduled, upcoming7d, publishedVideos, publishedVideosThisMonth, failed, publishedShorts, publishedShortsThisMonth] =
       await this.prisma.$transaction([
         this.prisma.video.count({ where: { ...base, status: 'SCHEDULED' } }),
         this.prisma.video.count({
@@ -227,9 +288,19 @@ export class PublishingService {
           where: { ...base, status: 'PUBLISHED', publishedAt: { gte: monthStart } },
         }),
         this.prisma.video.count({ where: { ...base, status: 'FAILED' } }),
+        this.prisma.shortClip.count({ where: shortsBase }),
+        this.prisma.shortClip.count({
+          where: { ...shortsBase, exports: { some: { publishedAt: { gte: monthStart } } } },
+        }),
       ]);
 
-    return { scheduled, upcoming7d, published, publishedThisMonth, failed };
+    return {
+      scheduled,
+      upcoming7d,
+      published: publishedVideos + publishedShorts,
+      publishedThisMonth: publishedVideosThisMonth + publishedShortsThisMonth,
+      failed,
+    };
   }
 
   async getVideoStats(channelId: string, youtubeVideoId: string) {

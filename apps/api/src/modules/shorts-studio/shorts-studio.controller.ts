@@ -391,7 +391,7 @@ export class ShortsStudioController {
       clip.projectId,
       'SHORTS_PUBLISH',
       { shortClipId, approvalId, exportId, ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}) },
-      { delayMs },
+      { delayMs, idempotencyKey: scheduledAt ? `SHORTS_PUBLISH-SCHED-${shortClipId}` : `SHORTS_PUBLISH-${shortClipId}-${approvalId}` },
     );
   }
 

@@ -13,6 +13,7 @@ import {
   LayoutList,
   Loader2,
   MessageSquare,
+  Scissors,
   Search,
   ThumbsUp,
   AlertTriangle,
@@ -364,11 +365,12 @@ function MonthView({ channelId, onSelect }: { channelId: string; onSelect: (v: T
                       key={v.id}
                       type="button"
                       onClick={() => { onSelect(v); }}
-                      title={`${STATUS_LABEL[v.status]}: ${v.title}`}
-                      className="text-left text-[11px] leading-tight px-1.5 py-1 rounded-lg truncate hover:opacity-80 transition-opacity"
+                      title={`${v.source === 'SHORT' ? 'Short · ' : ''}${STATUS_LABEL[v.status]}: ${v.title}`}
+                      className="text-left text-[11px] leading-tight px-1.5 py-1 rounded-lg truncate hover:opacity-80 transition-opacity flex items-center gap-1"
                       style={STATUS_CHIP_STYLE[v.status]}
                     >
-                      {v.title}
+                      {v.source === 'SHORT' && <Scissors className="w-2.5 h-2.5 shrink-0" />}
+                      <span className="truncate">{v.title}</span>
                     </button>
                   ))}
                   {dayVideos.length > 3 && (
@@ -507,7 +509,17 @@ function ListView({ channelId, onSelect }: { channelId: string; onSelect: (v: Tr
                 )}
                 {/* Title + meta */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{v.title}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate flex items-center gap-1.5">
+                    {v.source === 'SHORT' && (
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0"
+                        style={{ background: '#fdf4ff', color: '#7c3aed', border: '1px solid #e9d5ff' }}
+                      >
+                        <Scissors className="w-2.5 h-2.5" />Short
+                      </span>
+                    )}
+                    <span className="truncate">{v.title}</span>
+                  </p>
                   <p className="text-xs text-gray-400 truncate mt-0.5">
                     {v.channel.title} · {v.project.title}
                   </p>

@@ -501,6 +501,7 @@ export interface TrackedVideo {
   createdAt: string;
   channel: { id: string; title: string };
   project: { id: string; title: string };
+  source?: 'VIDEO' | 'SHORT';
 }
 
 export interface TrackedVideosPage {

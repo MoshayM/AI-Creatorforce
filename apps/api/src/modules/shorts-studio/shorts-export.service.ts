@@ -309,7 +309,7 @@ export class ShortsExportService {
 
     await this.prisma.shortsExportHistory.update({
       where: { id: exportId },
-      data: { publishedAt: new Date(), publishTargetId: clip.project.channelId },
+      data: { publishedAt: new Date(), publishTargetId: youtubeVideoId },
     });
     await this.prisma.shortClip.update({ where: { id: shortClipId }, data: { status: 'PUBLISHED' } });
     onLog?.(`Published ✓ — https://youtube.com/shorts/${youtubeVideoId}`);
