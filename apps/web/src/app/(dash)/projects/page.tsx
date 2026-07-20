@@ -146,7 +146,7 @@ function CardMenu({ onRename, onDelete }: CardMenuProps) {
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="w-7 h-7 rounded-xl flex items-center justify-center text-gray-300 opacity-0 group-hover:opacity-100 hover:text-gray-600 hover:bg-gray-100 transition-all"
+        className="w-7 h-7 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
       >
         <MoreVertical className="w-4 h-4" />
       </button>
@@ -489,8 +489,8 @@ export default function ProjectsPage() {
                     className="block bg-white rounded-2xl p-5 transition-all hover:border-[#6D4AE0]/40 hover:shadow-lg hover:-translate-y-0.5"
                     style={{ border: '1.5px solid #e3ddf8' }}
                   >
-                    {/* Top row */}
-                    <div className="flex items-start gap-3 mb-4">
+                    {/* Top row — pr-10 reserves space for the floating ⋮ button */}
+                    <div className="flex items-start gap-3 mb-4 pr-10">
                       <div
                         className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0"
                         style={{ background: tile.tileBg }}
