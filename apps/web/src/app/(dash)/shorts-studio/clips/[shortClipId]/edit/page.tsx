@@ -140,8 +140,13 @@ export default function TimelineEditorPage() {
     try {
       const res = await api.shortsStudio.applyCommands(tl.id, commands);
       setSaveError(null);
+      const serverTimeline = res.data as TimelineData;
       // Server state is authoritative (SPLIT/DUPLICATE ids are server-generated)
-      setTimeline((prev) => prev ? { ...(res.data as TimelineData), captions: (res.data as TimelineData).captions ?? prev.captions } : (res.data as TimelineData));
+      setTimeline((prev) => prev ? { ...serverTimeline, captions: serverTimeline.captions ?? prev.captions } : serverTimeline);
+      // Keep the React Query cache in sync so re-navigation loads the saved state
+      qc.setQueryData<ClipData>(['clip-timeline', shortClipId], (old) =>
+        old ? { ...old, timeline: serverTimeline } : old,
+      );
       // Flushed edits can no longer be undone locally
       setUndoStack([]);
       setRedoStack([]);
@@ -153,7 +158,7 @@ export default function TimelineEditorPage() {
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [qc, shortClipId]);
 
   // Debounced autosave
   useEffect(() => {
@@ -505,7 +510,12 @@ export default function TimelineEditorPage() {
       return res.data as TimelineData;
     },
     onSuccess: (data) => {
-      if (data) setTimeline((prev) => prev ? { ...data, captions: data.captions ?? prev.captions } : data);
+      if (data) {
+        setTimeline((prev) => prev ? { ...data, captions: data.captions ?? prev.captions } : data);
+        qc.setQueryData<ClipData>(['clip-timeline', shortClipId], (old) =>
+          old ? { ...old, timeline: data } : old,
+        );
+      }
       setSuggestions(null);
       setUndoStack([]); setRedoStack([]);
     },
