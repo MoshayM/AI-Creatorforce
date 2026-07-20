@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, Upload, ShieldCheck, Package, ExternalLink, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Loader2, Clapperboard, Download, Star, RefreshCw, CheckCircle2, Upload, ShieldCheck, Package, ExternalLink, AlertTriangle, CalendarClock } from 'lucide-react';
 import { api, apiClient } from '@/lib/api';
 import { JobErrorCard } from '@/components/job-error-card';
 
@@ -102,10 +102,15 @@ export default function ClipExportPage() {
     },
   });
 
+  const [scheduledAt, setScheduledAt] = useState('');
+
   const invalidatePub = () => void qc.invalidateQueries({ queryKey: ['publish-state', shortClipId] });
   const exportMutation = useMutation({ mutationFn: () => api.shortsStudio.exportClip(shortClipId), onSuccess: invalidatePub });
   const requestPublish = useMutation({ mutationFn: () => api.shortsStudio.requestPublish(shortClipId), onSuccess: invalidatePub });
-  const publishMutation = useMutation({ mutationFn: () => api.shortsStudio.publish(shortClipId), onSuccess: invalidatePub });
+  const publishMutation = useMutation({
+    mutationFn: () => api.shortsStudio.publish(shortClipId, scheduledAt || undefined),
+    onSuccess: invalidatePub,
+  });
 
   const videoUrl = useBlobUrl(status?.render?.versionId);
   const rendering = status?.clipStatus === 'RENDERING' || status?.renderJob?.status === 'RUNNING' || status?.renderJob?.status === 'CHECKPOINTED';
@@ -212,7 +217,10 @@ export default function ClipExportPage() {
             </div>
           ) : pub?.publishJob && ['PENDING', 'QUEUED', 'RUNNING'].includes(pub.publishJob.status) ? (
             <p className="flex items-center gap-2 text-sm text-gray-600">
-              <Loader2 className="w-4 h-4 animate-spin text-brand-600" /> Publishing — compliance audit then upload…
+              <Loader2 className="w-4 h-4 animate-spin text-brand-600" />
+              {pub.publishJob.status === 'PENDING'
+                ? 'Scheduled — waiting for publish time…'
+                : 'Publishing — compliance audit then upload…'}
             </p>
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
@@ -243,15 +251,36 @@ export default function ClipExportPage() {
                   2. Request approval
                 </button>
               )}
-              {/* Step 3: publish */}
-              <button
-                onClick={() => publishMutation.mutate()}
-                disabled={publishMutation.isPending || pub?.approval?.status !== 'APPROVED'}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
-              >
-                {publishMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                3. Publish
-              </button>
+              {/* Step 3: schedule or publish immediately */}
+              {pub?.approval?.status === 'APPROVED' ? (
+                <div className="flex items-center gap-2 flex-wrap mt-1 w-full border-t border-gray-100 pt-3">
+                  <label className="text-xs text-gray-500 shrink-0 flex items-center gap-1">
+                    <CalendarClock className="w-3.5 h-3.5" /> Publish at
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={scheduledAt}
+                    onChange={(e) => setScheduledAt(e.target.value)}
+                    min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                    className="flex-1 min-w-[180px] border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                  />
+                  <button
+                    onClick={() => publishMutation.mutate()}
+                    disabled={publishMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+                  >
+                    {publishMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : scheduledAt ? <CalendarClock className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                    {scheduledAt ? '3. Schedule' : '3. Publish now'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  disabled
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-sm opacity-40 cursor-not-allowed"
+                >
+                  <Upload className="w-4 h-4" /> 3. Publish
+                </button>
+              )}
             </div>
           )}
           {pub?.publishJob?.status === 'FAILED' && (

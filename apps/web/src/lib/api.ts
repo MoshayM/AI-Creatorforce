@@ -771,8 +771,8 @@ export const api = {
       apiClient.post(`/shorts-studio/clips/${shortClipId}/export`),
     requestPublish: (shortClipId: string) =>
       apiClient.post(`/shorts-studio/clips/${shortClipId}/request-publish`),
-    publish: (shortClipId: string) =>
-      apiClient.post(`/shorts-studio/clips/${shortClipId}/publish`),
+    publish: (shortClipId: string, scheduledAt?: string) =>
+      apiClient.post(`/shorts-studio/clips/${shortClipId}/publish`, scheduledAt ? { scheduledAt } : {}),
     publishStatus: (shortClipId: string) =>
       apiClient.get(`/shorts-studio/clips/${shortClipId}/publish-status`),
   },

@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
-import { IsString, IsArray, IsIn, IsOptional } from 'class-validator';
+import { IsString, IsArray, IsIn, IsOptional, IsDateString } from 'class-validator';
 import type { ClipType } from '@prisma/client';
 import { ApplyCommandsSchema, AssistCapabilitySchema } from '@cf/shared';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -37,6 +37,10 @@ class GenerateClipsDto {
 class UpdateChapterDto {
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() summary?: string;
+}
+
+class SchedulePublishDto {
+  @IsOptional() @IsDateString() scheduledAt?: string;
 }
 
 // ai.md Section 18 — routes live under /api/v1/shorts-studio (existing global
@@ -370,11 +374,25 @@ export class ShortsStudioController {
   }
 
   @Post('clips/:shortClipId/publish')
-  async publish(@Param('shortClipId') shortClipId: string, @CurrentUser() user: JwtPayload) {
+  async publish(
+    @Param('shortClipId') shortClipId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() body: SchedulePublishDto,
+  ) {
     const clip = await this.shorts.assertClipOwnership(shortClipId, user.sub);
     // Approval is validated here AND re-validated inside the publish job/connector
     const { approvalId, exportId } = await this.exports.assertPublishable(shortClipId);
-    return this.jobs.enqueue(clip.projectId, 'SHORTS_PUBLISH', { shortClipId, approvalId, exportId });
+    const scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
+    if (scheduledAt && scheduledAt <= new Date()) {
+      throw new BadRequestException('Scheduled time must be in the future');
+    }
+    const delayMs = scheduledAt ? scheduledAt.getTime() - Date.now() : 0;
+    return this.jobs.enqueue(
+      clip.projectId,
+      'SHORTS_PUBLISH',
+      { shortClipId, approvalId, exportId, ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}) },
+      { delayMs },
+    );
   }
 
   @Get('clips/:shortClipId/publish-status')

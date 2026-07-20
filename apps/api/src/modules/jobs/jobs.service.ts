@@ -19,7 +19,7 @@ export class JobsService {
     projectId: string | null,
     type: JobType,
     payload: Record<string, unknown> = {},
-    opts?: { developerKeyId?: string; idempotencyKey?: string },
+    opts?: { developerKeyId?: string; idempotencyKey?: string; delayMs?: number },
   ) {
     // Enqueue idempotency (Wave 17, risk R-02): a replayed Idempotency-Key
     // returns the original job — the unique column closes the concurrent race
@@ -49,6 +49,7 @@ export class JobsService {
       await this.queue.add(type, { jobId: job.id, projectId, type, payload, correlationId: currentCorrelationId(), developerKeyId: opts?.developerKeyId }, {
         jobId: job.id,
         attempts: 1,
+        ...(opts?.delayMs && opts.delayMs > 0 ? { delay: opts.delayMs } : {}),
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
