@@ -31,8 +31,8 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     items: [
+      { href: '/editor',        icon: Film,        label: 'Video Editor' },
       { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
-      { href: '/editor', icon: Film, label: 'Video Editor' },
     ],
   },
   {
