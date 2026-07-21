@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, Settings, LogOut, Palette, Clapperboard, ListVideo, Wallet, Bell, ShieldCheck, Gift, Building2, ChevronDown, Film, Menu, X, Sparkles, Home, Bot, Upload, BookOpen, Activity, BarChart2, Compass, ArrowRightLeft, Award, Target, FlaskConical, Layers, ListOrdered, Search, CheckCircle, CalendarClock } from 'lucide-react';
+import { FolderOpen, Settings, LogOut, Palette, Clapperboard, ListVideo, Wallet, Bell, ShieldCheck, Building2, ChevronDown, Film, Menu, X, Home, Bot, Upload, BookOpen, BarChart2, Search } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { LogoMark } from '@/components/logo-mark';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
@@ -35,39 +35,15 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    category: 'Publish',
     items: [
-      { href: '/publishing', icon: Upload, label: 'Publishing' },
-      { href: '/approvals', icon: CheckCircle, label: 'Approvals' },
-      { href: '/scheduler', icon: CalendarClock, label: 'Scheduler' },
-      { href: '/autonomy', icon: Sparkles, label: 'Autonomy', badge: 'NEW' },
-      { href: '/ab-testing', icon: FlaskConical, label: 'A/B Testing', badge: 'BETA' },
+      { href: '/publish',  icon: Upload,   label: 'Publish' },
+      { href: '/content',  icon: BookOpen, label: 'Content' },
+      { href: '/insights', icon: BarChart2, label: 'Insights' },
     ],
   },
   {
-    category: 'Content',
-    items: [
-      { href: '/research', icon: BookOpen, label: 'Research' },
-      { href: '/discover', icon: Compass, label: 'Discover' },
-      { href: '/repurpose', icon: ArrowRightLeft, label: 'Repurpose' },
-      { href: '/series-planner', icon: ListOrdered, label: 'Series Planner' },
-      { href: '/score-script', icon: Award, label: 'Script Scorer' },
-    ],
-  },
-  {
-    category: 'Insights',
-    items: [
-      { href: '/analytics', icon: BarChart2, label: 'Analytics' },
-      { href: '/strategy', icon: Target, label: 'Strategy' },
-      { href: '/growth', icon: Gift, label: 'Growth' },
-      { href: '/monitor', icon: Activity, label: 'Monitor' },
-    ],
-  },
-  {
-    category: 'Library',
     items: [
       { href: '/library', icon: ListVideo, label: 'Media Control' },
-      { href: '/assets', icon: Layers, label: 'Media Assets' },
     ],
   },
 ];
@@ -136,7 +112,7 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   /** Which collapsible sections are open (Studio is always open, not tracked here). */
   const [openSections, setOpenSections] = useState<Set<string>>(
-    () => new Set(['Publish', 'Content', 'Insights', 'Library'])
+    () => new Set<string>([])
   );
   function toggleSection(cat: string) {
     setOpenSections(prev => {

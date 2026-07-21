@@ -103,6 +103,8 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
     if (tierOpts) {
       if (!this.available) return true;
       const user = req.user;
+      // OWNER and SUPER_ADMIN bypass per-tier rate limits entirely
+      if (user?.role === 'SUPER_ADMIN' || user?.role === 'OWNER') return true;
       const plan = user?.plan ?? 'FREE';
       const limit =
         (tierOpts.limits as Record<string, number | undefined>)[plan] ??

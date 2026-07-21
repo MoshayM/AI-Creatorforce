@@ -21,8 +21,8 @@ import { getErrorMessage } from '@/lib/getErrorMessage';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmtCredits(n: number) {
-  return n.toLocaleString();
+function fmtCredits(n: number | undefined | null) {
+  return (n ?? 0).toLocaleString();
 }
 
 function daysUntil(dateStr: string): number {

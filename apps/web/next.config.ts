@@ -55,6 +55,27 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'i.ytimg.com' },
     ],
   },
+  async redirects() {
+    return [
+      // Old individual Publish routes → combined /publish page
+      { source: '/publishing',    destination: '/publish?tab=publishing',    permanent: false },
+      { source: '/approvals',     destination: '/publish?tab=approvals',     permanent: false },
+      { source: '/scheduler',     destination: '/publish?tab=scheduler',     permanent: false },
+      { source: '/autonomy',      destination: '/publish?tab=autonomy',      permanent: false },
+      { source: '/ab-testing',    destination: '/publish?tab=ab-testing',    permanent: false },
+      // Old individual Content routes → combined /content page
+      { source: '/research',      destination: '/content?tab=research',      permanent: false },
+      { source: '/discover',      destination: '/content?tab=discover',      permanent: false },
+      { source: '/repurpose',     destination: '/content?tab=repurpose',     permanent: false },
+      { source: '/series-planner',destination: '/content?tab=series-planner',permanent: false },
+      { source: '/score-script',  destination: '/content?tab=score-script',  permanent: false },
+      // Old individual Insights routes → combined /insights page
+      { source: '/analytics',     destination: '/insights?tab=analytics',    permanent: false },
+      { source: '/strategy',      destination: '/insights?tab=strategy',     permanent: false },
+      { source: '/growth',        destination: '/insights?tab=growth',       permanent: false },
+      { source: '/monitor',       destination: '/insights?tab=monitor',      permanent: false },
+    ];
+  },
   async rewrites() {
     return [
       {

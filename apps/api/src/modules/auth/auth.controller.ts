@@ -27,6 +27,7 @@ import { OAuthService } from './oauth.service';
 import { ProviderRegistry } from './providers/provider.registry';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { OwnerGuard } from '../../common/guards/owner.guard';
 import { RateLimit } from '../../common/guards/rate-limit.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/decorators/current-user.decorator';
@@ -157,13 +158,13 @@ export class AuthController {
   }
 
   @Get('sessions')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, OwnerGuard)
   listSessions(@CurrentUser() user: JwtPayload) {
     return this.sessions.listActive(user.sub, user.sid);
   }
 
   @Delete('sessions/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, OwnerGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async revokeSession(
     @CurrentUser() user: JwtPayload,

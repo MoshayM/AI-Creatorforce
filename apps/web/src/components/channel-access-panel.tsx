@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { type ComponentType, Suspense, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -66,14 +66,42 @@ const OAUTH_ERRORS: Record<string, string> = {
 
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4007/api/v1';
 
+// Inline SVG icons for platforms not in Lucide
+const XIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+  </svg>
+);
+
+const LinkedInIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+    <path d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.35-1.85 3.58 0 4.24 2.36 4.24 5.43v6.31zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zm1.78 13.02H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/>
+  </svg>
+);
+
+const ThreadsIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 192 192" className={className} fill="currentColor" aria-hidden>
+    <path d="M141.537 88.988a66.667 66.667 0 0 0-2.518-1.143c-1.482-27.307-16.403-42.94-41.457-43.1h-.34c-14.986 0-27.449 6.396-35.12 18.036l13.779 9.452c5.73-8.695 14.724-10.548 21.348-10.548h.229c8.249.053 14.474 2.452 18.503 7.129 2.932 3.405 4.893 8.111 5.864 14.05-7.314-1.243-15.224-1.626-23.68-1.14-23.82 1.371-39.134 15.264-38.105 34.568.522 9.792 5.4 18.216 13.735 23.719 7.047 4.652 16.124 6.927 25.557 6.412 12.458-.683 22.231-5.436 29.049-14.127 5.178-6.6 8.453-15.153 9.899-25.93 5.937 3.583 10.337 8.298 12.767 13.966 4.132 9.635 4.373 25.468-8.546 38.376-11.319 11.308-24.925 16.2-45.488 16.351-22.739-.169-39.934-7.451-51.093-21.641C35.942 138.355 30.5 120.512 30.5 96c0-24.512 5.442-42.355 16.171-53.017C57.83 29.621 75.025 22.34 97.764 22.17c22.987.17 40.462 7.479 51.956 21.732 5.603 6.99 9.976 15.73 13.067 26.003l16.212-4.476c-3.769-12.988-9.331-24.052-16.663-33.052C147.036 13.726 125.202 4.203 97.93 4h-.404C70.28 4.203 48.66 13.765 33.816 32.01 20.695 48.343 13.987 71.76 13.8 96.1c.187 24.34 6.895 47.757 20.016 64.09C48.66 178.436 70.28 187.997 97.526 188.2h.404c24.268-.17 41.337-6.52 55.4-20.572 18.456-18.442 17.908-41.447 11.815-55.627-4.353-10.147-12.645-18.342-23.608-23.013zM96.952 153.658c-10.437.576-21.286-2.657-28.87-7.701-5.924-3.909-9.14-9.424-9.397-15.836-.41-10.148 7.23-19.835 27.063-21.01 2.341-.135 4.638-.2 6.888-.2 7.032 0 13.602.68 19.594 2.011-2.219 27.579-6.615 42.03-15.278 42.736z"/>
+  </svg>
+);
+
 // Social platforms that will join YouTube in this panel — publishing and
 // tracking integrations for these are on the roadmap.
-const SOCIAL_PLATFORMS = [
-  { key: 'facebook', name: 'Facebook', icon: Facebook, tile: 'bg-blue-50', color: 'text-blue-600', note: 'Pages & Reels publishing' },
-  { key: 'instagram', name: 'Instagram', icon: Instagram, tile: 'bg-pink-50', color: 'text-pink-600', note: 'Reels & Stories publishing' },
-  { key: 'tiktok', name: 'TikTok', icon: Music2, tile: 'bg-gray-100', color: 'text-gray-900', note: 'Video publishing & analytics' },
-  { key: 'others', name: 'Others', icon: Share2, tile: 'bg-purple-50', color: 'text-purple-600', note: 'X (Twitter), LinkedIn, Threads & more' },
-] as const;
+const SOCIAL_PLATFORMS: Array<{
+  key: string;
+  name: string;
+  icon: ComponentType<{ className?: string }>;
+  tile: string;
+  color: string;
+  note: string;
+}> = [
+  { key: 'facebook',  name: 'Facebook',   icon: Facebook,     tile: 'bg-blue-50',       color: 'text-blue-600',  note: 'Pages & Reels publishing' },
+  { key: 'instagram', name: 'Instagram',  icon: Instagram,    tile: 'bg-pink-50',        color: 'text-pink-600',  note: 'Reels & Stories publishing' },
+  { key: 'tiktok',    name: 'TikTok',     icon: Music2,       tile: 'bg-gray-100',       color: 'text-gray-900',  note: 'Video publishing & analytics' },
+  { key: 'x',         name: 'X (Twitter)',icon: XIcon,        tile: 'bg-black',          color: 'text-white',     note: 'Post & thread publishing' },
+  { key: 'linkedin',  name: 'LinkedIn',   icon: LinkedInIcon, tile: 'bg-[#0A66C2]',      color: 'text-white',     note: 'Article & video publishing' },
+  { key: 'threads',   name: 'Threads',    icon: ThreadsIcon,  tile: 'bg-black',          color: 'text-white',     note: 'Short-form post publishing' },
+];
 
 // useSearchParams() requires a Suspense boundary for static prerendering.
 export function ChannelAccessPanel() {

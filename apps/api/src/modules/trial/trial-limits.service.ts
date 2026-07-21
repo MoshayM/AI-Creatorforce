@@ -22,12 +22,14 @@ const DEFAULTS: Record<TrialFeature, { access: string; limitValue: number | null
 export class TrialLimitsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Trial users = active grant and no purchased credits yet. */
+  /** Trial users = active grant and no purchased credits yet. OWNER/SUPER_ADMIN are never trial users. */
   async isTrialUser(userId: string): Promise<boolean> {
-    const [grant, wallet] = await Promise.all([
+    const [user, grant, wallet] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } }),
       this.prisma.trialGrant.findUnique({ where: { userId } }),
       this.prisma.wallet.findUnique({ where: { userId }, select: { lifetimePurchased: true } }),
     ]);
+    if (user?.role === 'SUPER_ADMIN' || user?.role === 'OWNER') return false;
     if (!grant || grant.status === 'CONVERTED') return false;
     if ((wallet?.lifetimePurchased ?? 0) > 0) return false;
     return true;

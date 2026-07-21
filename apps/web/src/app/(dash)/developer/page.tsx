@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Code2, Copy, Check, Plus, Trash2, X, ChevronDown, ChevronUp, Loader2, BarChart2, Key } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 
@@ -51,6 +52,7 @@ function formatDate(dateStr: string): string {
 }
 
 export default function DeveloperPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<'keys' | 'usage'>('keys');
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [keysLoading, setKeysLoading] = useState(true);
@@ -74,6 +76,20 @@ export default function DeveloperPage() {
   const [revoking, setRevoking] = useState<string | null>(null);
 
   const [error, setError] = useState('');
+
+  // Restrict to OWNER / SUPER_ADMIN — redirect others back to home
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem('cf_token');
+      if (!token) { router.replace('/home'); return; }
+      const payload = JSON.parse(atob(token.split('.')[1] ?? '')) as { role?: string };
+      if (!['OWNER', 'SUPER_ADMIN'].includes(payload.role ?? '')) {
+        router.replace('/home');
+      }
+    } catch {
+      router.replace('/home');
+    }
+  }, [router]);
 
   const loadKeys = useCallback(async () => {
     setKeysLoading(true);

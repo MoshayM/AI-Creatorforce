@@ -6,7 +6,7 @@ import {
   Loader2, CheckCircle,
   LogOut, XCircle, Eye,
   Key, Save, EyeOff, Shield, Monitor, Unlink, Link2, Phone, User,
-  Webhook, Trash2, Play,
+  Webhook, Trash2, Play, ChevronDown, Mail, Plus,
 } from 'lucide-react';
 import { api, apiClient, type OAuthProvider, type AuthSession, type LinkedAccount, type OAuthProviders, type AuthLinksResponse } from '@/lib/api';
 
@@ -27,6 +27,53 @@ interface ApiKeyEntry {
   set: boolean;
 }
 
+const COUNTRY_CODES = [
+  { code: '+1',   flag: '🇺🇸', name: 'United States' },
+  { code: '+1',   flag: '🇨🇦', name: 'Canada' },
+  { code: '+44',  flag: '🇬🇧', name: 'United Kingdom' },
+  { code: '+91',  flag: '🇮🇳', name: 'India' },
+  { code: '+61',  flag: '🇦🇺', name: 'Australia' },
+  { code: '+49',  flag: '🇩🇪', name: 'Germany' },
+  { code: '+33',  flag: '🇫🇷', name: 'France' },
+  { code: '+81',  flag: '🇯🇵', name: 'Japan' },
+  { code: '+55',  flag: '🇧🇷', name: 'Brazil' },
+  { code: '+52',  flag: '🇲🇽', name: 'Mexico' },
+  { code: '+34',  flag: '🇪🇸', name: 'Spain' },
+  { code: '+39',  flag: '🇮🇹', name: 'Italy' },
+  { code: '+7',   flag: '🇷🇺', name: 'Russia' },
+  { code: '+82',  flag: '🇰🇷', name: 'South Korea' },
+  { code: '+86',  flag: '🇨🇳', name: 'China' },
+  { code: '+65',  flag: '🇸🇬', name: 'Singapore' },
+  { code: '+971', flag: '🇦🇪', name: 'UAE' },
+  { code: '+966', flag: '🇸🇦', name: 'Saudi Arabia' },
+  { code: '+234', flag: '🇳🇬', name: 'Nigeria' },
+  { code: '+27',  flag: '🇿🇦', name: 'South Africa' },
+  { code: '+62',  flag: '🇮🇩', name: 'Indonesia' },
+  { code: '+60',  flag: '🇲🇾', name: 'Malaysia' },
+  { code: '+63',  flag: '🇵🇭', name: 'Philippines' },
+  { code: '+66',  flag: '🇹🇭', name: 'Thailand' },
+  { code: '+64',  flag: '🇳🇿', name: 'New Zealand' },
+  { code: '+31',  flag: '🇳🇱', name: 'Netherlands' },
+  { code: '+46',  flag: '🇸🇪', name: 'Sweden' },
+  { code: '+41',  flag: '🇨🇭', name: 'Switzerland' },
+  { code: '+47',  flag: '🇳🇴', name: 'Norway' },
+  { code: '+45',  flag: '🇩🇰', name: 'Denmark' },
+  { code: '+20',  flag: '🇪🇬', name: 'Egypt' },
+  { code: '+92',  flag: '🇵🇰', name: 'Pakistan' },
+  { code: '+880', flag: '🇧🇩', name: 'Bangladesh' },
+  { code: '+94',  flag: '🇱🇰', name: 'Sri Lanka' },
+  { code: '+977', flag: '🇳🇵', name: 'Nepal' },
+  { code: '+93',  flag: '🇦🇫', name: 'Afghanistan' },
+];
+
+function parsePhone(full: string): { code: string; local: string } {
+  const sorted = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length);
+  for (const cc of sorted) {
+    if (full.startsWith(cc.code)) return { code: cc.code, local: full.slice(cc.code.length).trim() };
+  }
+  return { code: '+1', local: full };
+}
+
 function SettingsContent() {
   const qc = useQueryClient();
   const searchParams = useSearchParams();
@@ -41,6 +88,16 @@ function SettingsContent() {
   const [profileName, setProfileName] = useState('');
   const [profileAvatar, setProfileAvatar] = useState('');
   const [profileSaved, setProfileSaved] = useState(false);
+
+  // ── Phone + country code state ──────────────────────────────────────────────
+  const [countryCode, setCountryCode] = useState('+1');
+  const [phoneLocal, setPhoneLocal] = useState('');
+  const [ccOpen, setCcOpen] = useState(false);
+  const [ccSearch, setCcSearch] = useState('');
+
+  // ── OTP email state ──────────────────────────────────────────────────────────
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpEmailSaved, setOtpEmailSaved] = useState(false);
 
   // ── Webhook state ───────────────────────────────────────────────────────────
   const [showAddWebhookForm, setShowAddWebhookForm] = useState(false);
@@ -57,7 +114,13 @@ function SettingsContent() {
   const isOwner = me?.role === 'OWNER' || me?.role === 'SUPER_ADMIN';
 
   useEffect(() => {
-    if (me?.phone) setPhone(me.phone);
+    if (me?.phone) {
+      const { code, local } = parsePhone(me.phone);
+      setCountryCode(code);
+      setPhoneLocal(local);
+    }
+    // @ts-expect-error otpEmail may not be in API type yet
+    if (me?.otpEmail) setOtpEmail((me as Record<string, unknown>).otpEmail as string ?? '');
   }, [me?.phone]);
 
   useEffect(() => {
@@ -167,7 +230,7 @@ function SettingsContent() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['me'] });
       setPhoneSaved(true);
-      setBanner({ type: 'success', message: phone.trim() ? 'Phone number saved.' : 'Phone number removed.' });
+      setBanner({ type: 'success', message: phoneLocal.trim() ? 'Phone number saved.' : 'Phone number removed.' });
       setTimeout(() => setPhoneSaved(false), 3000);
     },
     onError: (err: unknown) => {
@@ -176,6 +239,24 @@ function SettingsContent() {
         setBanner({ type: 'error', message: 'That phone number is already linked to another account.' });
       } else {
         setBanner({ type: 'error', message: 'Failed to update phone number.' });
+      }
+    },
+  });
+
+  const updateOtpEmailMutation = useMutation({
+    mutationFn: (value: string | null) => apiClient.patch('/auth/me', { otpEmail: value || null }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me'] });
+      setOtpEmailSaved(true);
+      setBanner({ type: 'success', message: otpEmail.trim() ? 'OTP email saved.' : 'OTP email removed.' });
+      setTimeout(() => setOtpEmailSaved(false), 3000);
+    },
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        setBanner({ type: 'error', message: 'That email is already linked to another account.' });
+      } else {
+        setBanner({ type: 'error', message: 'Failed to update OTP email.' });
       }
     },
   });
@@ -209,8 +290,10 @@ function SettingsContent() {
   const { data: webhooks = [] } = useQuery<WebhookEntry[]>({
     queryKey: ['dev-webhooks'],
     queryFn: () =>
-      apiClient.get<{ webhooks: WebhookEntry[] }>('/dev/webhooks').then((r) => r.data.webhooks),
+      apiClient.get<{ webhooks: WebhookEntry[] }>('/dev/webhooks').then((r) => r.data.webhooks ?? []),
+    enabled: isOwner,
   });
+
 
   const createWebhookMutation = useMutation({
     mutationFn: () =>
@@ -287,13 +370,13 @@ function SettingsContent() {
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               ) : (
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center text-white text-2xl font-bold shrink-0 select-none">
-                  {(me?.name ?? 'C')[0]?.toUpperCase()}
+                <div suppressHydrationWarning className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center text-white text-2xl font-bold shrink-0 select-none">
+                  {me?.name?.[0]?.toUpperCase() ?? ''}
                 </div>
               )}
               <div className="text-sm text-gray-500">
-                <p className="font-medium text-gray-700">{me?.email}</p>
-                <p className="text-xs mt-0.5 capitalize">{me?.role?.toLowerCase() ?? 'member'}</p>
+                <p suppressHydrationWarning className="font-medium text-gray-700">{me?.email ?? ''}</p>
+                <p suppressHydrationWarning className="text-xs mt-0.5 capitalize">{me?.role?.toLowerCase() ?? ''}</p>
               </div>
             </div>
             <div className="space-y-3">
@@ -351,7 +434,7 @@ function SettingsContent() {
                 <p className="text-xs text-gray-500 mt-0.5">Connect social accounts to sign in without a password.</p>
               </div>
             </div>
-            {(['google', 'apple', 'facebook'] as OAuthProvider[]).map((provider) => {
+            {(['google', 'apple'] as OAuthProvider[]).map((provider) => {
               const label = provider.charAt(0).toUpperCase() + provider.slice(1);
               const linkedAccount: LinkedAccount | undefined = authLinks?.links.find((l) => l.provider === provider);
               const providerEnabled = oauthProviders?.[provider] ?? false;
@@ -419,6 +502,30 @@ function SettingsContent() {
             })}
           </div>
 
+          {/* Content channels — link to Media Control */}
+          <div className="bg-white rounded-2xl mb-4 overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
+            <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #f0edf9' }}>
+              <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="none" aria-hidden>
+                <rect x="2" y="7" width="20" height="15" rx="2" stroke="#6D4AE0" strokeWidth="1.8" />
+                <path d="M16 2 8 2 2 7h20z" fill="#e3ddf8" />
+              </svg>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Content Channels</p>
+                <p className="text-xs text-gray-500 mt-0.5">Connect and manage all your publishing accounts in one place.</p>
+              </div>
+            </div>
+            <div className="px-4 py-5 flex items-center justify-between gap-4">
+              <p className="text-sm text-gray-600">YouTube, Instagram, TikTok, Facebook, X, LinkedIn, Threads — all managed from <span className="font-semibold text-gray-800">Media Control → Channel Access</span>.</p>
+              <a
+                href="/library?tab=channels"
+                className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-2xl font-bold text-white text-sm hover:opacity-90 transition-opacity"
+                style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)', textDecoration: 'none' }}
+              >
+                <Plus className="w-3.5 h-3.5" /> Manage Channels
+              </a>
+            </div>
+          </div>
+
           {/* Phone number */}
           <div className="bg-white rounded-2xl mb-4 overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
             <div className="px-4 py-3" style={{ borderBottom: '1px solid #f0edf9' }}>
@@ -429,16 +536,68 @@ function SettingsContent() {
               <p className="text-xs text-gray-500 mt-0.5">Optional. Add a phone number to sign in with OTP codes.</p>
             </div>
             <div className="px-4 py-3 flex items-center gap-3">
+              {/* Country code picker */}
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setCcOpen(o => !o); setCcSearch(''); }}
+                  className="flex items-center gap-1.5 h-[46px] px-3 rounded-2xl text-sm font-medium text-gray-700 bg-white hover:bg-[#faf9ff] transition-colors"
+                  style={{ border: '1.5px solid #e3e0f0', minWidth: '88px' }}
+                >
+                  <span className="text-base leading-none">{COUNTRY_CODES.find(c => c.code === countryCode)?.flag ?? '🌐'}</span>
+                  <span className="font-semibold text-[13px]">{countryCode}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" style={{ transform: ccOpen ? 'rotate(180deg)' : 'none', transition: 'transform 180ms' }} />
+                </button>
+                {ccOpen && (
+                  <div
+                    className="absolute left-0 bottom-full mb-1 bg-white z-50 rounded-2xl overflow-hidden"
+                    style={{ width: '240px', border: '1.5px solid #e3ddf8', boxShadow: '0 16px 40px -12px rgba(30,27,46,.22)' }}
+                  >
+                    <div className="px-3 py-2" style={{ borderBottom: '1px solid #f0edf9' }}>
+                      <input
+                        autoFocus
+                        type="text"
+                        value={ccSearch}
+                        onChange={e => setCcSearch(e.target.value)}
+                        placeholder="Search country…"
+                        className="w-full text-sm outline-none bg-transparent text-gray-700 placeholder:text-gray-400"
+                      />
+                    </div>
+                    <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
+                      {COUNTRY_CODES.filter(c =>
+                        c.name.toLowerCase().includes(ccSearch.toLowerCase()) ||
+                        c.code.includes(ccSearch)
+                      ).map((c, i) => (
+                        <button
+                          key={`${c.code}-${i}`}
+                          type="button"
+                          onClick={() => { setCountryCode(c.code); setCcOpen(false); setCcSearch(''); }}
+                          className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left hover:bg-[#f5f2fd] transition-colors"
+                          style={{ background: c.code === countryCode && c.flag === (COUNTRY_CODES.find(x => x.code === countryCode)?.flag) ? '#f5f2fd' : 'transparent' }}
+                        >
+                          <span className="text-base w-5 text-center">{c.flag}</span>
+                          <span className="flex-1 text-gray-700">{c.name}</span>
+                          <span className="font-semibold text-gray-500 text-xs">{c.code}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <input
                 type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+1 555 000 0000 (optional)"
+                value={phoneLocal}
+                onChange={e => setPhoneLocal(e.target.value)}
+                placeholder="555 000 0000"
                 className="flex-1 bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
                 style={{ border: '1.5px solid #e3e0f0' }}
               />
               <button
-                onClick={() => updatePhoneMutation.mutate(phone.trim() || null)}
+                onClick={() => {
+                  const full = phoneLocal.trim() ? `${countryCode}${phoneLocal.trim()}` : null;
+                  updatePhoneMutation.mutate(full);
+                }}
                 disabled={updatePhoneMutation.isPending}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-2xl font-bold text-white text-xs hover:opacity-90 active:scale-[0.98] disabled:opacity-50 shrink-0 transition-all"
                 style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
@@ -448,13 +607,47 @@ function SettingsContent() {
                   : phoneSaved
                   ? <CheckCircle className="w-3 h-3" />
                   : <Save className="w-3 h-3" />}
-                {phone.trim() ? 'Save' : 'Remove'}
+                {phoneLocal.trim() ? 'Save' : 'Remove'}
               </button>
             </div>
           </div>
 
-          {/* Active sessions */}
-          <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
+          {/* Email for OTP login */}
+          <div className="bg-white rounded-2xl mb-4 overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
+            <div className="px-4 py-3" style={{ borderBottom: '1px solid #f0edf9' }}>
+              <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                <Mail className="w-4 h-4 text-gray-500" />
+                Email for OTP login
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">Add a secondary email to receive one-time password sign-in codes.</p>
+            </div>
+            <div className="px-4 py-3 flex items-center gap-3">
+              <input
+                type="email"
+                value={otpEmail}
+                onChange={e => setOtpEmail(e.target.value)}
+                placeholder="secondary@example.com (optional)"
+                className="flex-1 bg-white rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6D4AE0]/20 focus:border-[#6D4AE0] transition-all"
+                style={{ border: '1.5px solid #e3e0f0' }}
+              />
+              <button
+                onClick={() => updateOtpEmailMutation.mutate(otpEmail.trim() || null)}
+                disabled={updateOtpEmailMutation.isPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl font-bold text-white text-xs hover:opacity-90 active:scale-[0.98] disabled:opacity-50 shrink-0 transition-all"
+                style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)', boxShadow: '0 4px 20px rgba(109,74,224,0.35)' }}
+              >
+                {updateOtpEmailMutation.isPending
+                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                  : otpEmailSaved
+                  ? <CheckCircle className="w-3 h-3" />
+                  : <Save className="w-3 h-3" />}
+                {otpEmail.trim() ? 'Save' : 'Remove'}
+              </button>
+            </div>
+          </div>
+
+          {/* Active sessions — OWNER / SUPER_ADMIN only */}
+          {isOwner && <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1.5px solid #e3ddf8' }}>
             <div className="px-4 py-3 flex items-center justify-between gap-4" style={{ borderBottom: '1px solid #f0edf9' }}>
               <div>
                 <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
@@ -540,11 +733,11 @@ function SettingsContent() {
                 </div>
               );
             })}
-          </div>
+          </div>}
         </section>
 
-        {/* ── Developer Webhooks ───────────────────────────────────────── */}
-        <section>
+        {/* ── Developer Webhooks — OWNER / SUPER_ADMIN only ───────────── */}
+        {isOwner && <section>
           <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 mb-3">Developer Webhooks</p>
           <div className="bg-white rounded-2xl mb-3" style={{ border: '1.5px solid #e3ddf8' }}>
             <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #f0edf9' }}>
@@ -678,7 +871,7 @@ function SettingsContent() {
               </div>
             )}
           </div>
-        </section>
+        </section>}
 
         {/* ── API Keys (Owner only) ─────────────────────────── */}
         {isOwner && (
