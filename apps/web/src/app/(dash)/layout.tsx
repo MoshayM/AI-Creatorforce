@@ -24,7 +24,8 @@ interface NavSection {
 const NAV_SECTIONS: NavSection[] = [
   {
     items: [
-      { href: '/home', icon: Home, label: 'Home' },
+      { href: '/home',     icon: Home,     label: 'Home' },
+      { href: '/content',  icon: BookOpen, label: 'Content' },
       { href: '/projects', icon: FolderOpen, label: 'Projects' },
     ],
   },
@@ -36,8 +37,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     items: [
-      { href: '/publish',  icon: Upload,   label: 'Publish' },
-      { href: '/content',  icon: BookOpen, label: 'Content' },
+      { href: '/publish',  icon: Upload,    label: 'Publish' },
       { href: '/insights', icon: BarChart2, label: 'Insights' },
     ],
   },
