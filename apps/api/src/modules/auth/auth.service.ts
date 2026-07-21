@@ -100,7 +100,11 @@ export class AuthService {
     if (!user) throw new UnauthorizedException();
     const role = await this.effectiveRole(user);
 
-    const payload: JwtPayload = { sub: user.id, email: user.email, role, sid: familyId };
+    const sub = await this.prisma.subscription
+      .findUnique({ where: { userId: user.id }, select: { plan: true } })
+      .catch(() => null);
+
+    const payload: JwtPayload = { sub: user.id, email: user.email, role, sid: familyId, plan: sub?.plan ?? 'FREE' };
     const accessToken = this.jwt.sign(payload);
 
     return { accessToken, refreshToken: newRefreshToken };
@@ -200,8 +204,12 @@ export class AuthService {
       if (!active) throw new UnauthorizedException('Session has been revoked');
     }
 
-    // Propagate sid so controllers can read it via @CurrentUser().
-    return { sub: user.id, email: user.email, role, sid: payload.sid };
+    const sub = await this.prisma.subscription
+      .findUnique({ where: { userId: user.id }, select: { plan: true } })
+      .catch(() => null);
+
+    // Propagate sid and plan so controllers can read them via @CurrentUser().
+    return { sub: user.id, email: user.email, role, sid: payload.sid, plan: sub?.plan ?? payload.plan ?? 'FREE' };
   }
 
   /**
@@ -234,7 +242,11 @@ export class AuthService {
 
     const { refreshToken, familyId } = await this.sessions.issue(userId, meta);
 
-    const payload: JwtPayload = { sub: userId, email, role, sid: familyId };
+    const sub = await this.prisma.subscription
+      .findUnique({ where: { userId }, select: { plan: true } })
+      .catch(() => null);
+
+    const payload: JwtPayload = { sub: userId, email, role, sid: familyId, plan: sub?.plan ?? 'FREE' };
     const accessToken = this.jwt.sign(payload);
 
     return { accessToken, refreshToken };

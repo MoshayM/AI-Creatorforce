@@ -4,6 +4,7 @@ import { IsString, IsOptional, IsArray, IsDateString, IsIn, IsInt, Min, Max, IsB
 import { Transform, Type } from 'class-transformer';
 import type { VideoStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { TierRateLimit } from '../../common/guards/rate-limit.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 import { PublishingService } from './publishing.service';
 
@@ -67,6 +68,7 @@ export class PublishingController {
   }
 
   @Post('publish')
+  @TierRateLimit({ bucket: 'publish', windowSecs: 86400, limits: { FREE: 2, STARTER: 10, PRO: 30, AGENCY: 100, default: 2 } })
   publish(@Body() dto: PublishDto, @CurrentUser() user: JwtPayload) {
     return this.svc.publish(
       {

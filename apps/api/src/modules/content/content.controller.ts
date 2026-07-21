@@ -2,6 +2,7 @@ import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsOptional, IsArray, IsNumber } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { TierRateLimit } from '../../common/guards/rate-limit.guard';
 import { ContentService } from './content.service';
 import type { RepurposePlatform } from '@cf/shared';
 
@@ -41,6 +42,7 @@ class SeriesPlanDto {
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('content')
+@TierRateLimit({ bucket: 'content-generate', windowSecs: 3600, limits: { FREE: 5, STARTER: 20, PRO: 80, AGENCY: 200, default: 5 } })
 export class ContentController {
   constructor(private readonly svc: ContentService) {}
 

@@ -5,6 +5,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CopilotChatRequestSchema } from '@cf/shared';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { TierRateLimit } from '../../common/guards/rate-limit.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 import { CopilotService } from './copilot.service';
 import { SpeechService } from './speech.service';
@@ -18,6 +19,7 @@ export class CopilotController {
   ) {}
 
   @Post('chat')
+  @TierRateLimit({ bucket: 'copilot-chat', windowSecs: 3600, limits: { FREE: 20, STARTER: 60, PRO: 200, AGENCY: 500, default: 20 } })
   async chat(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     const parsed = CopilotChatRequestSchema.safeParse(body);
     if (!parsed.success) {
