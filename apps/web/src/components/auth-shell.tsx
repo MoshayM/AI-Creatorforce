@@ -1,5 +1,6 @@
 'use client';
 import React from 'react';
+import { LogoMark } from '@/components/logo-mark';
 
 // ─── Legacy shell — used by register / forgot-password / reset-password ───────
 
@@ -115,14 +116,9 @@ export function LoginShell({
 
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-3">
-          <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0"
-            style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}
-          >
-            🎬
-          </div>
+          <LogoMark className="w-12 h-12 shrink-0" style={{borderRadius:'14px',boxShadow:'0 8px 20px -6px rgba(124,58,237,.5)'}} />
           <div>
-            <div className="text-white font-extrabold text-xl tracking-tight leading-none">AI CreatorForce</div>
+            <div className="text-white font-extrabold text-xl tracking-tight leading-none">Blueforce</div>
             <div className="text-white/50 text-xs mt-0.5">YouTube Growth Intelligence</div>
           </div>
         </div>
@@ -199,7 +195,7 @@ export function LoginShell({
             ))}
           </div>
           <p className="text-white/80 text-sm leading-relaxed mb-4">
-            &ldquo;CreatorForce helped me grow from 5K to 150K subscribers in 6 months. The AI scripts are genuinely better than what I was writing myself.&rdquo;
+            &ldquo;Blueforce helped me grow from 5K to 150K subscribers in 6 months. The AI scripts are genuinely better than what I was writing myself.&rdquo;
           </p>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#f0c14d] to-[#f5a623] flex items-center justify-center text-sm font-bold text-[#6D4AE0] shrink-0">
@@ -218,10 +214,8 @@ export function LoginShell({
         <div className="w-full max-w-[370px]">
           {/* Mobile brand */}
           <div className="flex items-center gap-2.5 mb-10 lg:hidden">
-            <div className="w-9 h-9 rounded-xl bg-[#6D4AE0] flex items-center justify-center text-lg" aria-hidden>
-              🎬
-            </div>
-            <span className="text-[#6D4AE0] font-bold text-lg">AI CreatorForce</span>
+            <LogoMark className="w-9 h-9 shrink-0" style={{borderRadius:'10px'}} />
+            <span className="font-bold text-lg" style={{color:'#7C3AED'}}>Blueforce</span>
           </div>
 
           <div className="mb-8">
@@ -314,14 +308,9 @@ export function RegisterShell({
 
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-3">
-          <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0"
-            style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}
-          >
-            🎬
-          </div>
+          <LogoMark className="w-12 h-12 shrink-0" style={{borderRadius:'14px',boxShadow:'0 8px 20px -6px rgba(124,58,237,.5)'}} />
           <div>
-            <div className="text-white font-extrabold text-xl tracking-tight leading-none">AI CreatorForce</div>
+            <div className="text-white font-extrabold text-xl tracking-tight leading-none">Blueforce</div>
             <div className="text-white/50 text-xs mt-0.5">YouTube Growth Intelligence</div>
           </div>
         </div>
@@ -403,7 +392,7 @@ export function RegisterShell({
             ))}
           </div>
           <p className="text-white/80 text-sm leading-relaxed mb-4">
-            &ldquo;I was spending 20+ hours a week on content research. CreatorForce cut that to under 2 hours. The trend discovery alone is worth it.&rdquo;
+            &ldquo;I was spending 20+ hours a week on content research. Blueforce cut that to under 2 hours. The trend discovery alone is worth it.&rdquo;
           </p>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#f0c14d] to-[#f5a623] flex items-center justify-center text-sm font-bold text-[#6D4AE0] shrink-0">
@@ -422,10 +411,8 @@ export function RegisterShell({
         <div className="w-full max-w-[380px]">
           {/* Mobile brand */}
           <div className="flex items-center gap-2.5 mb-8 lg:hidden">
-            <div className="w-9 h-9 rounded-xl bg-[#6D4AE0] flex items-center justify-center text-lg" aria-hidden>
-              🎬
-            </div>
-            <span className="text-[#6D4AE0] font-bold text-lg">AI CreatorForce</span>
+            <LogoMark className="w-9 h-9 shrink-0" style={{borderRadius:'10px'}} />
+            <span className="font-bold text-lg" style={{color:'#7C3AED'}}>Blueforce</span>
           </div>
 
           <div className="mb-7">
@@ -449,13 +436,13 @@ const RECOVERY_STEPS = [
     n: '1',
     icon: '📧',
     title: 'Enter your email',
-    desc: "We'll verify it's registered with AI CreatorForce",
+    desc: "We'll verify it's registered with Blueforce",
   },
   {
     n: '2',
     icon: '📬',
     title: 'Check your inbox',
-    desc: 'Look for an email from AI CreatorForce (check spam too)',
+    desc: 'Look for an email from Blueforce (check spam too)',
   },
   {
     n: '3',
@@ -484,11 +471,9 @@ export function ForgotPasswordShell({
 
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0" style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}>
-            🎬
-          </div>
+          <LogoMark className="w-12 h-12 shrink-0" style={{borderRadius:'14px',boxShadow:'0 8px 20px -6px rgba(124,58,237,.5)'}} />
           <div>
-            <div className="text-white font-extrabold text-xl tracking-tight leading-none">AI CreatorForce</div>
+            <div className="text-white font-extrabold text-xl tracking-tight leading-none">Blueforce</div>
             <div className="text-white/50 text-xs mt-0.5">YouTube Growth Intelligence</div>
           </div>
         </div>
@@ -548,8 +533,8 @@ export function ForgotPasswordShell({
       <div className="flex-1 flex items-center justify-center bg-[#faf9ff] px-6 sm:px-10 py-12 overflow-y-auto">
         <div className="w-full max-w-[370px]">
           <div className="flex items-center gap-2.5 mb-10 lg:hidden">
-            <div className="w-9 h-9 rounded-xl bg-[#6D4AE0] flex items-center justify-center text-lg" aria-hidden>🎬</div>
-            <span className="text-[#6D4AE0] font-bold text-lg">AI CreatorForce</span>
+            <LogoMark className="w-9 h-9 shrink-0" style={{borderRadius:'10px'}} />
+            <span className="font-bold text-lg" style={{color:'#7C3AED'}}>Blueforce</span>
           </div>
           {children}
           <p className="text-center text-sm text-gray-400 mt-8">{footer}</p>
@@ -588,11 +573,9 @@ export function ResetPasswordShell({
 
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0" style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}>
-            🎬
-          </div>
+          <LogoMark className="w-12 h-12 shrink-0" style={{borderRadius:'14px',boxShadow:'0 8px 20px -6px rgba(124,58,237,.5)'}} />
           <div>
-            <div className="text-white font-extrabold text-xl tracking-tight leading-none">AI CreatorForce</div>
+            <div className="text-white font-extrabold text-xl tracking-tight leading-none">Blueforce</div>
             <div className="text-white/50 text-xs mt-0.5">YouTube Growth Intelligence</div>
           </div>
         </div>
@@ -641,8 +624,8 @@ export function ResetPasswordShell({
       <div className="flex-1 flex items-center justify-center bg-[#faf9ff] px-6 sm:px-10 py-12 overflow-y-auto">
         <div className="w-full max-w-[370px]">
           <div className="flex items-center gap-2.5 mb-10 lg:hidden">
-            <div className="w-9 h-9 rounded-xl bg-[#6D4AE0] flex items-center justify-center text-lg" aria-hidden>🎬</div>
-            <span className="text-[#6D4AE0] font-bold text-lg">AI CreatorForce</span>
+            <LogoMark className="w-9 h-9 shrink-0" style={{borderRadius:'10px'}} />
+            <span className="font-bold text-lg" style={{color:'#7C3AED'}}>Blueforce</span>
           </div>
           {children}
           <p className="text-center text-sm text-gray-400 mt-8">{footer}</p>
@@ -707,11 +690,9 @@ export function OAuthCallbackShell({
 
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0" style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(12px)' }}>
-            🎬
-          </div>
+          <LogoMark className="w-12 h-12 shrink-0" style={{borderRadius:'14px',boxShadow:'0 8px 20px -6px rgba(124,58,237,.5)'}} />
           <div>
-            <div className="text-white font-extrabold text-xl tracking-tight leading-none">AI CreatorForce</div>
+            <div className="text-white font-extrabold text-xl tracking-tight leading-none">Blueforce</div>
             <div className="text-white/50 text-xs mt-0.5">YouTube Growth Intelligence</div>
           </div>
         </div>
@@ -824,8 +805,8 @@ export function OAuthCallbackShell({
         <div className="w-full max-w-[360px]">
           {/* Mobile brand */}
           <div className="flex items-center gap-2.5 mb-10 lg:hidden">
-            <div className="w-9 h-9 rounded-xl bg-[#6D4AE0] flex items-center justify-center text-lg" aria-hidden>🎬</div>
-            <span className="text-[#6D4AE0] font-bold text-lg">AI CreatorForce</span>
+            <LogoMark className="w-9 h-9 shrink-0" style={{borderRadius:'10px'}} />
+            <span className="font-bold text-lg" style={{color:'#7C3AED'}}>Blueforce</span>
           </div>
 
           {children}

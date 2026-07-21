@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Menu, X, Zap } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
+import { LogoMark } from '@/components/logo-mark';
 
 const NAV_LINKS = [
   { label: 'Features', href: '#features' },
@@ -64,10 +65,8 @@ export function MobileNav() {
           {/* Top row in overlay */}
           <div className="flex items-center justify-between mb-10">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow">
-                <Zap className="w-5 h-5 text-brand-600" />
-              </div>
-              <span className="font-bold text-white text-lg">AI CreatorForce</span>
+              <LogoMark className="w-9 h-9 shrink-0" style={{borderRadius:'10px'}} />
+              <span className="font-bold text-white text-lg">Blueforce</span>
             </div>
             <button
               type="button"

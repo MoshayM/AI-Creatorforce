@@ -3,48 +3,50 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, Settings, LogOut, Zap, Palette, Clapperboard, ListVideo, Wallet, Bell, Gauge, Gift, Building2, ChevronDown, Workflow, Film, Menu, X, Sparkles, Home, Bot, Upload, BookOpen, Code2, Activity, BarChart2, Compass, ArrowRightLeft, Award, Target, FlaskConical, Layers, ListOrdered, Search, CheckCircle, CalendarClock } from 'lucide-react';
+import { FolderOpen, Settings, LogOut, Palette, Clapperboard, ListVideo, Wallet, Bell, ShieldCheck, Gift, Building2, ChevronDown, Film, Menu, X, Sparkles, Home, Bot, Upload, BookOpen, Activity, BarChart2, Compass, ArrowRightLeft, Award, Target, FlaskConical, Layers, ListOrdered, Search, CheckCircle, CalendarClock } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
+import { LogoMark } from '@/components/logo-mark';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
 
 interface NavItem {
   href: string;
   icon: typeof FolderOpen;
   label: string;
-  /** When true, this item acts as a collapsible group header (renders as <button>, not <Link>). */
-  isGroup?: boolean;
-  /** Render a subtle divider above this item. */
-  dividerBefore?: boolean;
-  /** Indented sub-links rendered directly beneath the item. */
-  children?: NavItem[];
+  badge?: string;
+  action?: () => void;
 }
 
-const NAV: NavItem[] = [
-  { href: '/home', icon: Home, label: 'Home' },
-  { href: '/projects', icon: FolderOpen, label: 'Projects' },
-  { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
-  { href: '/editor', icon: Film, label: 'Video Editor' },
-  { href: '/copilot', icon: Bot, label: 'Copilot' },
+interface NavSection {
+  category?: string;
+  items: NavItem[];
+}
+
+const NAV_SECTIONS: NavSection[] = [
   {
-    href: '/publish-group',
-    icon: Upload,
-    label: 'Publish',
-    isGroup: true,
-    dividerBefore: true,
-    children: [
-      { href: '/publishing', icon: Upload, label: 'Publishing' },
-      { href: '/approvals', icon: CheckCircle, label: 'Approvals' },
-      { href: '/scheduler', icon: CalendarClock, label: 'Scheduler' },
-      { href: '/autonomy', icon: Sparkles, label: 'Autonomy' },
-      { href: '/ab-testing', icon: FlaskConical, label: 'A/B Testing' },
+    items: [
+      { href: '/home', icon: Home, label: 'Home' },
+      { href: '/projects', icon: FolderOpen, label: 'Projects' },
     ],
   },
   {
-    href: '/content-group',
-    icon: BookOpen,
-    label: 'Content',
-    isGroup: true,
-    children: [
+    items: [
+      { href: '/shorts-studio', icon: Clapperboard, label: 'Shorts Studio' },
+      { href: '/editor', icon: Film, label: 'Video Editor' },
+    ],
+  },
+  {
+    category: 'Publish',
+    items: [
+      { href: '/publishing', icon: Upload, label: 'Publishing' },
+      { href: '/approvals', icon: CheckCircle, label: 'Approvals' },
+      { href: '/scheduler', icon: CalendarClock, label: 'Scheduler' },
+      { href: '/autonomy', icon: Sparkles, label: 'Autonomy', badge: 'NEW' },
+      { href: '/ab-testing', icon: FlaskConical, label: 'A/B Testing', badge: 'BETA' },
+    ],
+  },
+  {
+    category: 'Content',
+    items: [
       { href: '/research', icon: BookOpen, label: 'Research' },
       { href: '/discover', icon: Compass, label: 'Discover' },
       { href: '/repurpose', icon: ArrowRightLeft, label: 'Repurpose' },
@@ -53,11 +55,8 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    href: '/insights-group',
-    icon: BarChart2,
-    label: 'Insights',
-    isGroup: true,
-    children: [
+    category: 'Insights',
+    items: [
       { href: '/analytics', icon: BarChart2, label: 'Analytics' },
       { href: '/strategy', icon: Target, label: 'Strategy' },
       { href: '/growth', icon: Gift, label: 'Growth' },
@@ -65,28 +64,19 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    href: '/library-group',
-    icon: ListVideo,
-    label: 'Library',
-    isGroup: true,
-    children: [
+    category: 'Library',
+    items: [
       { href: '/library', icon: ListVideo, label: 'Media Control' },
       { href: '/assets', icon: Layers, label: 'Media Assets' },
     ],
   },
-  {
-    href: '/settings',
-    icon: Settings,
-    label: 'Settings',
-    dividerBefore: true,
-    children: [
-      { href: '/brand-kit', icon: Palette, label: 'Brand Kit' },
-      { href: '/automation', icon: Workflow, label: 'Automation' },
-      { href: '/wallet', icon: Wallet, label: 'Billing & Wallet' },
-      { href: '/orgs', icon: Building2, label: 'Organization' },
-      { href: '/developer', icon: Code2, label: 'Developer' },
-    ],
-  },
+];
+
+const BOTTOM_ITEMS: NavItem[] = [
+  { href: '/settings', icon: Settings, label: 'Settings' },
+  { href: '/brand-kit', icon: Palette, label: 'Brand Kit' },
+  { href: '/wallet', icon: Wallet, label: 'Billing' },
+  { href: '/orgs', icon: Building2, label: 'Organization' },
 ];
 
 /** Display name from the JWT payload — no network call, safe in mock mode. */
@@ -142,10 +132,23 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
     staleTime: 60_000,
     enabled: !!token,
   });
-  /** Explicit expand/collapse choices per nav group; unset falls back to route-based auto-open. */
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   /** Sidebar collapsed state — collapses to icon-only rail. */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  /** Which collapsible sections are open (Studio is always open, not tracked here). */
+  const [openSections, setOpenSections] = useState<Set<string>>(
+    () => new Set(['Publish', 'Content', 'Insights', 'Library'])
+  );
+  function toggleSection(cat: string) {
+    setOpenSections(prev => {
+      const next = new Set(prev);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      return next;
+    });
+  }
+
+  // ── User menu state ────────────────────────────────────────────────────────
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   // ── Notifications bell state ───────────────────────────────────────────────
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -182,12 +185,11 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
     };
   }, [router, fetchNotifications]);
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     function onOutside(e: MouseEvent) {
-      if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
-        setBellOpen(false);
-      }
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) setBellOpen(false);
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(false);
     }
     document.addEventListener('mousedown', onOutside);
     return () => document.removeEventListener('mousedown', onOutside);
@@ -246,14 +248,9 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
 
         {/* Logo */}
         <div className="flex items-center gap-2.5 shrink-0">
-          <div
-            className="w-[38px] h-[38px] rounded-[11px] flex items-center justify-center"
-            style={{background:'linear-gradient(135deg,#9C88DD,#7E62C9)',boxShadow:'0 6px 14px -6px rgba(124,58,237,.6)'}}
-          >
-            <Zap className="w-5 h-5 text-white" />
-          </div>
+          <LogoMark className="w-[38px] h-[38px] shrink-0" style={{borderRadius:'11px',boxShadow:'0 6px 14px -6px rgba(124,58,237,.5)'}} />
           <div className="leading-[1.15]">
-            <div className="font-bold text-[15px] tracking-[-0.3px]">AI CreatorForce</div>
+            <div className="font-bold text-[15px] tracking-[-0.3px]">Blueforce</div>
             <div className="text-[11px] font-medium" style={{color:'#8b88a0'}}>AI Content Platform</div>
           </div>
         </div>
@@ -270,6 +267,20 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         <div className="flex-1" />
+
+        {/* Admin button — only visible to OWNER / SUPER_ADMIN */}
+        {isAdmin && (
+          <Link
+            href="/admin"
+            title="Admin panel"
+            className="w-[42px] h-[42px] rounded-[12px] flex items-center justify-center transition-colors shrink-0"
+            style={{border:'1px solid #E4DEFB',background:'#F6F2FF',color:'#7C3AED'}}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background='#EDE9FD'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background='#F6F2FF'; }}
+          >
+            <ShieldCheck className="w-[19px] h-[19px]" />
+          </Link>
+        )}
 
         {/* Copilot button */}
         <button
@@ -363,19 +374,71 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
           )}
         </div>
 
-        {/* User chip */}
-        <div className="flex items-center gap-2.5 hover:bg-[#F6F5FC] transition-colors cursor-pointer shrink-0" style={{background:'#fff',border:'1px solid #ECECF3',borderRadius:'12px',padding:'5px 14px 5px 5px'}}>
-          {meData?.avatarUrl ? (
-            <img src={meData.avatarUrl} alt={meData.name ?? 'Avatar'} style={{width:'32px',height:'32px',borderRadius:'9px',objectFit:'cover'}} />
-          ) : (
-            <div className="flex items-center justify-center text-white font-bold text-sm uppercase" style={{width:'32px',height:'32px',borderRadius:'9px',background:'linear-gradient(135deg,#9C88DD,#7E62C9)'}}>
-              {(meData?.name ?? userName).charAt(0)}
+        {/* User menu */}
+        <div className="relative shrink-0" ref={userMenuRef}>
+          <button
+            type="button"
+            onClick={() => setUserMenuOpen(o => !o)}
+            className="flex items-center gap-2.5 hover:bg-[#F6F5FC] transition-colors cursor-pointer"
+            style={{background:'#fff',border:'1px solid #ECECF3',borderRadius:'12px',padding:'5px 14px 5px 5px'}}
+          >
+            {meData?.avatarUrl ? (
+              <img src={meData.avatarUrl} alt={meData.name ?? 'Avatar'} style={{width:'32px',height:'32px',borderRadius:'9px',objectFit:'cover'}} />
+            ) : (
+              <div className="flex items-center justify-center text-white font-bold text-sm uppercase" style={{width:'32px',height:'32px',borderRadius:'9px',background:'linear-gradient(135deg,#9C88DD,#7E62C9)'}}>
+                {(meData?.name ?? userName).charAt(0)}
+              </div>
+            )}
+            <div style={{lineHeight:1.2,textAlign:'left'}}>
+              <div style={{fontWeight:700,fontSize:'13.5px'}}>{meData?.name ?? userName}</div>
+              <div style={{fontSize:'11.5px',color:'#8b88a0',fontWeight:500}}>Creator</div>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 ml-1 shrink-0" style={{color:'#9a97ab',transform: userMenuOpen ? 'rotate(180deg)' : 'none',transition:'transform 200ms ease'}} />
+          </button>
+
+          {userMenuOpen && (
+            <div
+              className="absolute right-0 z-50 bg-white overflow-hidden"
+              style={{top:'calc(100% + 8px)',width:'220px',border:'1px solid #ECECF3',borderRadius:'16px',boxShadow:'0 20px 50px -12px rgba(30,27,46,.25)'}}
+            >
+              {/* User info header */}
+              <div style={{padding:'14px 16px 12px',borderBottom:'1px solid #F1EFF7'}}>
+                <div style={{fontWeight:700,fontSize:'13.5px',color:'#1E1B2E'}}>{meData?.name ?? userName}</div>
+                <div style={{fontSize:'11.5px',color:'#8b88a0',fontWeight:500,marginTop:'1px'}}>{meData?.email ?? 'Creator'}</div>
+              </div>
+              {/* Menu items */}
+              <div style={{padding:'6px'}}>
+                {BOTTOM_ITEMS.map(({ href, icon: Icon, label }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2.5 transition-colors"
+                    style={{padding:'9px 10px',borderRadius:'10px',fontSize:'13px',fontWeight:500,textDecoration:'none',color:'#3d3a52'}}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background='#F6F5FC'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background='transparent'; }}
+                  >
+                    <Icon style={{width:'16px',height:'16px',flexShrink:0,color:'#7C3AED',opacity:.85}} />
+                    {label}
+                  </Link>
+                ))}
+              </div>
+              {/* Sign out */}
+              <div style={{padding:'0 6px 6px',borderTop:'1px solid #F1EFF7',marginTop:'2px',paddingTop:'6px'}}>
+                <button
+                  type="button"
+                  onClick={() => { setUserMenuOpen(false); void handleLogout(); }}
+                  className="flex items-center gap-2.5 w-full border-none cursor-pointer transition-colors"
+                  style={{padding:'9px 10px',borderRadius:'10px',fontSize:'13px',fontWeight:500,background:'transparent',color:'#ef4444',fontFamily:'inherit',width:'100%'}}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background='#FEF2F2'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background='transparent'; }}
+                >
+                  <LogOut style={{width:'16px',height:'16px',flexShrink:0}} />
+                  Sign Out
+                </button>
+              </div>
             </div>
           )}
-          <div style={{lineHeight:1.2}}>
-            <div style={{fontWeight:700,fontSize:'13.5px'}}>{meData?.name ?? userName}</div>
-            <div style={{fontSize:'11.5px',color:'#8b88a0',fontWeight:500}}>Creator</div>
-          </div>
         </div>
       </header>
 
@@ -384,118 +447,154 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
 
         {/* ── SIDEBAR ──────────────────────────────────────────────────────── */}
         <aside
-          className={`flex flex-col p-[10px] overflow-hidden shrink-0 transition-[width] duration-[320ms] ease-[cubic-bezier(.4,0,.2,1)]`}
-          style={{background:'linear-gradient(185deg,#7C3AED 0%,#5B21B6 100%)',width: sidebarCollapsed ? '52px' : '224px'}}
+          className="flex flex-col shrink-0 overflow-hidden transition-[width] duration-[320ms] ease-[cubic-bezier(.4,0,.2,1)]"
+          style={{ background:'linear-gradient(185deg,#7C3AED 0%,#5B21B6 100%)', width: sidebarCollapsed ? '62px' : '244px', WebkitFontSmoothing:'antialiased', MozOsxFontSmoothing:'grayscale' } as React.CSSProperties}
         >
-          <nav className="flex flex-col gap-0.5 flex-1 overflow-y-auto overflow-x-hidden" style={{scrollbarWidth:'none'}}>
-            {[...NAV, ...(isAdmin ? [{ href:'/admin', icon: Gauge, label:'Admin' } as NavItem] : [])].map(({ href, icon: Icon, label, children, isGroup, dividerBefore }) => {
-              const groupActive = isGroup
-                ? (children?.some(c => !c.href.includes('#') && pathname.startsWith(c.href)) ?? false)
-                : (pathname === href || pathname.startsWith(href + '/') || (children?.some(c => !c.href.includes('#') && pathname.startsWith(c.href)) ?? false));
-              const open = openGroups[href] ?? groupActive;
-              const isActiveLink = !isGroup && (pathname === href || pathname.startsWith(href + '/'));
+          {/* ── Logo header ── */}
+          <div
+            className="flex items-center shrink-0"
+            style={{
+              height:'62px',
+              padding: sidebarCollapsed ? '0' : '0 16px',
+              justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+              gap:'11px',
+              borderBottom:'1px solid rgba(255,255,255,.10)',
+            }}
+          >
+            <LogoMark className="shrink-0" style={{ width:'34px', height:'34px', borderRadius:'9px', border:'1.5px solid rgba(255,255,255,.28)', boxShadow:'0 3px 10px rgba(0,0,0,.28)' }} />
+            {!sidebarCollapsed && (
+              <div style={{ overflow:'hidden', lineHeight:1.35 }}>
+                <div style={{ fontWeight:800, fontSize:'16px', color:'#fff', letterSpacing:'-.4px', whiteSpace:'nowrap' }}>Blueforce</div>
+                <div style={{ fontSize:'11px', color:'rgba(255,255,255,.48)', fontWeight:500, letterSpacing:'.15px', whiteSpace:'nowrap' }}>AI Content Platform</div>
+              </div>
+            )}
+          </div>
 
+          {/* ── Nav ── */}
+          <nav
+            className="flex-1 overflow-hidden"
+            style={{ padding:'10px 10px' }}
+          >
+            {NAV_SECTIONS.map(({ category, items }, si) => {
+              const isCollapsible = !!category && category !== 'Studio';
+              const isOpen = !isCollapsible || sidebarCollapsed || openSections.has(category!);
               return (
-                <div key={href}>
-                  {dividerBefore && <div style={{margin:'6px 10px',borderTop:'1px solid rgba(255,255,255,.15)'}} />}
-
-                  {isGroup ? (
-                    <button
-                      type="button"
-                      aria-expanded={open}
-                      onClick={() => setOpenGroups(g => ({ ...g, [href]: !open }))}
-                      className="w-full flex items-center transition-colors"
-                      style={{
-                        gap:'11px',padding:'9px 10px',borderRadius:'10px',cursor:'pointer',
-                        fontSize:'12.5px',fontWeight:600,border:'none',
-                        background: groupActive ? 'rgba(255,255,255,.18)' : 'transparent',
-                        color: groupActive ? '#fff' : 'rgba(255,255,255,.82)',
-                      }}
-                      onMouseEnter={e => { if (!groupActive) (e.currentTarget as HTMLElement).style.background='rgba(255,255,255,.12)'; }}
-                      onMouseLeave={e => { if (!groupActive) (e.currentTarget as HTMLElement).style.background='transparent'; }}
-                    >
-                      <Icon style={{width:'18px',height:'18px',flexShrink:0}} />
-                      <span style={{whiteSpace:'nowrap',overflow:'hidden',flex:'1 1 auto',textAlign:'left',opacity: sidebarCollapsed ? 0 : 1,transition:'opacity .2s'}}>
-                        {label}
-                      </span>
-                      {!sidebarCollapsed && (
-                        <ChevronDown style={{width:'14px',height:'14px',flexShrink:0,transform: open ? 'none' : 'rotate(-90deg)',transition:'transform .2s'}} />
-                      )}
-                    </button>
-                  ) : (
-                    <div style={{position:'relative'}}>
-                      <Link
-                        href={href}
-                        className="flex items-center transition-colors"
+                <div key={si} style={{ marginBottom: sidebarCollapsed ? '4px' : '4px' }}>
+                  {/* Category header */}
+                  {category && !sidebarCollapsed && (
+                    isCollapsible ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleSection(category)}
+                        className="flex items-center w-full border-none cursor-pointer"
                         style={{
-                          gap:'11px',padding:'9px 10px',borderRadius:'10px',
-                          fontSize:'12.5px',fontWeight:600,textDecoration:'none',
-                          background: isActiveLink ? 'rgba(255,255,255,.18)' : 'transparent',
-                          color: isActiveLink ? '#fff' : 'rgba(255,255,255,.82)',
+                          gap:'6px',
+                          padding:'10px 12px 6px',
+                          background:'transparent',
+                          fontSize:'11.5px',
+                          fontWeight:600,
+                          letterSpacing:'-.1px',
+                          color:'rgba(255,255,255,.55)',
+                          fontFamily:'inherit',
+                          transition:'color 150ms ease',
                         }}
-                        onMouseEnter={e => { if (!isActiveLink) (e.currentTarget as HTMLElement).style.background='rgba(255,255,255,.12)'; }}
-                        onMouseLeave={e => { if (!isActiveLink) (e.currentTarget as HTMLElement).style.background='transparent'; (e.currentTarget as HTMLElement).style.color='rgba(255,255,255,.82)'; }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color='rgba(255,255,255,.90)'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color='rgba(255,255,255,.55)'; }}
                       >
-                        <Icon style={{width:'18px',height:'18px',flexShrink:0}} />
-                        <span style={{whiteSpace:'nowrap',overflow:'hidden',flex:'1 1 auto',opacity: sidebarCollapsed ? 0 : 1,transition:'opacity .2s'}}>
-                          {label}
-                        </span>
-                        {children && children.length > 0 && !sidebarCollapsed && (
-                          <ChevronDown style={{width:'14px',height:'14px',flexShrink:0,transform: open ? 'none' : 'rotate(-90deg)',transition:'transform .2s'}} />
-                        )}
-                      </Link>
-                      {!isGroup && children && children.length > 0 && (
-                        <button
-                          type="button"
-                          aria-label={`${open ? 'Collapse' : 'Expand'} ${label} menu`}
-                          aria-expanded={open}
-                          onClick={e => { e.preventDefault(); setOpenGroups(g => ({ ...g, [href]: !open })); }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 border-none bg-transparent cursor-pointer"
-                          style={{padding:'4px',borderRadius:'6px',color:'rgba(255,255,255,.7)'}}
-                        />
-                      )}
+                        <span style={{ flex:'1 1 auto', textAlign:'left' }}>{category}</span>
+                        <ChevronDown style={{
+                          width:'14px', height:'14px', flexShrink:0,
+                          transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                          transition:'transform 220ms ease',
+                        }} />
+                      </button>
+                    ) : (
+                      <div style={{
+                        fontSize:'11.5px', fontWeight:600, letterSpacing:'-.1px',
+                        color:'rgba(255,255,255,.40)', padding:'10px 12px 6px',
+                      }}>
+                        {category}
+                      </div>
+                    )
+                  )}
+                  {/* Items */}
+                  {isOpen && (
+                    <div style={{ display:'flex', flexDirection:'column', gap:'2px' }}>
+                      {items.map(({ href, icon: Icon, label, badge, action }) => {
+                        const isActive = !action && (pathname === href || pathname.startsWith(href + '/'));
+                        const itemStyle: React.CSSProperties = {
+                          gap:'11px',
+                          padding: sidebarCollapsed ? '11px 0' : '9px 12px',
+                          borderRadius:'11px',
+                          fontSize:'14px',
+                          fontWeight: isActive ? 600 : 500,
+                          letterSpacing: isActive ? '-.15px' : '-.05px',
+                          textDecoration:'none',
+                          justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+                          background: isActive ? 'rgba(255,255,255,.92)' : 'transparent',
+                          color: isActive ? '#6D28D9' : 'rgba(255,255,255,.78)',
+                          transition:'background 180ms ease, color 180ms ease',
+                          boxShadow: isActive ? '0 2px 8px rgba(0,0,0,.15)' : 'none',
+                        };
+                        const inner = (
+                          <>
+                            <Icon style={{ width:'18px', height:'18px', flexShrink:0, opacity: isActive ? 1 : 0.78, color: isActive ? '#7C3AED' : 'inherit' }} />
+                            {!sidebarCollapsed && (
+                              <>
+                                <span style={{ flex:'1 1 auto', whiteSpace:'nowrap', overflow:'hidden' }}>{label}</span>
+                                {badge && (
+                                  <span style={{
+                                    fontSize:'10px', fontWeight:700, letterSpacing:'.3px', textTransform:'uppercase',
+                                    padding:'2px 7px', borderRadius:'99px', flexShrink:0, color:'#fff',
+                                    background:
+                                      badge === 'NEW'  ? 'linear-gradient(135deg,#10B981,#059669)' :
+                                      badge === 'BETA' ? 'linear-gradient(135deg,#F59E0B,#D97706)' :
+                                      badge === 'AI'   ? 'rgba(255,255,255,.22)' :
+                                                        'linear-gradient(135deg,#6366F1,#4F46E5)',
+                                  }}>
+                                    {badge}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </>
+                        );
+                        const hoverOn  = (e: React.MouseEvent) => { if (!isActive) { const el = e.currentTarget as HTMLElement; el.style.background='rgba(255,255,255,.13)'; el.style.color='#fff'; } };
+                        const hoverOff = (e: React.MouseEvent) => { if (!isActive) { const el = e.currentTarget as HTMLElement; el.style.background='transparent'; el.style.color='rgba(255,255,255,.78)'; } };
+                        return action ? (
+                          <button
+                            key={href}
+                            type="button"
+                            title={sidebarCollapsed ? label : undefined}
+                            onClick={action}
+                            className="flex items-center w-full border-none cursor-pointer"
+                            style={{ ...itemStyle, fontFamily:'inherit' }}
+                            onMouseEnter={hoverOn}
+                            onMouseLeave={hoverOff}
+                          >
+                            {inner}
+                          </button>
+                        ) : (
+                          <Link
+                            key={href}
+                            href={href}
+                            title={sidebarCollapsed ? label : undefined}
+                            className="flex items-center"
+                            style={itemStyle}
+                            onMouseEnter={hoverOn}
+                            onMouseLeave={hoverOff}
+                          >
+                            {inner}
+                          </Link>
+                        );
+                      })}
                     </div>
                   )}
-
-                  {open && !sidebarCollapsed && children?.map(({ href: subHref, icon: SubIcon, label: subLabel }) => (
-                    <Link
-                      key={subHref}
-                      href={subHref}
-                      className="flex items-center transition-colors"
-                      style={{
-                        gap:'9px',padding:'8px 10px 8px 36px',borderRadius:'10px',marginTop:'1px',
-                        fontSize:'12px',fontWeight:600,textDecoration:'none',
-                        background: (!subHref.includes('#') && pathname.startsWith(subHref)) ? 'rgba(255,255,255,.18)' : 'transparent',
-                        color: (!subHref.includes('#') && pathname.startsWith(subHref)) ? '#fff' : 'rgba(255,255,255,.70)',
-                      }}
-                      onMouseEnter={e => { if (!(!subHref.includes('#') && pathname.startsWith(subHref))) (e.currentTarget as HTMLElement).style.background='rgba(255,255,255,.12)'; }}
-                      onMouseLeave={e => { if (!(!subHref.includes('#') && pathname.startsWith(subHref))) (e.currentTarget as HTMLElement).style.background='transparent'; }}
-                    >
-                      <SubIcon style={{width:'15px',height:'15px',flexShrink:0}} />
-                      <span style={{whiteSpace:'nowrap',overflow:'hidden'}}>{subLabel}</span>
-                    </Link>
-                  ))}
                 </div>
               );
             })}
           </nav>
 
-          {/* Sign out */}
-          <button
-            onClick={() => void handleLogout()}
-            className="flex items-center transition-colors border-none cursor-pointer"
-            style={{
-              marginTop:'6px',gap:'11px',padding:'9px 10px',borderRadius:'10px',
-              fontSize:'12.5px',fontWeight:600,
-              color:'rgba(255,255,255,.82)',background:'transparent',fontFamily:'inherit',
-              width:'100%',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background='rgba(255,255,255,.12)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background='transparent'; }}
-          >
-            <LogOut style={{width:'17px',height:'17px',flexShrink:0}} />
-            <span style={{whiteSpace:'nowrap',overflow:'hidden',opacity: sidebarCollapsed ? 0 : 1,transition:'opacity .2s'}}>Sign Out</span>
-          </button>
         </aside>
 
         {/* ── MAIN ─────────────────────────────────────────────────────────── */}

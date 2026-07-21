@@ -5,6 +5,7 @@ import {
   Bot, ArrowRight, CheckCircle2, ChevronRight, Sparkles, ShieldCheck,
 } from 'lucide-react';
 import { MobileNav } from './_components/MobileNav';
+import { LogoMark } from '@/components/logo-mark';
 
 // ── Capabilities ──────────────────────────────────────────────────────────────
 
@@ -66,11 +67,9 @@ export default function LandingPage() {
       <header className="sticky top-0 z-40 border-b border-white/10 backdrop-blur-xl" style={{background:'rgba(14,9,36,.85)'}}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 gap-4">
-            <Link href="/" className="flex items-center gap-2.5 shrink-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label="AI CreatorForce">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)'}}>
-                <Zap className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-bold text-white text-lg leading-none hidden sm:block tracking-tight">AI CreatorForce</span>
+            <Link href="/" className="flex items-center gap-2.5 shrink-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label="Blueforce">
+              <LogoMark className="w-9 h-9 shrink-0" style={{borderRadius:'10px'}} />
+              <span className="font-bold text-white text-lg leading-none hidden sm:block tracking-tight">Blueforce</span>
             </Link>
 
             <nav className="hidden md:flex items-center gap-1" aria-label="Primary navigation">
@@ -122,7 +121,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-white/60 max-w-2xl mx-auto leading-relaxed">
-              From a single conversation to a published video — CreatorForce handles research, scripting, voice, music, editing, and publishing.{' '}
+              From a single conversation to a published video — Blueforce handles research, scripting, voice, music, editing, and publishing.{' '}
               <span className="text-white/80">No forms. No menus. Just results.</span>
             </p>
 
@@ -324,7 +323,7 @@ export default function LandingPage() {
                   <span style={{color:'#7C3AED'}}>Just conversation.</span>
                 </h2>
                 <p className="mt-6 text-lg text-gray-500 leading-relaxed">
-                  CreatorForce&apos;s AI Copilot works like an experienced producer. Tell it what you need — it asks the right questions, fills in the gaps, and gets it done.
+                  Blueforce&apos;s AI Copilot works like an experienced producer. Tell it what you need — it asks the right questions, fills in the gaps, and gets it done.
                 </p>
                 <ul className="mt-8 space-y-4">
                   {[
@@ -440,11 +439,9 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:'linear-gradient(135deg,#a78bfa,#7C3AED)'}}>
-                <Zap className="w-5 h-5 text-white" />
-              </div>
+              <LogoMark className="w-9 h-9 shrink-0" style={{borderRadius:'10px'}} />
               <div>
-                <p className="font-bold text-base leading-tight">AI CreatorForce</p>
+                <p className="font-bold text-base leading-tight">Blueforce</p>
                 <p className="text-xs mt-0.5" style={{color:'rgba(255,255,255,.35)'}}>AI Content Operating System</p>
               </div>
             </div>
@@ -461,7 +458,7 @@ export default function LandingPage() {
             </nav>
           </div>
           <div className="mt-8 pt-8 text-center text-xs" style={{borderTop:'1px solid rgba(255,255,255,.06)',color:'rgba(255,255,255,.25)'}}>
-            &copy; {new Date().getFullYear()} AI CreatorForce. All rights reserved.
+            &copy; {new Date().getFullYear()} Blueforce. All rights reserved.
           </div>
         </div>
       </footer>

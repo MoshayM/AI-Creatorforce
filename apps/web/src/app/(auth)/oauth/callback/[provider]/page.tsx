@@ -183,7 +183,7 @@ function LinkRequiredView({ email, provider }: { email: string; provider: string
 
       <h2 className="text-2xl font-extrabold text-gray-900 mb-2 text-center">Account already exists</h2>
       <p className="text-gray-500 text-sm text-center leading-relaxed mb-6">
-        An AI CreatorForce account is already registered for{' '}
+        A Blueforce account is already registered for{' '}
         <span className="font-semibold text-gray-700 break-all">{email}</span>.
       </p>
 

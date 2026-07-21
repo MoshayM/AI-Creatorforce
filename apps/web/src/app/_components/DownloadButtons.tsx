@@ -53,7 +53,7 @@ export function DownloadButtons() {
           <button
             type="button"
             onClick={handleDownloadClick}
-            aria-label="Download AI CreatorForce for Windows (coming soon)"
+            aria-label="Download Blueforce for Windows (coming soon)"
             className="w-full py-3 rounded-xl bg-gradient-to-r from-[#9d6ff0] to-[#7c4fd8] text-white font-semibold text-sm hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 transition-opacity min-h-[44px]"
           >
             Download for Windows
@@ -75,7 +75,7 @@ export function DownloadButtons() {
           <button
             type="button"
             onClick={handleDownloadClick}
-            aria-label="Download AI CreatorForce for Android (coming soon)"
+            aria-label="Download Blueforce for Android (coming soon)"
             className="w-full py-3 rounded-xl bg-gradient-to-r from-[#9d6ff0] to-[#7c4fd8] text-white font-semibold text-sm hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 transition-opacity min-h-[44px]"
           >
             Get the Android app

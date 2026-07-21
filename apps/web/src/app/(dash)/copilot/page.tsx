@@ -1,10 +1,11 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  BotMessageSquare, Send, Loader2, Zap, ChevronRight,
+  BotMessageSquare, Send, Zap, ChevronRight,
   BookOpen, FileText, Calendar, Search, ShieldCheck, Clock, X,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { checkInputSafety, httpErrorMessage } from '@/lib/safety';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,8 +47,8 @@ const QUICK_ACTIONS: QuickAction[] = [
     id: 'research',
     icon: BookOpen,
     label: 'Research Topic',
-    description: 'Deep-dive into any subject for a YouTube video',
-    placeholder: 'Enter a topic to research…',
+    description: "I'll dig deep into any topic for you",
+    placeholder: 'What topic?',
     template: (v) => `Research this topic in depth for a YouTube video: ${v}`,
     tileBg: '#eff6ff',
     iconColor: '#3b82f6',
@@ -56,8 +57,8 @@ const QUICK_ACTIONS: QuickAction[] = [
     id: 'script',
     icon: FileText,
     label: 'Script Ideas',
-    description: 'Generate a detailed script outline',
-    placeholder: 'Enter video title or concept…',
+    description: 'Build a full script from scratch',
+    placeholder: 'Video title or concept?',
     template: (v) => `Generate a detailed script outline for a YouTube video titled: "${v}"`,
     tileBg: '#f5f2fd',
     iconColor: '#6D4AE0',
@@ -66,8 +67,8 @@ const QUICK_ACTIONS: QuickAction[] = [
     id: 'calendar',
     icon: Calendar,
     label: 'Content Calendar',
-    description: 'Plan your upload schedule',
-    placeholder: 'Enter your niche or channel topic…',
+    description: 'Lock in your posting schedule',
+    placeholder: "What's your niche?",
     template: (v) => `Suggest a 2-week content calendar for a YouTube channel about: ${v}`,
     tileBg: '#ecfdf5',
     iconColor: '#10b981',
@@ -76,8 +77,8 @@ const QUICK_ACTIONS: QuickAction[] = [
     id: 'seo',
     icon: Search,
     label: 'SEO Analysis',
-    description: 'Optimized titles, tags & keywords',
-    placeholder: 'Enter video topic or keyword…',
+    description: 'Boost your reach with smarter SEO',
+    placeholder: 'Topic or keyword?',
     template: (v) => `Analyze the SEO potential and suggest optimized titles, tags, and keywords for: ${v}`,
     tileBg: '#fefce8',
     iconColor: '#d97706',
@@ -86,8 +87,8 @@ const QUICK_ACTIONS: QuickAction[] = [
     id: 'factcheck',
     icon: ShieldCheck,
     label: 'Fact Check',
-    description: 'Verify claims before you publish',
-    placeholder: 'Enter a claim to fact-check…',
+    description: "Don't get caught slipping — I'll check it",
+    placeholder: 'Claim to verify?',
     template: (v) => `Fact-check this claim for my YouTube video: "${v}"`,
     tileBg: '#f0fdfa',
     iconColor: '#0d9488',
@@ -96,8 +97,8 @@ const QUICK_ACTIONS: QuickAction[] = [
     id: 'ideas',
     icon: Zap,
     label: 'Video Ideas',
-    description: 'Generate viral video concepts',
-    placeholder: 'Enter your channel niche…',
+    description: "Brainstorm ideas that'll actually get views",
+    placeholder: "What's your channel niche?",
     template: (v) => `Give me 10 viral YouTube video ideas for a channel focused on: ${v}`,
     tileBg: '#fdf2f8',
     iconColor: '#ec4899',
@@ -105,10 +106,10 @@ const QUICK_ACTIONS: QuickAction[] = [
 ];
 
 const PROMPT_CHIPS = [
-  "What topics are trending in my niche?",
-  "Suggest 5 video ideas for next week",
-  "Review my recent scripts for compliance",
-  "Plan a 2-week content calendar",
+  "What's blowing up in my niche right now?",
+  "Give me 5 video ideas for next week",
+  "Check my scripts before I post",
+  "Help me plan the next 2 weeks",
 ];
 
 const HISTORY_KEY = 'cf_copilot_history';
@@ -141,7 +142,7 @@ function saveToHistory(text: string) {
 const GREETING: Message = {
   id: 'greeting',
   role: 'assistant',
-  content: "Hi! I'm your CreatorForce Copilot. I can help you research topics, generate script ideas, plan your content calendar, analyze SEO, and more. What would you like to create today?",
+  content: "Hey! I'm your Blueforce Copilot — think of me as your content right-hand. Need script ideas, SEO tips, a posting plan, or just want to brainstorm? I got you. What are we working on?",
   ts: Date.now(),
 };
 
@@ -177,6 +178,20 @@ export default function CopilotPage() {
   const sendMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
+
+    // Safety check
+    const safety = checkInputSafety(trimmed);
+    if (!safety.ok) {
+      setMessages(prev => [...prev, {
+        id: uid(),
+        role: 'assistant',
+        content: `⚠️ ${safety.message}`,
+        ts: Date.now(),
+        error: true,
+      }]);
+      return;
+    }
+
     setInput('');
     setActiveAction(null);
     setActionInput('');
@@ -203,10 +218,12 @@ export default function CopilotPage() {
         ...prev,
         { id: uid(), role: 'assistant', content: res.data.reply, executed: res.data.executed, ts: Date.now() },
       ]);
-    } catch {
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const msg = status ? httpErrorMessage(status) : 'Something went wrong. Try again in a sec.';
       setMessages((prev) => [
         ...prev,
-        { id: uid(), role: 'assistant', content: 'Sorry, something went wrong. Please try again.', ts: Date.now(), error: true },
+        { id: uid(), role: 'assistant', content: `⚠️ ${msg}`, ts: Date.now(), error: true },
       ]);
     } finally {
       setLoading(false);
@@ -233,6 +250,9 @@ export default function CopilotPage() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-[#faf9ff]">
+      <style>{`
+        @keyframes cfVoiceBar { 0%,100%{transform:scaleY(0.25);opacity:0.5} 50%{transform:scaleY(1);opacity:1} }
+      `}</style>
 
       {/* ── Left sidebar ───────────────────────────────────────────────── */}
       <aside
@@ -345,19 +365,30 @@ export default function CopilotPage() {
         {/* Chat header */}
         <div
           className="flex-shrink-0 px-6 py-4 flex items-center gap-3"
-          style={{ background: 'linear-gradient(145deg, #4f2ec4 0%, #6D4AE0 55%, #7c5ae8 100%)' }}
+          style={{ background: 'linear-gradient(145deg, #4f2ec4 0%, #6D4AE0 55%, #7c5ae8 100%)', borderBottom: '1px solid rgba(255,255,255,.1)' }}
         >
-          <div className="w-10 h-10 bg-white/15 rounded-2xl flex items-center justify-center">
+          <div className="w-10 h-10 bg-white/15 rounded-2xl flex items-center justify-center" style={{ boxShadow:'0 2px 8px rgba(0,0,0,.2)' }}>
             <BotMessageSquare className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1">
             <h1 className="text-white font-extrabold text-base leading-tight">AI Copilot</h1>
-            <p className="text-white/70 text-xs">Your intelligent content assistant · powered by Claude</p>
+            <p className="text-white/60 text-xs">Your content right-hand · powered by Claude</p>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 text-white/80 text-xs font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-300 animate-pulse" />
-            Online
-          </div>
+          {loading ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-white/80 text-xs font-semibold">
+              <span className="flex items-center gap-[2.5px]">
+                {['8px','14px','18px','14px','8px'].map((h, i) => (
+                  <span key={i} style={{ display:'inline-block',width:'2.5px',borderRadius:'3px',background:'rgba(255,255,255,.85)',height:h,animation:`cfVoiceBar .65s ease-in-out ${[0,.1,.2,.1,0][i]}s infinite` }} />
+                ))}
+              </span>
+              Thinking…
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 text-white/80 text-xs font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-300 animate-pulse" />
+              Online
+            </div>
+          )}
         </div>
 
         {/* Messages */}
@@ -412,7 +443,7 @@ export default function CopilotPage() {
 
           {/* Typing indicator */}
           {loading && (
-            <div className="flex gap-3">
+            <div className="flex gap-3 items-end">
               <div
                 className="w-8 h-8 rounded-2xl flex items-center justify-center flex-shrink-0 text-white"
                 style={{ background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)' }}
@@ -420,11 +451,24 @@ export default function CopilotPage() {
                 <Zap className="w-3.5 h-3.5" />
               </div>
               <div
-                className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2"
-                style={{ border: '1.5px solid #e3ddf8', boxShadow: '0 1px 4px rgba(109,74,224,0.06)' }}
+                className="rounded-2xl rounded-tl-sm px-4 py-2.5"
+                style={{ background:'linear-gradient(160deg,#6D4AE0 0%,#5B21B6 100%)',border:'1px solid rgba(109,74,224,.2)',boxShadow:'0 4px 16px -4px rgba(109,74,224,.3)' }}
               >
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#6D4AE0]" />
-                <span className="text-sm text-gray-500">Copilot is thinking…</span>
+                <div className="flex items-center gap-[2.5px]" style={{ height:'22px' }}>
+                  {['5px','9px','13px','17px','19px','17px','13px','9px','5px'].map((h, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        display:'inline-block',width:'2.5px',borderRadius:'4px',
+                        background:'rgba(233,213,255,.85)',
+                        height:h,
+                        transformOrigin:'center',
+                        animation:`cfVoiceBar .75s ease-in-out ${['0s','.09s','.18s','.06s','.15s','.03s','.21s','.12s','.09s'][i]} infinite`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div style={{ fontSize:'10.5px',fontWeight:600,color:'rgba(233,213,255,.55)',marginTop:'2px',letterSpacing:'.3px' }}>Hmm…</div>
               </div>
             </div>
           )}
@@ -461,7 +505,7 @@ export default function CopilotPage() {
                 onChange={handleTextareaChange}
                 onKeyDown={handleKeyDown}
                 disabled={loading}
-                placeholder="Ask anything about your content…"
+                placeholder="What's on your mind?"
                 rows={1}
                 className="flex-1 resize-none bg-transparent px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none disabled:opacity-50 max-h-24 leading-relaxed"
               />

@@ -9,20 +9,25 @@ const SITE_URL = process.env['NEXT_PUBLIC_SITE_URL'] ?? 'https://aicreatorforce.
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: 'AI CreatorForce', template: '%s · AI CreatorForce' },
+  title: { default: 'Blueforce', template: '%s · Blueforce' },
   description: 'Turn long videos into publish-ready YouTube Shorts, edit with a full timeline, and publish — AI-assisted end to end.',
-  applicationName: 'AI CreatorForce',
+  applicationName: 'Blueforce',
   alternates: { canonical: '/' },
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
   openGraph: {
     type: 'website',
     url: SITE_URL,
-    siteName: 'AI CreatorForce',
-    title: 'AI CreatorForce — AI YouTube Content Platform',
+    siteName: 'Blueforce',
+    title: 'Blueforce — AI YouTube Content Platform',
     description: 'Turn long videos into publish-ready Shorts, edit with a full timeline, and publish — AI-assisted end to end.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'AI CreatorForce',
+    title: 'Blueforce',
     description: 'AI-powered YouTube content creation platform.',
   },
 };
