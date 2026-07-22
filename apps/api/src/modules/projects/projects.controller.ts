@@ -1,18 +1,20 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsArray } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 import { ProjectsService } from './projects.service';
 
 class CreateProjectDto {
-  @IsString() channelId!: string;
+  @IsOptional() @IsString() channelId?: string;
   @IsString() title!: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() niche?: string;
   @IsOptional() @IsString() targetLang?: string;
   /** Phase 5 §10: bill agent-job spend to this org; empty string clears. */
   @IsOptional() @IsString() billingOrgId?: string;
+  @IsOptional() @IsString() contentFormat?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) platforms?: string[];
 }
 
 @ApiTags('projects')

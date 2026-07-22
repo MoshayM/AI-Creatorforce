@@ -3,13 +3,15 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { decodeCursor, keysetWhereDesc, clampLimit, pageResult } from '../../common/pagination/cursor';
 
 export interface CreateProjectDto {
-  channelId: string;
+  channelId?: string;
   title: string;
   description?: string;
   niche?: string;
   targetLang?: string;
   /** Phase 5 §10: bill agent-job spend to this org's shared wallet; null/'' clears. */
   billingOrgId?: string | null;
+  contentFormat?: string;
+  platforms?: string[];
 }
 
 @Injectable()
@@ -31,10 +33,12 @@ export class ProjectsService {
   }
 
   async create(userId: string, dto: CreateProjectDto) {
-    const channel = await this.prisma.channel.findFirst({
-      where: { id: dto.channelId, userId },
-    });
-    if (!channel) throw new ForbiddenException('Channel not found or not owned');
+    if (dto.channelId) {
+      const channel = await this.prisma.channel.findFirst({
+        where: { id: dto.channelId, userId },
+      });
+      if (!channel) throw new ForbiddenException('Channel not found or not owned');
+    }
 
     return this.prisma.project.create({
       data: {
@@ -45,6 +49,8 @@ export class ProjectsService {
         niche: dto.niche,
         targetLang: dto.targetLang ?? 'en',
         billingOrgId: await this.resolveBillingOrgId(userId, dto.billingOrgId),
+        contentFormat: dto.contentFormat,
+        platforms: dto.platforms ?? [],
       },
     });
   }

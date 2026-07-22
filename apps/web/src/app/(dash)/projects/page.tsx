@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
@@ -203,7 +204,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: React.ReactNode; hint?: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-600 mb-1.5">{label}</label>
@@ -474,8 +475,10 @@ function DeleteModal({ project, onClose, onSuccess }: DeleteModalProps) {
 
 export default function ProjectsPage() {
   const qc = useQueryClient();
+  const router = useRouter();
   const [showCreate, setShowCreate] = useState(false);
   const [createStep, setCreateStep] = useState<1 | 2>(1);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [form, setForm] = useState({
     platform: 'YOUTUBE' as Platform,
     contentFormat: 'YT_VIDEO' as ContentFormat,
@@ -503,6 +506,7 @@ export default function ProjectsPage() {
   function closeCreate() {
     setShowCreate(false);
     setCreateStep(1);
+    setCreateError(null);
     setForm({
       platform: 'YOUTUBE',
       contentFormat: 'YT_VIDEO',
@@ -538,7 +542,12 @@ export default function ProjectsPage() {
         localStorage.setItem(`cf_crosspost_${newId}`, JSON.stringify(form.crossPostChannelIds));
       }
       void qc.invalidateQueries({ queryKey: ['projects'] });
+      router.push(`/projects/${newId}`);
       closeCreate();
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setCreateError(typeof msg === 'string' ? msg : 'Failed to create project. Please try again.');
     },
   });
 
@@ -990,6 +999,9 @@ export default function ProjectsPage() {
                 </div>
 
                 {/* Step 2 footer */}
+                {createError && (
+                  <p className="px-7 pb-2 text-sm text-red-600">{createError}</p>
+                )}
                 <div
                   className="px-7 py-5 flex items-center justify-between gap-3"
                   style={{ borderTop: '1.5px solid #f0edf9' }}
