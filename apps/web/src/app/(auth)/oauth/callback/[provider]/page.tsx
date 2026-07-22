@@ -283,7 +283,9 @@ function OAuthCallbackInner() {
 
         if (data.linked === true) {
           setState({ phase: 'linked', provider });
-          router.replace(`/settings?linked=${encodeURIComponent(provider)}`);
+          const returnUrl = sessionStorage.getItem('cf.oauth.returnUrl');
+          sessionStorage.removeItem('cf.oauth.returnUrl');
+          router.replace(returnUrl ?? `/settings?linked=${encodeURIComponent(provider)}`);
           return;
         }
         if (data.accessToken && data.refreshToken) {

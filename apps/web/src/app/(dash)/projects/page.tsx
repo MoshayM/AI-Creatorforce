@@ -853,23 +853,41 @@ export default function ProjectsPage() {
                 <div className="px-7 py-6 space-y-5 max-h-[60vh] overflow-y-auto">
                   {/* Primary account */}
                   <Field
-                    label="Primary account (optional)"
+                    label={
+                      <span className="flex items-center gap-2">
+                        Primary account
+                        <span
+                          className="text-xs font-medium rounded-full px-2 py-0.5"
+                          style={{ background: '#ede9fe', color: '#6D4AE0' }}
+                        >
+                          Optional
+                        </span>
+                      </span>
+                    }
                     hint={`Optimizes content for ${selPlatform.label}. You can connect an account now or publish later.`}
                   >
                     {platformChannels.length === 0 ? (
                       <div
                         className="rounded-2xl px-4 py-3 text-sm"
-                        style={{ background: '#fffbeb', color: '#92400e', border: '1.5px solid #fde68a' }}
+                        style={{ background: '#f5f2fd', border: '1.5px solid #d4c9f9' }}
                       >
-                        <span className="font-semibold">No {selPlatform.label} accounts connected.</span>
-                        {' '}You can still create this project and publish later.{' '}
-                        <Link
-                          href="/library?tab=channels"
-                          className="font-bold underline hover:opacity-75"
-                          onClick={closeCreate}
-                        >
-                          Go to Channel Access →
-                        </Link>
+                        <p className="font-semibold mb-1" style={{ color: '#4c1d95' }}>
+                          ℹ No accounts connected yet
+                        </p>
+                        <p style={{ color: '#6b7280' }}>
+                          You don&apos;t need to connect any account now. Create your content first. You can connect YouTube, Facebook, Instagram, TikTok or any platform whenever you&apos;re ready to publish.
+                        </p>
+                        <p className="mt-2">
+                          <Link
+                            href="/library?tab=channels"
+                            className="text-[#6D4AE0] font-semibold hover:underline"
+                            onClick={closeCreate}
+                          >
+                            Connect Account →
+                          </Link>
+                          {' '}
+                          <span style={{ color: '#9ca3af', fontSize: 12 }}>(optional)</span>
+                        </p>
                       </div>
                     ) : (
                       <div className="relative">
@@ -899,7 +917,7 @@ export default function ProjectsPage() {
                       <p style={{ fontSize: 12, color: '#9ca3af' }}>
                         No other accounts connected yet.{' '}
                         <Link href="/library?tab=channels" className="text-[#6D4AE0] font-semibold hover:underline" onClick={closeCreate}>
-                          Add in Channel Access →
+                          Connect accounts →
                         </Link>
                       </p>
                     ) : (

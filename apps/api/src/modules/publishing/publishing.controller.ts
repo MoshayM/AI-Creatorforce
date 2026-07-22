@@ -10,7 +10,7 @@ import { PublishingService } from './publishing.service';
 
 class PublishDto {
   @IsString() videoId!: string;
-  @IsString() channelId!: string;
+  @IsOptional() @IsString() channelId?: string;
   @IsString() title!: string;
   @IsString() description!: string;
   @IsArray() tags!: string[];

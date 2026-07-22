@@ -24,7 +24,7 @@ const AI_DISCLOSURE_LABEL =
 
 export interface PublishOptions {
   videoId: string;
-  channelId: string;
+  channelId?: string;
   title: string;
   description: string;
   tags: string[];
