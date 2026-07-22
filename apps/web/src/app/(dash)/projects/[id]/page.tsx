@@ -1826,6 +1826,7 @@ function PublishFromRenderPanel({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
   const [error, setError] = useState('');
+  const [oauthExpired, setOauthExpired] = useState(false);
 
   const { data, isLoading } = useQuery<ProjectPublishReady>({
     queryKey: ['publish-ready', projectId],
@@ -1837,6 +1838,7 @@ function PublishFromRenderPanel({ projectId }: { projectId: string }) {
     mutationFn: async () => {
       if (!data?.render?.r2Key || !data.approval || !data.video || !data.project.channel) return;
       setError('');
+      setOauthExpired(false);
       await api.publishing.publish({
         videoId: data.video.id,
         channelId: data.project.channel?.id ?? '',
@@ -1853,11 +1855,49 @@ function PublishFromRenderPanel({ projectId }: { projectId: string }) {
       setOpen(false);
       void qc.invalidateQueries({ queryKey: ['publish-ready', projectId] });
     },
-    onError: (e: unknown) => setError(e instanceof Error ? e.message : 'Publish failed'),
+    onError: (e: unknown) => {
+      const axiosErr = e as { response?: { data?: { code?: string; message?: string } } };
+      const code = axiosErr.response?.data?.code;
+      if (code === 'OAUTH_EXPIRED') {
+        setOauthExpired(true);
+      } else {
+        const msg = axiosErr.response?.data?.message ?? (e instanceof Error ? e.message : 'Publish failed');
+        setError(msg);
+      }
+    },
   });
+
+  const handleReconnect = () => {
+    sessionStorage.setItem('cf.oauth.returnUrl', `/projects/${projectId}`);
+    window.location.href = '/library?tab=channels';
+  };
 
   if (isLoading) return null;
   if (!data) return null;
+
+  // Channel connected but token revoked — show reconnect prompt proactively
+  if (data.project.channel && !data.project.channel.active) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4">
+        <div className="flex items-start gap-3 mb-3">
+          <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">YouTube authorization expired</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Your YouTube connection for <strong>{data.project.channel.title}</strong> has expired.
+              Reconnect to continue publishing.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={handleReconnect}
+          className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-xl transition-colors"
+        >
+          Reconnect YouTube
+        </button>
+      </div>
+    );
+  }
 
   // No channel connected — show prompt instead of publish UI
   if (!data.project.channel) {
@@ -1948,7 +1988,7 @@ function PublishFromRenderPanel({ projectId }: { projectId: string }) {
                 <Youtube className="w-5 h-5 text-red-600" />
                 <h2 className="text-lg font-bold text-gray-900">Confirm Publish</h2>
               </div>
-              <button onClick={() => { setOpen(false); setError(''); }} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => { setOpen(false); setError(''); setOauthExpired(false); }} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1984,18 +2024,45 @@ function PublishFromRenderPanel({ projectId }: { projectId: string }) {
               </p>
             </div>
 
-            {error && <p className="text-xs text-red-500 mb-3">{error}</p>}
+            {oauthExpired && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-3">
+                <div className="flex items-start gap-2 mb-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800">YouTube authorization expired</p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      Reconnect now to continue publishing. Your draft is safe.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleReconnect}
+                    className="flex-1 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition-colors"
+                  >
+                    Reconnect YouTube
+                  </button>
+                  <button
+                    onClick={() => setOauthExpired(false)}
+                    className="px-3 py-2 border border-amber-200 text-amber-700 text-xs font-medium rounded-lg hover:bg-amber-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {error && !oauthExpired && <p className="text-xs text-red-500 mb-3">{error}</p>}
 
             <div className="flex gap-3">
               <button
-                onClick={() => { setOpen(false); setError(''); }}
+                onClick={() => { setOpen(false); setError(''); setOauthExpired(false); }}
                 className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={() => publishMutation.mutate()}
-                disabled={publishMutation.isPending}
+                disabled={publishMutation.isPending || oauthExpired}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-colors"
               >
                 {publishMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

@@ -72,6 +72,9 @@ export class ChapterSyncService {
     // Preflight: syncing edits the live YouTube description, which needs an
     // OAuth-connected channel. Fail with the real reason instead of the
     // generic error the token lookup would produce.
+    if (!video.project.channelId) {
+      throw new BadRequestException('This project has no connected channel — cannot sync chapters to YouTube.');
+    }
     const channel = await this.prisma.channel.findUnique({
       where: { id: video.project.channelId },
       select: { title: true, readOnly: true, encryptedTokens: true },

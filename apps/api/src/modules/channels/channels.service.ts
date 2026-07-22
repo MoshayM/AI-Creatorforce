@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, OnModuleInit, HttpException, HttpStatus } from '@nestjs/common';
 import { google } from 'googleapis';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { TokenEncryptionService } from './token-encryption.service';
@@ -533,19 +533,41 @@ export class ChannelsService implements OnModuleInit {
 
   async buildAuthedYouTube(channelId: string) {
     this.logger.log(`[OAuth] Building authed YouTube client — channelId=${channelId}`);
-    const tokens = await this.getDecryptedTokens(channelId);
     const ch = await this.prisma.channel.findUniqueOrThrow({ where: { id: channelId } });
+
+    if (!ch.active || !ch.encryptedTokens) {
+      this.logger.warn(`[OAuth] Channel not connected — channelId=${channelId} active=${ch.active}`);
+      throw new HttpException(
+        { code: 'OAUTH_EXPIRED', message: 'Your YouTube authorization has expired. Please reconnect your channel.' },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    let tokens: OAuthTokens = JSON.parse(this.enc.decrypt(ch.encryptedTokens)) as OAuthTokens;
     const redirectUri = `${process.env['API_URL'] ?? 'http://localhost:4007'}/api/v1/channels/oauth/callback`;
+
+    // Proactive refresh: if the access token expires within 5 minutes, refresh before upload starts
+    const FIVE_MINUTES_MS = 5 * 60 * 1000;
+    if (!tokens.expiry_date || tokens.expiry_date - Date.now() < FIVE_MINUTES_MS) {
+      const remaining = tokens.expiry_date ? Math.round((tokens.expiry_date - Date.now()) / 1000) : 0;
+      this.logger.log(`[OAuth] Token expires soon (${remaining}s) — proactively refreshing — channelId=${channelId}`);
+      tokens = await this.proactivelyRefreshTokens(channelId, tokens, redirectUri);
+    }
+
     const oauth2 = this.buildOAuth2Client(redirectUri);
     oauth2.setCredentials(tokens);
 
     oauth2.on('tokens', (newTokens) => {
-      this.logger.log(`[OAuth] Token refreshed — channelId=${channelId}`);
-      const merged = { ...tokens, ...newTokens };
+      this.logger.log(`[OAuth] Token auto-refreshed — channelId=${channelId}`);
+      const merged: OAuthTokens = {
+        access_token: newTokens.access_token ?? tokens.access_token,
+        refresh_token: newTokens.refresh_token ?? tokens.refresh_token,
+        expiry_date: newTokens.expiry_date ?? Date.now() + 3_600_000,
+      };
       const enc = this.enc.encrypt(JSON.stringify(merged));
       void this.prisma.channel.update({
         where: { id: channelId },
-        data: { encryptedTokens: enc, tokenExpiresAt: new Date(merged.expiry_date ?? Date.now() + 3600_000) },
+        data: { encryptedTokens: enc, tokenExpiresAt: new Date(merged.expiry_date) },
       });
     });
 
@@ -569,6 +591,84 @@ export class ChannelsService implements OnModuleInit {
       },
       select: { id: true, title: true, niche: true, brandKit: true, voiceProfile: true },
     });
+  }
+
+  private async proactivelyRefreshTokens(channelId: string, tokens: OAuthTokens, redirectUri: string): Promise<OAuthTokens> {
+    const oauth2 = this.buildOAuth2Client(redirectUri);
+    oauth2.setCredentials({ refresh_token: tokens.refresh_token });
+    try {
+      this.logger.log(`[OAuth] Refresh request — channelId=${channelId}`);
+      const { credentials } = await oauth2.refreshAccessToken();
+      this.logger.log(`[OAuth] Refresh success — channelId=${channelId} expiresAt=${credentials.expiry_date}`);
+      const updated: OAuthTokens = {
+        access_token: credentials.access_token!,
+        refresh_token: credentials.refresh_token ?? tokens.refresh_token,
+        expiry_date: credentials.expiry_date ?? Date.now() + 3_600_000,
+      };
+      await this.prisma.channel.update({
+        where: { id: channelId },
+        data: {
+          encryptedTokens: this.enc.encrypt(JSON.stringify(updated)),
+          tokenExpiresAt: new Date(updated.expiry_date),
+        },
+      });
+      return updated;
+    } catch (err) {
+      return this.handleGoogleError(channelId, err);
+    }
+  }
+
+  async handleGoogleError(channelId: string, err: unknown): Promise<never> {
+    const { code, msg } = this.parseGoogleError(err);
+    this.logger.error(`[OAuth] Google API error — channelId=${channelId} code=${code} msg="${msg}"`);
+
+    if (code === 'invalid_grant') {
+      this.logger.warn(`[OAuth] invalid_grant — clearing tokens and disconnecting — channelId=${channelId}`);
+      await this.prisma.channel.update({
+        where: { id: channelId },
+        data: { active: false, encryptedTokens: null, tokenExpiresAt: null },
+      });
+      throw new HttpException(
+        { code: 'OAUTH_EXPIRED', message: 'Your YouTube authorization has expired. Please reconnect your channel.' },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    throw new HttpException(
+      { code, message: this.googleErrorMessage(code) },
+      code === 'quotaExceeded' ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_GATEWAY,
+    );
+  }
+
+  private parseGoogleError(err: unknown): { code: string; msg: string } {
+    // Shape 1: OAuth2 token error body { error, error_description }
+    const oauthBody = (err as { response?: { data?: { error?: string; error_description?: string } } })?.response?.data;
+    if (typeof oauthBody?.error === 'string') {
+      return { code: oauthBody.error, msg: oauthBody.error_description ?? oauthBody.error };
+    }
+    // Shape 2: YouTube Data API error body response.data.error.errors[0]
+    const ytErrs = (err as { response?: { data?: { error?: { errors?: Array<{ reason?: string; message?: string }> } } } })?.response?.data?.error?.errors;
+    if (ytErrs?.[0]?.reason) {
+      return { code: ytErrs[0].reason, msg: ytErrs[0].message ?? ytErrs[0].reason };
+    }
+    // Fallback: scan error message string
+    const raw = err instanceof Error ? err.message : String(err);
+    if (raw.toLowerCase().includes('invalid_grant')) return { code: 'invalid_grant', msg: raw };
+    if (raw.toLowerCase().includes('quota')) return { code: 'quotaExceeded', msg: raw };
+    return { code: 'unknown', msg: raw };
+  }
+
+  private googleErrorMessage(code: string): string {
+    const MAP: Record<string, string> = {
+      invalid_grant: 'Your YouTube authorization has expired. Please reconnect your channel.',
+      invalid_client: 'OAuth configuration error. Please contact support.',
+      redirect_uri_mismatch: 'OAuth redirect URI mismatch. Please contact support.',
+      invalid_scope: 'Required YouTube permissions are missing. Please reconnect your channel.',
+      unauthorized_client: 'YouTube Data API is not enabled. Please contact support.',
+      quotaExceeded: 'YouTube API daily quota exceeded. Uploads resume automatically tomorrow.',
+      access_denied: 'YouTube access was denied. Please reconnect your channel.',
+    };
+    return MAP[code] ?? `YouTube API error (${code}). Please try again.`;
   }
 
   private buildOAuth2Client(redirectUri: string) {

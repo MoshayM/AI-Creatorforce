@@ -54,7 +54,9 @@ export class TranscriptService {
 
     // 1) Owner captions via the Data API (needs force-ssl scope)
     onLog?.('Checking YouTube captions…');
-    let cues = await this.youtubeRead.getTranscript(video.project.channelId, video.youtubeVideoId);
+    let cues = video.project.channelId
+      ? await this.youtubeRead.getTranscript(video.project.channelId, video.youtubeVideoId)
+      : null;
     let source: 'YOUTUBE_CAPTIONS' | 'ASR_GENERATED' = 'YOUTUBE_CAPTIONS';
 
     // 2) Public (auto-)captions via yt-dlp — no scope needed, free

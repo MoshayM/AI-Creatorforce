@@ -436,7 +436,7 @@ export class CopilotService {
           select: { id: true, title: true, status: true, channel: { select: { title: true } }, _count: { select: { jobs: true } } },
           orderBy: { updatedAt: 'desc' },
         });
-        const lines = projects.map((p) => `• ${p.title} (${p.status.toLowerCase()}, ${p._count.jobs} jobs, channel ${p.channel.title})`);
+        const lines = projects.map((p) => `• ${p.title} (${p.status.toLowerCase()}, ${p._count.jobs} jobs${p.channel ? `, channel ${p.channel.title}` : ''})`);
         return { summary: projects.length ? `Your projects:\n${lines.join('\n')}` : 'You have no projects yet.', data: projects };
       }
 
@@ -692,6 +692,9 @@ export class CopilotService {
           where: { id: project.id },
           data: { targetLang: lang },
         });
+        if (!project.channelId) {
+          return { summary: 'No channel connected to this project. Connect a channel first to set voice language.', data: null };
+        }
         const channel = await this.prisma.channel.findUnique({ where: { id: project.channelId }, select: { voiceProfile: true } });
         await this.prisma.channel.update({
           where: { id: project.channelId },

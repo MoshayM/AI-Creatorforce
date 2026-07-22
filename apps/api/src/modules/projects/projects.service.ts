@@ -43,7 +43,6 @@ export class ProjectsService {
     return this.prisma.project.create({
       data: {
         userId,
-        channelId: dto.channelId,
         title: dto.title,
         description: dto.description,
         niche: dto.niche,
@@ -51,6 +50,7 @@ export class ProjectsService {
         billingOrgId: await this.resolveBillingOrgId(userId, dto.billingOrgId),
         contentFormat: dto.contentFormat,
         platforms: dto.platforms ?? [],
+        ...(dto.channelId ? { channelId: dto.channelId } : {}),
       },
     });
   }

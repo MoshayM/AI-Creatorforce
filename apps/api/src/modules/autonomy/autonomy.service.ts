@@ -966,7 +966,7 @@ export class AutonomyService {
         where: { id: projectId },
         include: { channel: { select: { userId: true, title: true } } },
       });
-      if (!project) return;
+      if (!project || !project.channel) return;
 
       const userId = project.channel.userId;
       const channelTitle = project.channel.title ?? 'your channel';

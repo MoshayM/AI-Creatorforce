@@ -52,6 +52,7 @@ export class VideoImportService {
     });
     if (!project) throw new NotFoundException('Project not found');
 
+    if (!project.channelId) throw new BadRequestException('This project has no connected channel — cannot import YouTube metadata without OAuth access.');
     const meta = await this.youtubeRead.getVideoMetadata(project.channelId, youtubeVideoId);
     if (meta.durationMs <= 0) {
       throw new BadRequestException('Could not determine video duration — is this a live stream or premiere?');

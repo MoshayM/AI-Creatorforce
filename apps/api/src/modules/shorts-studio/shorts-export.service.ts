@@ -271,6 +271,11 @@ export class ShortsExportService {
     }
     onLog?.('Compliance passed ✓');
 
+    if (!clip.project.channelId) {
+      throw new BadRequestException('A connected YouTube channel is required to publish a Short.');
+    }
+    const projectChannelId: string = clip.project.channelId;
+
     // After compliance: create the tracking Video row, resolve audio language, and count
     // synthetic timeline items all in parallel — none depend on each other.
     const importedVideoId = clip.topicSegment?.importedVideoId ?? clip.chapter?.importedVideoId ?? null;
@@ -278,7 +283,7 @@ export class ShortsExportService {
       this.prisma.video.create({
         data: {
           projectId: clip.project.id,
-          channelId: clip.project.channelId,
+          channelId: projectChannelId,
           title: metadata.title,
           description: metadata.description,
           tags: metadata.tags,
@@ -289,7 +294,7 @@ export class ShortsExportService {
       // must not present a different audio language to viewers unless they
       // switch tracks manually. Unknown stays unset (no wrong guesses).
       importedVideoId
-        ? this.resolveOriginalAudioLanguage(importedVideoId, clip.project.channelId, onLog)
+        ? this.resolveOriginalAudioLanguage(importedVideoId, projectChannelId, onLog)
         : Promise.resolve(null),
       // YouTube AI-disclosure policy (support.google.com/youtube/answer/14328491):
       // AI voiceover, generated music, or generated imagery must be disclosed.
@@ -313,7 +318,7 @@ export class ShortsExportService {
     try {
       youtubeVideoId = await this.publishing.publish({
         videoId: video.id,
-        channelId: clip.project.channelId,
+        channelId: projectChannelId,
         title: metadata.title,
         description: metadata.description,
         tags: metadata.tags,

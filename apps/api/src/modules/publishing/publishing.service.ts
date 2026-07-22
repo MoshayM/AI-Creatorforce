@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, ForbiddenException, BadRequestException, Logger, HttpException } from '@nestjs/common';
 import { createReadStream } from 'fs';
 import type { youtube_v3 } from 'googleapis';
 import type { Prisma, VideoStatus } from '@prisma/client';
@@ -53,6 +53,8 @@ export interface PublishOptions {
 
 @Injectable()
 export class PublishingService {
+  private readonly logger = new Logger(PublishingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly channels: ChannelsService,
@@ -60,14 +62,17 @@ export class PublishingService {
   ) {}
 
   async publish(opts: PublishOptions, approvalId: string): Promise<string> {
+    this.logger.log(`[Publish] Start — videoId=${opts.videoId} channelId=${opts.channelId ?? 'none'}`);
+
     const approval = await this.prisma.approval.findFirst({
       where: { id: approvalId, status: 'APPROVED' },
     });
     if (!approval) {
+      this.logger.warn(`[Publish] No approved approval — approvalId=${approvalId}`);
       throw new ForbiddenException('Human approval required before publishing. Approval not found or not approved.');
     }
+    this.logger.log(`[Publish] Approval verified — approvalId=${approvalId}`);
 
-    // Resolve the video path: explicit file path takes precedence, then r2Key
     let resolvedPath = opts.videoFilePath;
     if (!resolvedPath && opts.r2Key) {
       const available = await this.storage.ensure(opts.r2Key);
@@ -84,6 +89,11 @@ export class PublishingService {
       );
     }
 
+    if (!opts.channelId) {
+      throw new BadRequestException('A connected channel is required to publish to YouTube.');
+    }
+
+    this.logger.log(`[Publish] Token check — channelId=${opts.channelId}`);
     const { youtube } = await this.channels.buildAuthedYouTube(opts.channelId);
 
     const publishAt = opts.scheduledAt?.toISOString();
@@ -92,29 +102,37 @@ export class PublishingService {
       : { privacyStatus: 'public' };
     if (opts.containsSyntheticMedia) status.containsSyntheticMedia = true;
 
-    // Disclosure line in the description alongside the platform label —
-    // skipped when the metadata already carries one.
     const description =
       opts.containsSyntheticMedia && !/altered or synthetic content/i.test(opts.description)
         ? `${opts.description}\n\n${AI_DISCLOSURE_LABEL}`.trim()
         : opts.description;
 
-    const res = await youtube.videos.insert({
-      part: ['snippet', 'status'],
-      requestBody: {
-        snippet: {
-          title: opts.title,
-          description,
-          tags: opts.tags,
-          categoryId: opts.categoryId ?? '22',
-          ...(opts.defaultAudioLanguage ? { defaultAudioLanguage: opts.defaultAudioLanguage } : {}),
-        },
-        status,
-      },
-      media: { mimeType: 'video/mp4', body: createReadStream(resolvedPath) },
-    });
+    this.logger.log(`[Publish] Upload request — channelId=${opts.channelId} title="${opts.title}"`);
 
-    const youtubeVideoId = res.data.id!;
+    let res;
+    try {
+      res = await youtube.videos.insert({
+        part: ['snippet', 'status'],
+        requestBody: {
+          snippet: {
+            title: opts.title,
+            description,
+            tags: opts.tags,
+            categoryId: opts.categoryId ?? '22',
+            ...(opts.defaultAudioLanguage ? { defaultAudioLanguage: opts.defaultAudioLanguage } : {}),
+          },
+          status,
+        },
+        media: { mimeType: 'video/mp4', body: createReadStream(resolvedPath) },
+      });
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      this.logger.error(`[Publish] Upload error — channelId=${opts.channelId}`);
+      await this.channels.handleGoogleError(opts.channelId, err);
+    }
+
+    const youtubeVideoId = res!.data.id!;
+    this.logger.log(`[Publish] Upload complete — youtubeVideoId=${youtubeVideoId}`);
 
     await this.prisma.video.update({
       where: { id: opts.videoId },
@@ -244,7 +262,7 @@ export class PublishingService {
           likeCount: 0,
           commentCount: 0,
           createdAt: clip.createdAt,
-          channel: clip.project.channel,
+          channel: clip.project.channel ?? { id: '', title: 'Unknown' },
           project: { id: clip.project.id, title: clip.project.title },
         },
         'SHORT',
@@ -319,10 +337,9 @@ export class PublishingService {
    * Returns null for any part that is not yet available.
    */
   async getProjectPublishReady(projectId: string, userId: string) {
-    // Verify ownership via channel membership
     const project = await this.prisma.project.findFirst({
-      where: { id: projectId, channel: { userId } },
-      include: { channel: { select: { id: true, title: true } } },
+      where: { id: projectId, userId },
+      include: { channel: { select: { id: true, title: true, active: true } } },
     });
     if (!project) throw new ForbiddenException('Project not found or access denied');
 
