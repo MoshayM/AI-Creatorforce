@@ -630,14 +630,18 @@ export const handlers = [
   http.get(`${BASE}/projects`, () => HttpResponse.json({ data: MOCK_PROJECTS, nextCursor: null })),
 
   http.post(`${BASE}/projects`, async ({ request }) => {
-    const body = await request.json() as { title: string; channelId: string };
+    const body = await request.json() as { title: string; channelId?: string };
     return HttpResponse.json({
       id: 'proj-new',
       title: body.title,
-      channelId: body.channelId,
+      channelId: body.channelId ?? null,
       status: 'DRAFT',
       niche: null,
       targetLang: 'en',
+      channel: body.channelId
+        ? { title: 'Connected Account', thumbnailUrl: null }
+        : null,
+      _count: { jobs: 0, videos: 0 },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }, { status: 201 });

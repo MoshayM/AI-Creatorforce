@@ -49,10 +49,10 @@ const NAV_SECTIONS: NavSection[] = [
 ];
 
 const BOTTOM_ITEMS: NavItem[] = [
-  { href: '/settings', icon: Settings, label: 'Settings' },
-  { href: '/brand-kit', icon: Palette, label: 'Brand Kit' },
-  { href: '/wallet', icon: Wallet, label: 'Billing' },
-  { href: '/orgs', icon: Building2, label: 'Organization' },
+  { href: '/settings',  icon: Settings,  label: 'Settings' },
+  { href: '/brand-kit', icon: Palette,   label: 'Brand Kit' },
+  { href: '/wallet',    icon: Wallet,    label: 'Billing' },
+  { href: '/orgs',      icon: Building2, label: 'Organization' },
 ];
 
 /** Display name from the JWT payload — no network call, safe in mock mode. */
@@ -210,7 +210,7 @@ export default function DashLayout({ children }: { children: React.ReactNode }) 
     <div className="h-screen overflow-hidden flex flex-col bg-[#F4F3FB] text-[#1E1B2E]">
 
       {/* ── TOPBAR ──────────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3.5 px-[22px] py-[11px] bg-white border-b border-[#ECECF3] shrink-0 z-[5]">
+      <header className="flex items-center gap-3.5 px-[22px] py-[11px] bg-white border-b border-[#ECECF3] shrink-0 z-[30]">
 
         {/* Hamburger — collapses/expands sidebar */}
         <button

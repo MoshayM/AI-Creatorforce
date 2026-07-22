@@ -3,42 +3,100 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
-  FolderOpen, Plus, Loader2, Youtube, Video, Zap, PlayCircle,
+  FolderOpen, Plus, Loader2, Video, Zap, PlayCircle,
   ChevronDown, ArrowRight, Bot, Clock, MoreVertical,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { StatCard } from '@/components/stat-card';
 
-type ContentType = 'VIDEO' | 'MUSIC' | 'SHORT';
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Platform = 'YOUTUBE' | 'INSTAGRAM' | 'LINKEDIN' | 'TIKTOK' | 'X' | 'THREADS' | 'FACEBOOK';
+type ContentFormat = string; // platform-prefixed e.g. 'YT_VIDEO', 'IG_REEL', 'LI_ARTICLE'
 
 interface Project {
   id: string;
   title: string;
   niche?: string;
   status: string;
-  channel: { title: string; thumbnailUrl?: string };
+  channel?: { title: string; thumbnailUrl?: string } | null;
   _count: { jobs: number; videos: number };
   updatedAt: string;
 }
 
-interface Channel { id: string; title: string; }
+interface Channel { id: string; title: string; platform?: string; thumbnailUrl?: string; }
 
-// ── Content type config ───────────────────────────────────────────────────────
+// ── Platform config ───────────────────────────────────────────────────────────
 
-const CONTENT_TYPES: { type: ContentType; emoji: string; label: string; desc: string }[] = [
-  { type: 'VIDEO', emoji: '🎬', label: 'YouTube Video',  desc: 'Long-form with trend research, AI script & publish' },
-  { type: 'SHORT', emoji: '✂️', label: 'YouTube Short',  desc: 'Vertical shorts from scratch or clipped from long video' },
-  { type: 'MUSIC', emoji: '🎵', label: 'Music / Audio',  desc: 'Music track, gospel, podcast or audio content' },
+interface FormatDef { type: string; emoji: string; label: string; desc: string; }
+interface PlatformDef {
+  platform: Platform; label: string; emoji: string;
+  color: string; bg: string; border: string; textColor: string;
+  formats: FormatDef[];
+}
+
+const PLATFORMS: PlatformDef[] = [
+  {
+    platform: 'YOUTUBE', label: 'YouTube', emoji: '▶️',
+    color: '#FF0000', bg: '#fff0f0', border: '#fecaca', textColor: '#b91c1c',
+    formats: [
+      { type: 'YT_VIDEO',   emoji: '🎬', label: 'Long Video',      desc: 'AI research, script, chapters & SEO publish' },
+      { type: 'YT_SHORT',   emoji: '⚡', label: 'Short / Reel',    desc: 'Vertical <60s from scratch or clipped' },
+      { type: 'YT_PODCAST', emoji: '🎙️', label: 'Podcast / Audio', desc: 'Video podcast or audio-first content' },
+    ],
+  },
+  {
+    platform: 'INSTAGRAM', label: 'Instagram', emoji: '📸',
+    color: '#E1306C', bg: '#fff0f6', border: '#fbcfe8', textColor: '#be185d',
+    formats: [
+      { type: 'IG_REEL',  emoji: '🎞️', label: 'Reel',            desc: 'Short vertical video up to 90 s' },
+      { type: 'IG_POST',  emoji: '🖼️', label: 'Post / Carousel', desc: 'Image or multi-image carousel' },
+      { type: 'IG_STORY', emoji: '⭕', label: 'Story',           desc: '15 s disappearing content' },
+    ],
+  },
+  {
+    platform: 'LINKEDIN', label: 'LinkedIn', emoji: '💼',
+    color: '#0A66C2', bg: '#eff6ff', border: '#bfdbfe', textColor: '#1d4ed8',
+    formats: [
+      { type: 'LI_ARTICLE', emoji: '📄', label: 'Article',      desc: 'Long-form thought leadership piece' },
+      { type: 'LI_POST',    emoji: '✍️', label: 'Post',         desc: 'Text + optional image/video' },
+      { type: 'LI_VIDEO',   emoji: '🎥', label: 'Native Video', desc: 'Short video direct upload' },
+    ],
+  },
+  {
+    platform: 'TIKTOK', label: 'TikTok', emoji: '🎵',
+    color: '#000000', bg: '#f8f8f8', border: '#d1d5db', textColor: '#111827',
+    formats: [
+      { type: 'TT_VIDEO',  emoji: '🎵', label: 'TikTok Video', desc: 'Short-form vertical video' },
+      { type: 'TT_SERIES', emoji: '📚', label: 'Series',       desc: 'Multi-part episodic content' },
+    ],
+  },
+  {
+    platform: 'X', label: 'X / Twitter', emoji: '𝕏',
+    color: '#000000', bg: '#f9fafb', border: '#e5e7eb', textColor: '#111827',
+    formats: [
+      { type: 'X_THREAD', emoji: '🧵', label: 'Thread',     desc: 'Multi-post text thread' },
+      { type: 'X_VIDEO',  emoji: '📹', label: 'Video Post', desc: 'Short video with caption' },
+    ],
+  },
+  {
+    platform: 'THREADS', label: 'Threads', emoji: '🧶',
+    color: '#1a1a1a', bg: '#f9fafb', border: '#e5e7eb', textColor: '#111827',
+    formats: [
+      { type: 'TH_THREAD', emoji: '🧵', label: 'Thread',     desc: 'Multi-post text thread' },
+      { type: 'TH_VIDEO',  emoji: '📹', label: 'Video Post', desc: 'Short video + caption' },
+    ],
+  },
+  {
+    platform: 'FACEBOOK', label: 'Facebook', emoji: '📘',
+    color: '#1877F2', bg: '#eff6ff', border: '#bfdbfe', textColor: '#1d4ed8',
+    formats: [
+      { type: 'FB_VIDEO', emoji: '📺', label: 'Video', desc: 'Facebook native video' },
+      { type: 'FB_REEL',  emoji: '⚡', label: 'Reel',  desc: 'Short vertical video' },
+      { type: 'FB_POST',  emoji: '📝', label: 'Post',  desc: 'Text + image post' },
+    ],
+  },
 ];
-
-const CT_TILE: Record<ContentType, { tileBg: string; badgeBg: string; badgeColor: string }> = {
-  VIDEO: { tileBg: 'linear-gradient(135deg, #f0edf9, #e3ddf8)', badgeBg: '#f0edf9', badgeColor: '#6D4AE0' },
-  SHORT: { tileBg: 'linear-gradient(135deg, #fefce8, #fde68a)', badgeBg: '#fefce8', badgeColor: '#a16207' },
-  MUSIC: { tileBg: 'linear-gradient(135deg, #fdf2f8, #fce7f3)', badgeBg: '#fdf2f8', badgeColor: '#be185d' },
-};
-
-const CT_EMOJI: Record<ContentType, string> = { VIDEO: '🎬', SHORT: '✂️', MUSIC: '🎵' };
-const CT_LABEL: Record<ContentType, string> = { VIDEO: 'Video', SHORT: 'Short', MUSIC: 'Music' };
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; dot: string }> = {
   ACTIVE:   { bg: '#ecfdf5', color: '#065f46', dot: '#10b981' },
@@ -49,9 +107,39 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; dot: string }> =
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getContentType(projectId: string): ContentType {
-  if (typeof window === 'undefined') return 'VIDEO';
-  return (localStorage.getItem(`cf_ct_${projectId}`) as ContentType | null) ?? 'VIDEO';
+function platformFromChannel(ch: Channel): Platform {
+  const p = (ch.platform ?? 'YOUTUBE').toUpperCase() as Platform;
+  return PLATFORMS.find(d => d.platform === p) ? p : 'YOUTUBE';
+}
+
+function getProjectMeta(id: string): { platform: Platform; format: ContentFormat } {
+  if (typeof window === 'undefined') return { platform: 'YOUTUBE', format: 'YT_VIDEO' };
+  return {
+    platform: (localStorage.getItem(`cf_platform_${id}`) as Platform | null) ?? 'YOUTUBE',
+    format:   (localStorage.getItem(`cf_ct_${id}`) as string | null) ?? 'YT_VIDEO',
+  };
+}
+
+function getCrossPosts(id: string): string[] {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(localStorage.getItem(`cf_crosspost_${id}`) ?? '[]') as string[]; }
+  catch { return []; }
+}
+
+function formatLabel(fmt: string): string {
+  for (const pd of PLATFORMS) {
+    const fd = pd.formats.find(f => f.type === fmt);
+    if (fd) return fd.label;
+  }
+  return fmt;
+}
+
+function formatEmoji(fmt: string): string {
+  for (const pd of PLATFORMS) {
+    const fd = pd.formats.find(f => f.type === fmt);
+    if (fd) return fd.emoji;
+  }
+  return '📁';
 }
 
 function relativeTime(dateStr: string): string {
@@ -65,6 +153,22 @@ function relativeTime(dateStr: string): string {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function PlatformIcon({ platform, size = 16 }: { platform: Platform; size?: number }) {
+  const cfg = PLATFORMS.find(d => d.platform === platform) ?? PLATFORMS[0]!;
+  return (
+    <span
+      style={{
+        width: size, height: size, borderRadius: size * 0.28,
+        background: cfg.color, color: '#fff',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: size * 0.55, fontWeight: 800, fontFamily: 'inherit', flexShrink: 0,
+      }}
+    >
+      {cfg.emoji}
+    </span>
+  );
+}
 
 function ProjectSkeleton() {
   return (
@@ -98,8 +202,6 @@ function StatusBadge({ status }: { status: string }) {
     </span>
   );
 }
-
-// ── Field input ───────────────────────────────────────────────────────────────
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -213,15 +315,16 @@ function RenameModal({ project, onClose, onSuccess }: RenameModalProps) {
 
   return (
     <div
+      role="presentation"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(15,10,40,0.65)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
     >
       <div
         className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden"
         style={{ border: '1.5px solid #e3ddf8' }}
       >
-        {/* Header */}
         <div
           className="px-7 py-5 flex items-center justify-between"
           style={{ borderBottom: '1.5px solid #f0edf9' }}
@@ -242,7 +345,6 @@ function RenameModal({ project, onClose, onSuccess }: RenameModalProps) {
         <div className="px-7 py-6">
           <Field label="Project title">
             <input
-              autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !disabled) renameMutation.mutate(); }}
@@ -253,7 +355,6 @@ function RenameModal({ project, onClose, onSuccess }: RenameModalProps) {
           </Field>
         </div>
 
-        {/* Footer */}
         <div
           className="px-7 py-5 flex items-center justify-between gap-3"
           style={{ borderTop: '1.5px solid #f0edf9' }}
@@ -303,15 +404,16 @@ function DeleteModal({ project, onClose, onSuccess }: DeleteModalProps) {
 
   return (
     <div
+      role="presentation"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(15,10,40,0.65)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
     >
       <div
         className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden"
         style={{ border: '1.5px solid #e3ddf8' }}
       >
-        {/* Header */}
         <div
           className="px-7 py-5 flex items-center justify-between"
           style={{ borderBottom: '1.5px solid #f0edf9' }}
@@ -338,7 +440,6 @@ function DeleteModal({ project, onClose, onSuccess }: DeleteModalProps) {
           </div>
         </div>
 
-        {/* Footer */}
         <div
           className="px-7 py-5 flex items-center justify-between gap-3"
           style={{ borderTop: '1.5px solid #f0edf9' }}
@@ -374,7 +475,16 @@ function DeleteModal({ project, onClose, onSuccess }: DeleteModalProps) {
 export default function ProjectsPage() {
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ channelId: '', title: '', niche: '', contentType: 'VIDEO' as ContentType });
+  const [createStep, setCreateStep] = useState<1 | 2>(1);
+  const [form, setForm] = useState({
+    platform: 'YOUTUBE' as Platform,
+    contentFormat: 'YT_VIDEO' as ContentFormat,
+    primaryChannelId: '',
+    crossPostChannelIds: [] as string[],
+    title: '',
+    niche: '',
+    goal: '',
+  });
 
   // rename / delete modal state
   const [renameProject, setRenameProject] = useState<Project | null>(null);
@@ -390,15 +500,45 @@ export default function ProjectsPage() {
     queryFn: () => api.channels.list().then((r) => r.data as Channel[]),
   });
 
+  function closeCreate() {
+    setShowCreate(false);
+    setCreateStep(1);
+    setForm({
+      platform: 'YOUTUBE',
+      contentFormat: 'YT_VIDEO',
+      primaryChannelId: '',
+      crossPostChannelIds: [],
+      title: '',
+      niche: '',
+      goal: '',
+    });
+  }
+
   const createMutation = useMutation({
     mutationFn: () =>
-      api.projects.create({ channelId: form.channelId, title: form.title, niche: form.niche || undefined }),
+      api.projects.create({
+        channelId: form.primaryChannelId || undefined,
+        title: form.title,
+        niche: form.niche || undefined,
+        contentFormat: form.contentFormat,
+        platforms: [
+          form.platform,
+          ...form.crossPostChannelIds
+            .map(id => channels.find(c => c.id === id))
+            .filter((c): c is Channel => Boolean(c))
+            .map(c => platformFromChannel(c))
+            .filter((p, i, a) => a.indexOf(p) === i),
+        ],
+      }),
     onSuccess: (res) => {
       const newId: string = (res.data as { id: string }).id;
-      localStorage.setItem(`cf_ct_${newId}`, form.contentType);
+      localStorage.setItem(`cf_ct_${newId}`, form.contentFormat);
+      localStorage.setItem(`cf_platform_${newId}`, form.platform);
+      if (form.crossPostChannelIds.length > 0) {
+        localStorage.setItem(`cf_crosspost_${newId}`, JSON.stringify(form.crossPostChannelIds));
+      }
       void qc.invalidateQueries({ queryKey: ['projects'] });
-      setShowCreate(false);
-      setForm({ channelId: '', title: '', niche: '', contentType: 'VIDEO' });
+      closeCreate();
     },
   });
 
@@ -409,6 +549,16 @@ export default function ProjectsPage() {
   const activeCount = projects.filter((p) => p.status === 'ACTIVE').length;
   const totalJobs   = projects.reduce((s, p) => s + p._count.jobs, 0);
   const totalVideos = projects.reduce((s, p) => s + p._count.videos, 0);
+
+  const selPlatform = PLATFORMS.find(d => d.platform === form.platform) ?? PLATFORMS[0]!;
+  const platformChannels = channels.filter(ch => platformFromChannel(ch) === form.platform);
+  const otherChannels = channels.filter(ch => ch.id !== form.primaryChannelId);
+
+  const titlePlaceholder =
+    selPlatform.platform === 'YOUTUBE'   ? 'e.g. How to Start Investing in 2025' :
+    selPlatform.platform === 'INSTAGRAM' ? 'e.g. Morning Routine – 5 Habits That Changed My Life' :
+    selPlatform.platform === 'LINKEDIN'  ? 'e.g. Why Remote Work Changed My Leadership Style' :
+    'e.g. My content campaign title';
 
   return (
     <div className="min-h-full bg-[#faf9ff]">
@@ -463,7 +613,7 @@ export default function ProjectsPage() {
             </div>
             <h2 className="text-xl font-extrabold text-gray-900 mb-2">No projects yet</h2>
             <p className="text-gray-400 text-sm max-w-xs mb-8 leading-relaxed">
-              Create your first content campaign — long-form YouTube videos, Shorts, or music tracks.
+              Create your first content campaign — YouTube videos, Instagram Reels, LinkedIn articles, TikTok videos, and more. Publish to any connected account.
             </p>
             <button
               type="button"
@@ -480,8 +630,9 @@ export default function ProjectsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {projects.map((p) => {
-              const ct = getContentType(p.id);
-              const tile = CT_TILE[ct];
+              const { platform, format } = getProjectMeta(p.id);
+              const pdCfg = PLATFORMS.find(d => d.platform === platform) ?? PLATFORMS[0]!;
+              const crossPosts = getCrossPosts(p.id);
               return (
                 <div key={p.id} className="relative group">
                   <Link
@@ -493,17 +644,34 @@ export default function ProjectsPage() {
                     <div className="flex items-start gap-3 mb-4 pr-10">
                       <div
                         className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0"
-                        style={{ background: tile.tileBg }}
+                        style={{ background: pdCfg.bg }}
                       >
-                        {CT_EMOJI[ct]}
+                        {formatEmoji(format)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-extrabold text-gray-900 text-sm leading-tight truncate mb-1">
                           {p.title}
                         </h3>
                         <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                          <Youtube className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                          <span className="truncate">{p.channel.title}</span>
+                          <PlatformIcon platform={platform} size={14} />
+                          {p.channel?.title ? (
+                            <span className="truncate">{p.channel.title}</span>
+                          ) : (
+                            <span className="truncate italic" style={{ color: '#f59e0b' }}>No account linked</span>
+                          )}
+                          {crossPosts.length > 0 && (
+                            <span className="flex items-center gap-1 ml-1">
+                              <span className="text-[10px] text-gray-300 mx-0.5">+</span>
+                              {crossPosts.slice(0, 3).map((cpId, i) => {
+                                const cpCh = channels.find(c => c.id === cpId);
+                                const cpPlatform = cpCh ? platformFromChannel(cpCh) : 'YOUTUBE';
+                                return <PlatformIcon key={i} platform={cpPlatform} size={12} />;
+                              })}
+                              {crossPosts.length > 3 && (
+                                <span className="text-[10px] text-gray-400">+{crossPosts.length - 3}</span>
+                              )}
+                            </span>
+                          )}
                           {p.niche && <><span>·</span><span className="truncate">{p.niche}</span></>}
                         </div>
                       </div>
@@ -518,9 +686,9 @@ export default function ProjectsPage() {
                       <div className="flex items-center gap-4">
                         <span
                           className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full"
-                          style={{ background: tile.badgeBg, color: tile.badgeColor }}
+                          style={{ background: pdCfg.bg, color: pdCfg.textColor }}
                         >
-                          {CT_LABEL[ct]}
+                          {formatEmoji(format)} {formatLabel(format)}
                         </span>
                         <span className="flex items-center gap-1 text-xs text-gray-400">
                           <Zap className="w-3 h-3" /> {p._count.jobs} jobs
@@ -554,146 +722,284 @@ export default function ProjectsPage() {
       {/* ── Create project modal ──────────────────────────────────────────── */}
       {showCreate && (
         <div
+          role="presentation"
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(15,10,40,0.65)', backdropFilter: 'blur(4px)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowCreate(false); }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeCreate(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') closeCreate(); }}
         >
           <div
-            className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden"
+            className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden"
             style={{ border: '1.5px solid #e3ddf8' }}
           >
             {/* Modal header */}
             <div
-              className="px-7 py-5 flex items-center justify-between"
+              className="px-7 py-5 flex items-start justify-between gap-4"
               style={{ borderBottom: '1.5px solid #f0edf9' }}
             >
-              <div>
+              <div className="space-y-2.5">
                 <h2 className="text-lg font-extrabold text-gray-900">New Project</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Choose a type and fill in the details</p>
+                {/* Step indicator */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {[{ n: 1, label: 'Platform & Format' }, { n: 2, label: 'Accounts & Details' }].map(({ n, label }) => (
+                    <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 11, fontWeight: 800,
+                        background: createStep >= n ? '#6D4AE0' : '#e5e7eb',
+                        color: createStep >= n ? '#fff' : '#9ca3af',
+                      }}>{n}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: createStep === n ? '#6D4AE0' : '#9ca3af' }}>{label}</span>
+                      {n < 2 && <span style={{ width: 24, height: 2, background: '#e5e7eb', borderRadius: 2 }} />}
+                    </div>
+                  ))}
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowCreate(false)}
-                className="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors text-lg leading-none"
+                onClick={closeCreate}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors text-lg leading-none shrink-0"
               >
                 ×
               </button>
             </div>
 
-            <div className="px-7 py-6 space-y-5">
-              {/* Content type tiles */}
-              <Field label="Content type">
-                <div className="grid grid-cols-3 gap-3 mt-0.5">
-                  {CONTENT_TYPES.map((ct) => {
-                    const selected = form.contentType === ct.type;
-                    return (
-                      <button
-                        key={ct.type}
-                        type="button"
-                        onClick={() => setForm((f) => ({ ...f, contentType: ct.type }))}
-                        className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl text-center transition-all"
-                        style={
-                          selected
-                            ? { background: '#f5f2fd', border: '2px solid #6D4AE0' }
-                            : { background: '#faf9ff', border: '1.5px solid #e3ddf8' }
-                        }
-                      >
-                        <span className="text-2xl" aria-hidden>{ct.emoji}</span>
-                        <span
-                          className="text-xs font-bold leading-none"
-                          style={{ color: selected ? '#6D4AE0' : '#374151' }}
+            {/* ── Step 1: Platform & Format ── */}
+            {createStep === 1 && (
+              <>
+                <div className="px-7 py-6 space-y-5 max-h-[60vh] overflow-y-auto">
+                  {/* Platform grid */}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-3">Platform</p>
+                    <div className="grid grid-cols-4 gap-3">
+                      {PLATFORMS.map((pd) => (
+                        <button
+                          key={pd.platform}
+                          type="button"
+                          onClick={() => {
+                            setForm(f => ({
+                              ...f,
+                              platform: pd.platform,
+                              contentFormat: pd.formats[0]!.type,
+                              primaryChannelId: '',
+                              crossPostChannelIds: [],
+                            }));
+                          }}
+                          style={form.platform === pd.platform
+                            ? { background: pd.bg, border: `2px solid ${pd.color}` }
+                            : { background: '#faf9ff', border: '1.5px solid #e3ddf8' }}
+                          className="flex flex-col items-center gap-1.5 py-4 px-2 rounded-2xl text-center transition-all hover:border-gray-300"
                         >
-                          {ct.label}
-                        </span>
-                        <span className="text-[10px] text-gray-400 leading-tight">{ct.desc}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </Field>
+                          <span style={{ fontSize: 22 }}>{pd.emoji}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: form.platform === pd.platform ? pd.textColor : '#374151' }}>{pd.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Channel select */}
-              <Field label="Channel">
-                <div className="relative">
-                  <select
-                    aria-label="Channel"
-                    value={form.channelId}
-                    onChange={(e) => setForm((f) => ({ ...f, channelId: e.target.value }))}
-                    className={`${inputCls} pr-10 appearance-none cursor-pointer`}
-                    style={inputStyle}
+                  {/* Format grid */}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-3">Content format</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      {selPlatform.formats.map(fd => (
+                        <button
+                          key={fd.type}
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, contentFormat: fd.type }))}
+                          style={form.contentFormat === fd.type
+                            ? { background: selPlatform.bg, border: `2px solid ${selPlatform.color}` }
+                            : { background: '#faf9ff', border: '1.5px solid #e3ddf8' }}
+                          className="flex flex-col items-start gap-1 p-3.5 rounded-2xl text-left transition-all"
+                        >
+                          <span style={{ fontSize: 18 }}>{fd.emoji}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: form.contentFormat === fd.type ? selPlatform.textColor : '#374151' }}>{fd.label}</span>
+                          <span style={{ fontSize: 10, color: '#6b7280', lineHeight: 1.35 }}>{fd.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step 1 footer */}
+                <div
+                  className="px-7 py-5 flex items-center justify-between gap-3"
+                  style={{ borderTop: '1.5px solid #f0edf9' }}
+                >
+                  <button
+                    type="button"
+                    onClick={closeCreate}
+                    className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
                   >
-                    <option value="">Select a channel…</option>
-                    {channels.map((ch) => (
-                      <option key={ch.id} value={ch.id}>{ch.title}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateStep(2)}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+                    style={{
+                      background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)',
+                      boxShadow: '0 4px 16px rgba(109,74,224,0.30)',
+                    }}
+                  >
+                    Next →
+                  </button>
                 </div>
-                {channels.length === 0 && (
-                  <p className="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
-                    <span>⚠</span> No channels connected yet —{' '}
-                    <Link href="/library?tab=channels" className="underline" onClick={() => setShowCreate(false)}>connect one first</Link>
-                  </p>
-                )}
-              </Field>
+              </>
+            )}
 
-              {/* Title */}
-              <Field label="Project title">
-                <input
-                  placeholder="e.g. How to Start Investing in 2025"
-                  value={form.title}
-                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  className={inputCls}
-                  style={inputStyle}
-                />
-              </Field>
+            {/* ── Step 2: Accounts & Details ── */}
+            {createStep === 2 && (
+              <>
+                <div className="px-7 py-6 space-y-5 max-h-[60vh] overflow-y-auto">
+                  {/* Primary account */}
+                  <Field
+                    label="Primary account (optional)"
+                    hint={`Optimizes content for ${selPlatform.label}. You can connect an account now or publish later.`}
+                  >
+                    {platformChannels.length === 0 ? (
+                      <div
+                        className="rounded-2xl px-4 py-3 text-sm"
+                        style={{ background: '#fffbeb', color: '#92400e', border: '1.5px solid #fde68a' }}
+                      >
+                        <span className="font-semibold">No {selPlatform.label} accounts connected.</span>
+                        {' '}You can still create this project and publish later.{' '}
+                        <Link
+                          href="/library?tab=channels"
+                          className="font-bold underline hover:opacity-75"
+                          onClick={closeCreate}
+                        >
+                          Go to Channel Access →
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <select
+                          aria-label="Primary account"
+                          value={form.primaryChannelId}
+                          onChange={(e) => setForm(f => ({ ...f, primaryChannelId: e.target.value }))}
+                          className={`${inputCls} pr-10 appearance-none cursor-pointer`}
+                          style={inputStyle}
+                        >
+                          <option value="">Select a {selPlatform.label} account…</option>
+                          {platformChannels.map(ch => (
+                            <option key={ch.id} value={ch.id}>{ch.title}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                      </div>
+                    )}
+                  </Field>
 
-              {/* Niche */}
-              <Field
-                label="Niche"
-                hint={
-                  form.contentType === 'MUSIC'  ? 'e.g. Gospel, R&B, Worship' :
-                  form.contentType === 'SHORT'  ? 'e.g. Tech Tips, Life Hacks, Finance' :
-                  'e.g. Technology, Personal Finance, Cooking'
-                }
-              >
-                <input
-                  placeholder="Optional — helps AI tune content"
-                  value={form.niche}
-                  onChange={(e) => setForm((f) => ({ ...f, niche: e.target.value }))}
-                  className={inputCls}
-                  style={inputStyle}
-                />
-              </Field>
-            </div>
+                  {/* Cross-post */}
+                  <Field
+                    label="Cross-post to (optional)"
+                    hint="Also publish this content to other connected accounts."
+                  >
+                    {otherChannels.length === 0 ? (
+                      <p style={{ fontSize: 12, color: '#9ca3af' }}>
+                        No other accounts connected yet.{' '}
+                        <Link href="/library?tab=channels" className="text-[#6D4AE0] font-semibold hover:underline" onClick={closeCreate}>
+                          Add in Channel Access →
+                        </Link>
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {otherChannels.map(ch => {
+                          const chPlatform = platformFromChannel(ch);
+                          const chPd = PLATFORMS.find(d => d.platform === chPlatform) ?? PLATFORMS[0]!;
+                          const isSel = form.crossPostChannelIds.includes(ch.id);
+                          return (
+                            <button
+                              key={ch.id}
+                              type="button"
+                              onClick={() => setForm(f => ({
+                                ...f,
+                                crossPostChannelIds: isSel
+                                  ? f.crossPostChannelIds.filter(id => id !== ch.id)
+                                  : [...f.crossPostChannelIds, ch.id],
+                              }))}
+                              style={isSel
+                                ? { background: chPd.bg, border: `1.5px solid ${chPd.color}`, color: chPd.textColor }
+                                : { background: '#f9fafb', border: '1.5px solid #e5e7eb', color: '#374151' }}
+                              className="flex items-center gap-2 px-3 py-2 rounded-2xl text-xs font-semibold transition-all"
+                            >
+                              <PlatformIcon platform={chPlatform} size={14} />
+                              <span style={{ maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.title}</span>
+                              {isSel && <span style={{ fontSize: 10, marginLeft: 2 }}>✓</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Field>
 
-            {/* Modal footer */}
-            <div
-              className="px-7 py-5 flex items-center justify-between gap-3"
-              style={{ borderTop: '1.5px solid #f0edf9' }}
-            >
-              <button
-                type="button"
-                onClick={() => setShowCreate(false)}
-                className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => createMutation.mutate()}
-                disabled={!form.channelId || !form.title || createMutation.isPending}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-                style={{
-                  background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)',
-                  boxShadow: '0 4px 16px rgba(109,74,224,0.30)',
-                }}
-              >
-                {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                {createMutation.isPending ? 'Creating…' : 'Create project'}
-                {!createMutation.isPending && <Bot className="w-4 h-4 opacity-70" />}
-              </button>
-            </div>
+                  {/* Project title */}
+                  <Field label="Project title">
+                    <input
+                      placeholder={titlePlaceholder}
+                      value={form.title}
+                      onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))}
+                      className={inputCls}
+                      style={inputStyle}
+                    />
+                  </Field>
+
+                  {/* Niche */}
+                  <Field
+                    label="Niche / Topic"
+                    hint="Helps AI tune research & script for your audience"
+                  >
+                    <input
+                      placeholder="Optional — e.g. Personal Finance, Tech, Wellness"
+                      value={form.niche}
+                      onChange={(e) => setForm(f => ({ ...f, niche: e.target.value }))}
+                      className={inputCls}
+                      style={inputStyle}
+                    />
+                  </Field>
+
+                  {/* Goal */}
+                  <Field label="Goal / Brief">
+                    <textarea
+                      placeholder="Optional — describe the goal, angle, or target audience for this project"
+                      value={form.goal}
+                      onChange={(e) => setForm(f => ({ ...f, goal: e.target.value }))}
+                      rows={2}
+                      className={inputCls}
+                      style={{ ...inputStyle, resize: 'none' }}
+                    />
+                  </Field>
+                </div>
+
+                {/* Step 2 footer */}
+                <div
+                  className="px-7 py-5 flex items-center justify-between gap-3"
+                  style={{ borderTop: '1.5px solid #f0edf9' }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setCreateStep(1)}
+                    className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => createMutation.mutate()}
+                    disabled={!form.title || createMutation.isPending}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                    style={{
+                      background: 'linear-gradient(135deg, #6D4AE0 0%, #7c5ae8 100%)',
+                      boxShadow: '0 4px 16px rgba(109,74,224,0.30)',
+                    }}
+                  >
+                    {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {createMutation.isPending ? 'Creating…' : 'Create project'}
+                    {!createMutation.isPending && <Bot className="w-4 h-4 opacity-70" />}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

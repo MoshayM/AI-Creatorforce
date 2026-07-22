@@ -68,7 +68,8 @@ export class PublishingController {
   }
 
   @Post('publish')
-  @TierRateLimit({ bucket: 'publish', windowSecs: 86400, limits: { FREE: 2, STARTER: 10, PRO: 30, AGENCY: 100, default: 2 } })
+  // 30-day window matches billing page: Starter=5/mo, Pro/Agency=unlimited (9999)
+  @TierRateLimit({ bucket: 'publish', windowSecs: 2592000, limits: { FREE: 3, STARTER: 5, PRO: 9999, AGENCY: 9999, default: 3 } })
   publish(@Body() dto: PublishDto, @CurrentUser() user: JwtPayload) {
     return this.svc.publish(
       {

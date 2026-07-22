@@ -61,7 +61,8 @@ const nextConfig: NextConfig = {
       { source: '/publishing',    destination: '/publish?tab=publishing',    permanent: false },
       { source: '/approvals',     destination: '/publish?tab=approvals',     permanent: false },
       { source: '/scheduler',     destination: '/publish?tab=scheduler',     permanent: false },
-      { source: '/autonomy',      destination: '/publish?tab=autonomy',      permanent: false },
+      // /autonomy is now a live page (Autopilot) — keep the publish tab reachable via query param
+      { source: '/automation',    destination: '/autonomy',                  permanent: false },
       { source: '/ab-testing',    destination: '/publish?tab=ab-testing',    permanent: false },
       // Old individual Content routes → combined /content page
       { source: '/research',      destination: '/content?tab=research',      permanent: false },

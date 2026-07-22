@@ -4,6 +4,7 @@ import { BarChart2, TrendingUp, TrendingDown, Minus, Lightbulb, RefreshCw, Chevr
 import { ResultActions } from '@/components/result-actions';
 import { AiWorkingCard, formatDuration } from '@/components/ai-activity';
 import { StatCard, PastelBars, PastelDonut } from '@/components/stat-card';
+import { PlanGate, usePlan, planAtLeast } from '@/components/plan-gate';
 
 interface Insight {
   metric: string;
@@ -75,6 +76,8 @@ function PriorityBadge({ priority }: { priority: 'high' | 'medium' | 'low' }) {
 }
 
 export default function AnalyticsPage() {
+  const userPlan = usePlan();
+  const canAccessAiAnalysis = planAtLeast(userPlan, 'PRO');
   const [channelId, setChannelId] = useState('');
   const [analytics, setAnalytics] = useState<AnalyticsReport | null>(null);
   const [growth, setGrowth] = useState<GrowthReport | null>(null);
@@ -99,7 +102,6 @@ export default function AnalyticsPage() {
     callApi<TokenUsageSummary>('/token-usage/summary')
       .then(setTokenUsage)
       .catch(() => setTokenUsage('unavailable'));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function runAnalytics() {
@@ -133,7 +135,6 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (channelId) { void loadScorecard(channelId); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
 
   async function runGrowth() {
@@ -169,6 +170,7 @@ export default function AnalyticsPage() {
 
         {/* AI Usage card */}
         {activeView === 'usage' && (
+          <PlanGate requiredPlan="PRO" featureLabel="AI Usage" preview={false}>
           <div className="bg-white rounded-2xl p-5" style={{ border: '1.5px solid #e3ddf8' }}>
             <h2 className="font-bold text-gray-900 mb-3">AI Usage (30 days)</h2>
             {tokenUsage === 'unavailable' ? (
@@ -229,6 +231,7 @@ export default function AnalyticsPage() {
               </div>
             )}
           </div>
+          </PlanGate>
         )}
 
         {/* Channel selector + run — only show run button on analytics tab */}
@@ -279,20 +282,28 @@ export default function AnalyticsPage() {
 
         {/* Tab bar */}
         <div className="flex gap-2">
-          {(['scorecard', 'analytics', 'usage'] as const).map(v => (
-            <button
-              key={v}
-              onClick={() => setActiveView(v)}
-              className="flex-1 py-2.5 text-sm font-semibold rounded-2xl transition-all"
-              style={
-                activeView === v
-                  ? { background: '#f5f2fd', border: '2px solid #6D4AE0', color: '#6D4AE0' }
-                  : { background: '#faf9ff', border: '1.5px solid #e3ddf8', color: '#374151' }
-              }
-            >
-              {v === 'scorecard' ? 'Scorecard' : v === 'analytics' ? 'AI Analysis' : 'AI Usage'}
-            </button>
-          ))}
+          {(['scorecard', 'analytics', 'usage'] as const).map(v => {
+            const isPro = v !== 'scorecard';
+            const locked = isPro && !canAccessAiAnalysis;
+            return (
+              <button
+                key={v}
+                onClick={() => !locked && setActiveView(v)}
+                className="flex-1 py-2.5 text-sm font-semibold rounded-2xl transition-all flex items-center justify-center gap-1.5"
+                title={locked ? 'Requires Pro plan' : undefined}
+                style={
+                  activeView === v
+                    ? { background: '#f5f2fd', border: '2px solid #6D4AE0', color: '#6D4AE0' }
+                    : locked
+                    ? { background: '#faf9ff', border: '1.5px solid #e3ddf8', color: '#9ca3af', cursor: 'not-allowed' }
+                    : { background: '#faf9ff', border: '1.5px solid #e3ddf8', color: '#374151' }
+                }
+              >
+                {v === 'scorecard' ? 'Scorecard' : v === 'analytics' ? 'AI Analysis' : 'AI Usage'}
+                {locked && <span style={{ fontSize: 10 }}>🔒</span>}
+              </button>
+            );
+          })}
         </div>
 
         {/* Scorecard tab */}
@@ -371,7 +382,11 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {activeView === 'analytics' && loadingAnalytics && (
+        {activeView === 'analytics' && !canAccessAiAnalysis && (
+          <PlanGate requiredPlan="PRO" featureLabel="AI Analysis" preview={false} />
+        )}
+
+        {activeView === 'analytics' && canAccessAiAnalysis && loadingAnalytics && (
           <AiWorkingCard
             title="Analyzing channel performance"
             steps={[
@@ -383,7 +398,7 @@ export default function AnalyticsPage() {
         )}
 
         {/* Analytics report */}
-        {activeView === 'analytics' && analytics && !loadingAnalytics && (
+        {activeView === 'analytics' && canAccessAiAnalysis && analytics && !loadingAnalytics && (
           <div className="space-y-5 fade-in">
             <div className="flex items-center justify-between">
               <p className="text-xs text-gray-400">

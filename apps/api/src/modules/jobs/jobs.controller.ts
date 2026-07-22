@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Headers, Query, UseGuards, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Headers, Query, UseGuards, BadRequestException, ForbiddenException, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsOptional, IsObject } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -13,6 +13,28 @@ import { MEDIA_ERROR_RETRYABLE, type MediaErrorCode } from '@cf/shared';
 // edited version via lastResult(). SCRIPT is schema-validated so edits can
 // never break voice/subtitle/video generation.
 const OVERRIDABLE_TYPES: ReadonlySet<string> = new Set(['SCRIPT', 'TREND_ANALYSIS', 'MUSIC_BRIEF', 'METADATA']);
+
+/**
+ * Job types available on the Starter plan (3 AI agent families).
+ * Matches billing page: "3 AI agents" for Starter.
+ *   Family 1 — Research:  RESEARCH, TREND_ANALYSIS, AUDIENCE_ANALYSIS
+ *   Family 2 — Script:    SCRIPT, METADATA, SEO_OPTIMIZATION
+ *   Family 3 — Publish:   PUBLISH, CALENDAR_PROPOSAL
+ *   System/internal:      CHANNEL_SYNC, AUTOMATION_TICK, COMPLIANCE, FACT_CHECK
+ * Pro & Agency unlock all remaining agents.
+ */
+const STARTER_JOB_TYPES: ReadonlySet<JobType> = new Set<JobType>([
+  // Agent family 1 — Research & Strategy
+  'RESEARCH', 'TREND_ANALYSIS', 'AUDIENCE_ANALYSIS',
+  // Agent family 2 — Script & Copy
+  'SCRIPT', 'METADATA', 'SEO_OPTIMIZATION',
+  // Agent family 3 — Publishing
+  'PUBLISH', 'CALENDAR_PROPOSAL',
+  // Always-internal compliance (not user-triggered, but permitted to run)
+  'COMPLIANCE', 'FACT_CHECK',
+  // System heartbeat jobs
+  'CHANNEL_SYNC', 'AUTOMATION_TICK',
+]);
 
 function sanitizeJob(job: Record<string, unknown>, isAdmin: boolean): Record<string, unknown> {
   const { errorDetails, errorCode, ...rest } = job as {
@@ -70,8 +92,24 @@ export class JobsController {
   enqueue(
     @Body() dto: EnqueueDto,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
-    @CurrentUser() _user: JwtPayload,
+    @CurrentUser() user: JwtPayload,
   ) {
+    const plan = (user.plan ?? 'FREE') as string;
+    const isElevated = user.role === 'SUPER_ADMIN' || user.role === 'OWNER';
+
+    if (!isElevated) {
+      if (plan === 'FREE') {
+        throw new ForbiddenException(
+          'AI agents require a paid plan. Upgrade to Starter or higher to run jobs.',
+        );
+      }
+      if (plan === 'STARTER' && !STARTER_JOB_TYPES.has(dto.type as JobType)) {
+        throw new ForbiddenException(
+          `The "${dto.type}" agent requires Pro or above. Upgrade to unlock all 15 AI agents.`,
+        );
+      }
+    }
+
     return this.svc.enqueue(dto.projectId, dto.type as JobType, dto.payload, { idempotencyKey });
   }
 

@@ -90,6 +90,10 @@ function saveToHistory(text: string) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify([{ text, ts: Date.now() }, ...existing].slice(0, MAX_HISTORY)));
 }
 
+function removeFromHistory(text: string) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(loadHistory().filter(h => h.text !== text)));
+}
+
 function relTime(ts: number): string {
   const diff = Math.floor((Date.now() - ts) / 1000);
   if (diff < 5)     return 'just now';
@@ -298,6 +302,16 @@ export function CopilotPanel() {
 
   // history
   const [history, setHistory] = useState<{ text:string; ts:number }[]>([]);
+
+  function handleDeleteHistory(text: string) {
+    removeFromHistory(text);
+    setHistory(loadHistory());
+  }
+
+  function handleClearHistory() {
+    localStorage.removeItem(HISTORY_KEY);
+    setHistory([]);
+  }
 
   // misc
   const [currentPlan, setCurrentPlan] = useState<TaskPlan|null>(null);
@@ -1021,23 +1035,48 @@ export function CopilotPanel() {
             <div style={{ marginBottom:'8px' }}>
               <div style={{ display:'flex',alignItems:'center',gap:'6px',fontSize:'11px',fontWeight:700,letterSpacing:'.5px',textTransform:'uppercase',color:'#b8b5c8',marginBottom:'10px' }}>
                 <Clock style={{ width:'12px',height:'12px' }} /> Recent
+                {history.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearHistory}
+                    style={{ marginLeft:'auto',fontSize:'11px',fontWeight:600,color:'#b8b5c8',background:'none',border:'none',cursor:'pointer',padding:0,letterSpacing:'normal',textTransform:'none',fontFamily:'inherit' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color='#EF4444'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color='#b8b5c8'; }}
+                  >
+                    Clear all
+                  </button>
+                )}
               </div>
               {history.length === 0 ? (
                 <p style={{ fontSize:'12.5px',color:'#b8b5c8',textAlign:'center',marginTop:'16px' }}>Your recent prompts will appear here</p>
               ) : (
                 <div style={{ display:'flex',flexDirection:'column',gap:'4px' }}>
                   {history.map((h, i) => (
-                    <button
+                    <div
                       key={i}
-                      type="button"
-                      onClick={() => { setActiveTab('chat'); void send(h.text); }}
-                      style={{ display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',padding:'10px 12px',borderRadius:'10px',background:'transparent',border:'1px solid transparent',cursor:'pointer',textAlign:'left',transition:'background .15s,border-color .15s' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background='#F5F2FD'; (e.currentTarget as HTMLElement).style.borderColor='#EDE9F8'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background='transparent'; (e.currentTarget as HTMLElement).style.borderColor='transparent'; }}
+                      style={{ display:'flex',alignItems:'center',gap:'4px',borderRadius:'10px',transition:'background .15s' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background='#F5F2FD'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background='transparent'; }}
                     >
-                      <span style={{ fontSize:'13px',color:'#1E1B2E',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:'1 1 auto' }}>{h.text}</span>
-                      <span style={{ fontSize:'11px',color:'#b8b5c8',fontWeight:500,flexShrink:0 }}>{relTime(h.ts)}</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => { setActiveTab('chat'); void send(h.text); }}
+                        style={{ flex:'1 1 auto',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',padding:'10px 12px',borderRadius:'10px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left' }}
+                      >
+                        <span style={{ fontSize:'13px',color:'#1E1B2E',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:'1 1 auto' }}>{h.text}</span>
+                        <span style={{ fontSize:'11px',color:'#b8b5c8',fontWeight:500,flexShrink:0 }}>{relTime(h.ts)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove"
+                        onClick={() => handleDeleteHistory(h.text)}
+                        style={{ width:'26px',height:'26px',borderRadius:'7px',background:'transparent',border:'none',color:'#c4c0d4',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,marginRight:'4px',transition:'background .15s,color .15s' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background='#FEE2E2'; (e.currentTarget as HTMLElement).style.color='#EF4444'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background='transparent'; (e.currentTarget as HTMLElement).style.color='#c4c0d4'; }}
+                      >
+                        <X style={{ width:'12px',height:'12px' }} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}

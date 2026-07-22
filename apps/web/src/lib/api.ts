@@ -591,7 +591,7 @@ export const api = {
       return apiClient.get(`/projects${qs ? `?${qs}` : ''}`);
     },
     get: (id: string) => apiClient.get(`/projects/${id}`),
-    create: (data: { channelId: string; title: string; niche?: string; targetLang?: string }) =>
+    create: (data: { channelId?: string; title: string; niche?: string; targetLang?: string; contentFormat?: string; platforms?: string[] }) =>
       apiClient.post('/projects', data),
     update: (id: string, data: Record<string, unknown>) => apiClient.put(`/projects/${id}`, data),
     delete: (id: string) => apiClient.delete(`/projects/${id}`),

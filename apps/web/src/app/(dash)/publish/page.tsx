@@ -19,7 +19,7 @@ const TABS: TabDef[] = [
   { id: 'publishing',  label: 'Publishing',  icon: Upload },
   { id: 'approvals',   label: 'Approvals',   icon: CheckCircle },
   { id: 'scheduler',   label: 'Scheduler',   icon: CalendarClock },
-  { id: 'autonomy',    label: 'Autonomy',    icon: Sparkles,    badge: 'NEW' },
+  { id: 'autonomy',    label: 'Autopilot',   icon: Sparkles,    badge: 'NEW' },
   { id: 'ab-testing',  label: 'A/B Testing', icon: FlaskConical, badge: 'BETA' },
 ];
 
