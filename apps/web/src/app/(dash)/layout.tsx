@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, Settings, LogOut, Palette, Clapperboard, ListVideo, Wallet, Bell, ShieldCheck, Building2, ChevronDown, Film, Menu, X, Home, Bot, Upload, BookOpen, BarChart2, Search, Share2, Users, Clock, History, Inbox } from 'lucide-react';
+import { FolderOpen, Settings, LogOut, Palette, Clapperboard, ListVideo, Wallet, Bell, ShieldCheck, Building2, ChevronDown, Film, Menu, X, Home, Bot, Upload, BookOpen, BarChart2, Search } from 'lucide-react';
 import { CopilotPanel } from '@/components/copilot-panel';
 import { LogoMark } from '@/components/logo-mark';
 import { api, clearTokens, getRefreshToken, type AppNotification } from '@/lib/api';
@@ -39,15 +39,6 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: '/publish',  icon: Upload,    label: 'Publish' },
       { href: '/insights', icon: BarChart2, label: 'Insights' },
-    ],
-  },
-  {
-    category: 'Publishing',
-    items: [
-      { href: '/library?tab=channels',   icon: Users,   label: 'Accounts' },
-      { href: '/publish?tab=publishing', icon: Inbox,   label: 'Queue' },
-      { href: '/publish?tab=scheduler',  icon: Clock,   label: 'Scheduled' },
-      { href: '/publish?tab=history',    icon: History, label: 'History' },
     ],
   },
   {
