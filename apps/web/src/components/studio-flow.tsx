@@ -49,7 +49,7 @@ interface ScriptResult {
 
 interface Props {
   projectId: string;
-  channel: { title: string; youtubeChannelId: string };
+  channel: { title: string; youtubeChannelId: string } | null;
   jobs: Job[];
   anyPipelineRunning: boolean;
   progress: PipelineProgress | null;
@@ -1133,20 +1133,29 @@ export function StudioFlow({ projectId, channel, jobs, anyPipelineRunning, progr
         <div className="w-11 h-11 rounded-2xl bg-white shadow-sm flex items-center justify-center shrink-0">
           <Youtube className="w-5 h-5 text-red-500" />
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-gray-500">Producing for channel</p>
-          <p className="font-bold text-gray-900 truncate">{channel.title}</p>
-        </div>
-        {channels.length > 1 && (
-          <select
-            value={channels.find((c) => c.youtubeChannelId === channel.youtubeChannelId)?.id ?? ''}
-            onChange={(e) => switchChannel.mutate(e.target.value)}
-            disabled={switchChannel.isPending || busy}
-            aria-label="Switch channel"
-            className="border border-white bg-white/70 rounded-full px-3 py-1.5 text-xs text-gray-700"
-          >
-            {channels.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-          </select>
+        {channel ? (
+          <>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500">Producing for channel</p>
+              <p className="font-bold text-gray-900 truncate">{channel.title}</p>
+            </div>
+            {channels.length > 1 && (
+              <select
+                value={channels.find((c) => c.youtubeChannelId === channel.youtubeChannelId)?.id ?? ''}
+                onChange={(e) => switchChannel.mutate(e.target.value)}
+                disabled={switchChannel.isPending || busy}
+                aria-label="Switch channel"
+                className="border border-white bg-white/70 rounded-full px-3 py-1.5 text-xs text-gray-700"
+              >
+                {channels.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+              </select>
+            )}
+          </>
+        ) : (
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-500">Producing for channel</p>
+            <p className="text-xs text-gray-400 italic">No channel connected</p>
+          </div>
         )}
       </div>
 

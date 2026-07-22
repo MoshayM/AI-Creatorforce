@@ -11,11 +11,11 @@ import {
   Check, Copy, Download,
   RotateCcw, ArrowRightLeft, Timer, Trash2, Pause,
   FileText, RefreshCw, Film, Search, ShieldCheck, Tag, Image as ImageIcon,
-  Youtube, Send, X,
+  Youtube, Send, X, Clapperboard, Sparkles,
 } from 'lucide-react';
 import type { ProjectPublishReady } from '@/lib/api';
 
-type PageTab = 'pipeline' | 'script' | 'storyboard' | 'seo' | 'checks';
+type PageTab = 'pipeline' | 'script' | 'storyboard' | 'seo' | 'checks' | 'export';
 
 // ─── Storyboard Types ─────────────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@ interface ProjectDetail {
   status: string;
   /** Phase 5 §10: org whose shared wallet pays for this project's AI jobs. */
   billingOrgId?: string | null;
-  channel: { title: string; youtubeChannelId: string };
+  channel: { id: string; title: string; youtubeChannelId: string } | null;
   jobs: Job[];
 }
 
@@ -849,7 +849,14 @@ export default function ProjectDetailPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{project.title}</h1>
-            <p className="text-gray-500 mt-1">{project.channel.title}{project.niche ? ` · ${project.niche}` : ''}</p>
+            <p className="text-gray-500 mt-1">
+              {project.channel ? project.channel.title : (
+                <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                  No channel connected
+                </span>
+              )}
+              {project.niche ? ` · ${project.niche}` : ''}
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <BillingOrgPicker projectId={id} billingOrgId={project.billingOrgId} />
@@ -859,6 +866,12 @@ export default function ProjectDetailPage() {
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${project.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
               {project.status}
             </span>
+            <Link
+              href="/shorts-studio"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-[#d4c9f9] text-[#6D4AE0] bg-[#f5f2fd] hover:bg-[#ede9fe] transition-colors"
+            >
+              <Clapperboard className="w-3.5 h-3.5" /> Shorts Studio
+            </Link>
           </div>
         </div>
       </div>
@@ -903,6 +916,13 @@ export default function ProjectDetailPage() {
         >
           <ShieldCheck className="w-3.5 h-3.5" /> Checks
           {(hasDoneFactCheck || hasDoneCompliance) && <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('export')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${activeTab === 'export' ? 'bg-white shadow text-brand-700' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <Download className="w-3.5 h-3.5" /> Export &amp; Publish
         </button>
       </div>
 
@@ -1510,8 +1530,263 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
+      {/* ── Export & Publish tab ─────────────────────────────────────────────── */}
+      {activeTab === 'export' && (
+        <div className="space-y-6">
+
+          {/* Export section */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-6">
+            <h2 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              <Download className="w-4 h-4 text-[#6D4AE0]" /> Export Assets
+            </h2>
+            <p className="text-xs text-gray-400 mb-5">Download your content assets locally — no channel connection needed.</p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {/* Script download */}
+              <div className="rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Script</p>
+                    <p className="text-xs text-gray-400">{latestScriptJob ? 'Ready to download' : 'Generate script first'}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    disabled={!latestScriptJob?.result}
+                    onClick={() => {
+                      if (!latestScriptJob?.result) return;
+                      const r = latestScriptJob.result as Record<string, unknown>;
+                      const title = String(r['title'] ?? project.title);
+                      const sections = (r['sections'] as Array<{ heading: string; content: string }>) ?? [];
+                      const text = [title, ...sections.map((s) => `${s.heading}\n${s.content}`)].join('\n\n');
+                      const blob = new Blob([text], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url; a.download = `${title.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.txt`;
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    .txt
+                  </button>
+                  <button
+                    disabled={!latestScriptJob?.result}
+                    onClick={() => {
+                      if (!latestScriptJob?.result) return;
+                      const r = latestScriptJob.result as Record<string, unknown>;
+                      const title = String(r['title'] ?? project.title);
+                      const sections = (r['sections'] as Array<{ heading: string; content: string }>) ?? [];
+                      const md = [`# ${title}`, ...sections.map((s) => `## ${s.heading}\n\n${s.content}`)].join('\n\n');
+                      const blob = new Blob([md], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url; a.download = `${title.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.md`;
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    .md
+                  </button>
+                </div>
+              </div>
+
+              {/* Storyboard download */}
+              <div className="rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center flex-shrink-0">
+                    <Film className="w-4 h-4 text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Storyboard</p>
+                    <p className="text-xs text-gray-400">{storyboardData ? `${storyboardData.scenes.length} scenes` : 'Generate storyboard first'}</p>
+                  </div>
+                </div>
+                <button
+                  disabled={!storyboardData}
+                  onClick={() => {
+                    if (!storyboardData) return;
+                    const json = JSON.stringify(storyboardData, null, 2);
+                    const blob = new Blob([json], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = `${project.title.replace(/[^a-z0-9]/gi,'_').toLowerCase()}_storyboard.json`;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  .json
+                </button>
+              </div>
+
+              {/* Thumbnail brief download */}
+              <div className="rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                    <ImageIcon className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Thumbnail Brief</p>
+                    <p className="text-xs text-gray-400">{thumbnailResult ? 'Ready' : 'Generate thumbnail brief first'}</p>
+                  </div>
+                </div>
+                <button
+                  disabled={!thumbnailResult}
+                  onClick={() => {
+                    if (!thumbnailResult) return;
+                    const text = [
+                      `Concept: ${thumbnailResult.concept}`,
+                      thumbnailResult.suggestedTextOverlay ? `Text Overlay: ${thumbnailResult.suggestedTextOverlay}` : '',
+                      thumbnailResult.colorScheme ? `Colors: ${thumbnailResult.colorScheme}` : '',
+                      thumbnailResult.visualElements?.length ? `Elements: ${thumbnailResult.visualElements.join(', ')}` : '',
+                    ].filter(Boolean).join('\n');
+                    const blob = new Blob([text], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = `${project.title.replace(/[^a-z0-9]/gi,'_').toLowerCase()}_thumbnail.txt`;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  .txt
+                </button>
+              </div>
+
+              {/* Shorts Studio shortcut */}
+              <div className="rounded-xl border border-[#d4c9f9] p-4 flex items-center justify-between gap-3"
+                   style={{ background: '#f5f2fd' }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                       style={{ background: 'linear-gradient(135deg, #6D4AE0, #7c5ae8)' }}>
+                    <Clapperboard className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Shorts Studio</p>
+                    <p className="text-xs text-gray-400">Repurpose into TikTok/Reels/Shorts</p>
+                  </div>
+                </div>
+                <Link
+                  href="/shorts-studio"
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white transition-opacity hover:opacity-90"
+                  style={{ background: 'linear-gradient(135deg, #6D4AE0, #7c5ae8)' }}
+                >
+                  Open →
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* Publish section */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-6">
+            <h2 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              <Send className="w-4 h-4 text-[#6D4AE0]" /> Publish
+            </h2>
+            <p className="text-xs text-gray-400 mb-5">Publish to YouTube, TikTok, Instagram, and more — or skip and download instead.</p>
+
+            {project.channel ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-4 rounded-xl bg-green-50 border border-green-200">
+                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-green-800">Channel connected</p>
+                    <p className="text-xs text-green-600">{project.channel.title}</p>
+                  </div>
+                </div>
+                <PublishFromRenderPanel projectId={id} />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-[#d4c9f9] p-5 text-center"
+                     style={{ background: 'linear-gradient(135deg, #f5f2fd 0%, #faf9ff 100%)' }}>
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-2xl flex items-center justify-center"
+                       style={{ background: 'linear-gradient(135deg, #6D4AE0, #7c5ae8)' }}>
+                    <Send className="w-6 h-6 text-white" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900 mb-1">Ready to publish?</h3>
+                  <p className="text-sm text-gray-500 mb-4 max-w-xs mx-auto">
+                    Connect a channel to publish directly, or download your content and upload manually.
+                  </p>
+                  <div className="flex justify-center gap-3">
+                    <Link
+                      href="/library?tab=channels"
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                      style={{ background: 'linear-gradient(135deg, #6D4AE0, #7c5ae8)' }}
+                    >
+                      Connect Channel
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('export')}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      <Download className="w-4 h-4" /> Download Instead
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
       {/* ── Pipeline tab (existing content) ──────────────────────────────── */}
       {activeTab === 'pipeline' && <>
+
+      {/* Welcome panel for new projects with no jobs */}
+      {project.jobs.length === 0 && (
+        <div className="mb-6 rounded-2xl overflow-hidden border border-[#d4c9f9]"
+             style={{ background: 'linear-gradient(135deg, #f5f2fd 0%, #faf9ff 100%)' }}>
+          <div className="px-6 py-5">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
+                   style={{ background: 'linear-gradient(135deg, #6D4AE0, #7c5ae8)' }}>
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-gray-900 text-base mb-0.5">Your workspace is ready</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Start creating — no channel connection needed. Run AI agents to build your content, then download or publish when ready.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { icon: Search,    label: 'Research Topic',  color: '#6D4AE0', bg: '#f5f2fd', jobType: 'RESEARCH' },
+                    { icon: FileText,  label: 'Write Script',    color: '#0284c7', bg: '#f0f9ff', jobType: 'SCRIPT' },
+                    { icon: Tag,       label: 'SEO Metadata',    color: '#0891b2', bg: '#ecfeff', jobType: 'METADATA' },
+                    { icon: ImageIcon, label: 'Thumbnail Idea',  color: '#d97706', bg: '#fffbeb', jobType: 'THUMBNAIL' },
+                  ].map(({ icon: Icon, label, color, bg, jobType }) => (
+                    <button
+                      key={jobType}
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await api.jobs.enqueue(id, jobType as Parameters<typeof api.jobs.enqueue>[1], {});
+                          void qc.invalidateQueries({ queryKey: ['project', id] });
+                        } catch { /* handled by UI */ }
+                      }}
+                      className="flex flex-col items-center gap-2 p-3 rounded-xl border text-center hover:opacity-90 transition-opacity"
+                      style={{ background: bg, borderColor: color + '33', color }}
+                    >
+                      <Icon className="w-5 h-5" />
+                      <span className="text-xs font-semibold leading-tight">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          {!project.channel && (
+            <div className="px-6 py-3 border-t border-[#d4c9f9]"
+                 style={{ background: '#faf9ff' }}>
+              <p className="text-xs text-gray-500">
+                💡 <strong>Offline mode</strong> — All AI tools work without a connected channel. Connect later when you want to publish.{' '}
+                <Link href="/library?tab=channels" className="text-[#6D4AE0] font-semibold hover:underline">Connect a channel →</Link>
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Guided step-by-step studio flow (design ref: image.png / project.PNG) */}
       <StudioFlow
@@ -1768,11 +2043,11 @@ function PublishFromRenderPanel({ projectId }: { projectId: string }) {
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!data?.render?.r2Key || !data.approval || !data.video) return;
+      if (!data?.render?.r2Key || !data.approval || !data.video || !data.project.channel) return;
       setError('');
       await api.publishing.publish({
         videoId: data.video.id,
-        channelId: data.project.channel.id,
+        channelId: data.project.channel?.id ?? '',
         title: data.video.title,
         description: data.video.description ?? '',
         tags: data.video.tags,
@@ -1791,6 +2066,21 @@ function PublishFromRenderPanel({ projectId }: { projectId: string }) {
 
   if (isLoading) return null;
   if (!data) return null;
+
+  // No channel connected — show prompt instead of publish UI
+  if (!data.project.channel) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex items-center gap-3">
+        <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+        <div>
+          <p className="text-sm font-semibold text-amber-800">Connect a channel to publish</p>
+          <Link href="/library?tab=channels" className="text-xs text-amber-700 underline">
+            Go to Channel Library →
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const { render, approval, video, canPublish } = data;
 
@@ -1878,7 +2168,7 @@ function PublishFromRenderPanel({ projectId }: { projectId: string }) {
               </div>
               <div className="bg-gray-50 rounded-xl p-3">
                 <p className="text-xs text-gray-500 mb-0.5">Channel</p>
-                <p className="text-sm font-medium text-gray-900">{data.project.channel.title}</p>
+                <p className="text-sm font-medium text-gray-900">{data.project.channel?.title ?? 'Unknown channel'}</p>
               </div>
               {render?.preset && (
                 <div className="bg-gray-50 rounded-xl p-3">

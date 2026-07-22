@@ -520,7 +520,7 @@ export interface PublishTrackingSummary {
 }
 
 export interface ProjectPublishReady {
-  project: { id: string; title: string; description: string | null; channel: { id: string; title: string } };
+  project: { id: string; title: string; description: string | null; channel: { id: string; title: string } | null };
   render: { id: string; r2Key: string | null; preset: string; durationMs: number | null; sizeBytes: string | null; checksum: string | null } | null;
   approval: { id: string; reviewedAt: string | null; expiresAt: string } | null;
   video: { id: string; title: string; description: string | null; tags: string[]; status: string; youtubeVideoId: string | null } | null;
