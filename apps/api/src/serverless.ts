@@ -2,7 +2,7 @@ import './instrument';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
-import * as express from 'express';
+import express from 'express';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
