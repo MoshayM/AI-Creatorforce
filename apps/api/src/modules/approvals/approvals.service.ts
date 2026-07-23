@@ -70,14 +70,23 @@ export class ApprovalsService {
     return pageResult(rows, take, (r) => r.createdAt);
   }
 
-  async approve(approvalId: string, userId: string, notes?: string) {
+  async approve(approvalId: string, userId: string, notes?: string, scheduledAt?: Date) {
     const approval = await this.getOwnedApproval(approvalId, userId);
     if (approval.expiresAt < new Date()) throw new BadRequestException('Approval expired');
+
+    // YouTube requires at least 30 minutes for a scheduled premiere
+    if (scheduledAt) {
+      if (isNaN(scheduledAt.getTime())) throw new BadRequestException('Invalid scheduled date');
+      const minScheduledAt = new Date(Date.now() + 30 * 60 * 1000);
+      if (scheduledAt <= minScheduledAt) {
+        throw new BadRequestException('Scheduled publish time must be at least 30 minutes in the future');
+      }
+    }
 
     const [updated] = await this.prisma.$transaction([
       this.prisma.approval.update({
         where: { id: approvalId },
-        data: { status: 'APPROVED', reviewedBy: userId, reviewedAt: new Date(), notes },
+        data: { status: 'APPROVED', reviewedBy: userId, reviewedAt: new Date(), notes, scheduledAt: scheduledAt ?? null },
       }),
       // Transition the associated job from WAITING_APPROVAL → COMPLETED so downstream
       // steps (SEO, Thumbnail, Publish) become runnable.
@@ -88,7 +97,7 @@ export class ApprovalsService {
     ]);
 
     // Notify frontend via WebSocket so the page updates without a full refresh.
-    this.events.emitJobComplete(approval.jobId, { approved: true });
+    this.events.emitJobComplete(approval.jobId, { approved: true, scheduledAt: scheduledAt?.toISOString() });
 
     // Shorts publish approvals: the review IS the last human step — enqueue
     // the publish server-side so it doesn't depend on a browser tab polling.
@@ -104,12 +113,21 @@ export class ApprovalsService {
           where: { id: result.shortClipId },
           data: { status: 'APPROVED' },
         });
+        const delayMs = scheduledAt ? scheduledAt.getTime() - Date.now() : undefined;
         await this.jobs.enqueue(job.projectId, 'SHORTS_PUBLISH', {
           shortClipId: result.shortClipId,
           exportId: result.exportId,
           approvalId,
-        }, { idempotencyKey: `SHORTS_PUBLISH-${result.shortClipId}-${approvalId}` });
-        this.logger.log(`Approved shorts export — auto-enqueued SHORTS_PUBLISH for clip ${result.shortClipId}`);
+          ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
+        }, {
+          idempotencyKey: `SHORTS_PUBLISH-${result.shortClipId}-${approvalId}`,
+          ...(delayMs ? { delayMs } : {}),
+        });
+        this.logger.log(
+          scheduledAt
+            ? `Approved shorts export — scheduled SHORTS_PUBLISH for clip ${result.shortClipId} at ${scheduledAt.toISOString()}`
+            : `Approved shorts export — auto-enqueued SHORTS_PUBLISH for clip ${result.shortClipId}`,
+        );
       }
     } catch (err) {
       this.logger.warn(`Post-approval publish enqueue failed (resumable via API): ${err instanceof Error ? err.message : String(err)}`);

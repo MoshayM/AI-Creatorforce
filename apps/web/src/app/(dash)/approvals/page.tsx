@@ -1,6 +1,9 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, XCircle, Clock, Loader2, Clapperboard, Tag, FileText, History, ExternalLink, ChevronDown, ChevronRight, Scissors } from 'lucide-react';
+import {
+  CheckCircle, XCircle, Clock, Loader2, Clapperboard, Tag, FileText,
+  History, ExternalLink, ChevronDown, ChevronRight, Scissors, CalendarClock, X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, apiClient } from '@/lib/api';
@@ -11,6 +14,7 @@ interface Approval {
   status: string;
   expiresAt: string;
   reviewedAt?: string | null;
+  scheduledAt?: string | null;
   notes?: string | null;
   project: { title: string; channel: { title: string } };
   job: { type: string; result: unknown };
@@ -107,8 +111,6 @@ function isDisplayable(v: unknown): boolean {
 function GenericResultView({ result }: { result: unknown }) {
   if (!result || typeof result !== 'object') return null;
   const obj = result as Record<string, unknown>;
-  // One level of nesting is hoisted so payloads like { metadata: { title } }
-  // show the reviewer what they are approving without opening the raw JSON.
   const flat: Array<[string, unknown]> = [];
   for (const [k, v] of Object.entries(obj)) {
     if (isDisplayable(v)) {
@@ -144,11 +146,6 @@ function GenericResultView({ result }: { result: unknown }) {
   );
 }
 
-/**
- * Reviewed/expired approval: compact row that expands on click into the full
- * review card (video preview + metadata for shorts). The preview blob only
- * loads once expanded, so a long history stays cheap.
- */
 function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggle: () => void }) {
   const shorts = isShortsExport(a.job.type, a.job.result) ? a.job.result : null;
   const title = shorts?.metadata?.title
@@ -170,6 +167,12 @@ function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggl
         >
           {effectiveStatus}
         </span>
+        {a.scheduledAt && effectiveStatus === 'APPROVED' && (
+          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 flex items-center gap-1" style={{ background: '#eff6ff', color: '#1d4ed8' }}>
+            <CalendarClock className="w-3 h-3" />
+            {new Date(a.scheduledAt).toLocaleString()}
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-gray-900 truncate">{title}</p>
           <p className="text-[11px] text-gray-400 truncate">
@@ -194,11 +197,84 @@ function HistoryRow({ a, open, onToggle }: { a: Approval; open: boolean; onToggl
           {shorts ? <ShortsExportReview result={shorts} /> : <GenericResultView result={a.job.result} />}
           <div className="text-xs text-gray-400 space-y-0.5 -mt-2">
             {a.notes && <p><span className="text-gray-500">Review notes:</span> "{a.notes}"</p>}
+            {a.scheduledAt && <p><span className="text-gray-500">Scheduled publish:</span> {new Date(a.scheduledAt).toLocaleString()}</p>}
             {a.reviewedAt && <p><span className="text-gray-500">Reviewed:</span> {new Date(a.reviewedAt).toLocaleString()}</p>}
             <p><span className="text-gray-500">Expires{effectiveStatus === 'EXPIRED' ? 'd' : ''}:</span> {new Date(a.expiresAt).toLocaleString()}</p>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Inline schedule picker panel shown below the action buttons. */
+function SchedulePanel({
+  approvalId,
+  onConfirm,
+  onCancel,
+  isPending,
+}: {
+  approvalId: string;
+  onConfirm: (id: string, scheduledAt: string) => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  // Default to tomorrow at 10:00 in local time
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(10, 0, 0, 0);
+  const localIso = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+
+  const [value, setValue] = useState(localIso);
+
+  // Minimum: 30 minutes from now (YouTube requirement)
+  const minValue = new Date(Date.now() + 31 * 60 * 1000);
+  const minIso = new Date(minValue.getTime() - minValue.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+
+  const handleConfirm = () => {
+    if (!value) return;
+    // Convert local datetime-local string to ISO string with timezone offset
+    const picked = new Date(value);
+    if (isNaN(picked.getTime())) return;
+    onConfirm(approvalId, picked.toISOString());
+  };
+
+  return (
+    <div className="mt-4 rounded-2xl p-4" style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe' }}>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-semibold text-blue-800 flex items-center gap-1.5">
+          <CalendarClock className="w-4 h-4" />
+          Schedule publish time
+        </p>
+        <button onClick={onCancel} className="text-blue-400 hover:text-blue-600">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <p className="text-xs text-blue-600 mb-3">
+        YouTube will keep the video private until this time. Minimum 30 minutes from now.
+      </p>
+      <div className="flex items-center gap-3 flex-wrap">
+        <input
+          type="datetime-local"
+          value={value}
+          min={minIso}
+          onChange={(e) => setValue(e.target.value)}
+          className="flex-1 min-w-0 rounded-xl px-3 py-2 text-sm border border-blue-200 bg-white outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400"
+        />
+        <button
+          onClick={handleConfirm}
+          disabled={isPending || !value}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-all"
+          style={{ background: '#1d4ed8' }}
+        >
+          {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
+          Confirm schedule
+        </button>
+      </div>
     </div>
   );
 }
@@ -209,6 +285,9 @@ export default function ApprovalsPage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  const [scheduleOpenFor, setScheduleOpenFor] = useState<string | null>(null);
+  // Success banner: set after scheduling so user knows it will auto-publish
+  const [scheduledSuccess, setScheduledSuccess] = useState<string | null>(null);
 
   const { data: approvals = [], isLoading } = useQuery<Approval[]>({
     queryKey: ['approvals'],
@@ -223,10 +302,17 @@ export default function ApprovalsPage() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: ({ id }: { id: string }) => api.approvals.approve(id, notes[id]),
-    onSuccess: (_, { id }) => {
+    mutationFn: ({ id, scheduledAt }: { id: string; scheduledAt?: string }) =>
+      api.approvals.approve(id, notes[id], scheduledAt),
+    onSuccess: (_, { id, scheduledAt }) => {
       qc.setQueryData<Approval[]>(['approvals'], (old) => (old ?? []).filter((a) => a.id !== id));
       void qc.invalidateQueries({ queryKey: ['approvals-history'] });
+      setScheduleOpenFor(null);
+      if (scheduledAt) {
+        const dateStr = new Date(scheduledAt).toLocaleString();
+        setScheduledSuccess(`Scheduled! Your video will publish automatically on ${dateStr}. No further action needed.`);
+        setTimeout(() => setScheduledSuccess(null), 8000);
+      }
     },
   });
   const rejectMutation = useMutation({
@@ -237,7 +323,6 @@ export default function ApprovalsPage() {
       void qc.invalidateQueries({ queryKey: ['shorts-clips'] });
     },
   });
-  // "Needs work": close the approval, put the clip back in editing, open the editor.
   const moveToEditingMutation = useMutation({
     mutationFn: ({ id }: { id: string }) =>
       api.approvals.moveToEditing(id, notes[id]).then((r) => r.data as { shortClipId: string }),
@@ -257,6 +342,14 @@ export default function ApprovalsPage() {
           <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">Approval Center</h1>
           <p className="text-sm text-gray-400 mt-0.5">Review AI-generated content before it goes live</p>
         </div>
+
+        {/* Auto-publish scheduled confirmation banner */}
+        {scheduledSuccess && (
+          <div className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-green-800" style={{ background: '#ecfdf5', border: '1.5px solid #a7f3d0' }}>
+            <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+            {scheduledSuccess}
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex justify-center py-20">
@@ -302,16 +395,38 @@ export default function ApprovalsPage() {
                   />
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex gap-3 flex-wrap">
+                  {/* Approve & Publish Now */}
                   <button
                     onClick={() => approveMutation.mutate({ id: a.id })}
-                    disabled={approveMutation.isPending}
+                    disabled={approveMutation.isPending || scheduleOpenFor === a.id}
                     className="flex items-center gap-2 px-4 py-2 rounded-2xl font-bold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
                     style={{ background: '#15803d', boxShadow: '0 4px 16px rgba(21,128,61,0.25)' }}
                   >
-                    <CheckCircle className="w-4 h-4" />
-                    Approve
+                    {approveMutation.isPending && approveMutation.variables?.id === a.id && !approveMutation.variables?.scheduledAt
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <CheckCircle className="w-4 h-4" />}
+                    Approve &amp; Publish Now
                   </button>
+
+                  {/* Schedule button — only for Shorts exports that go to YouTube */}
+                  {isShortsExport(a.job.type, a.job.result) && (
+                    <button
+                      onClick={() => setScheduleOpenFor((prev) => prev === a.id ? null : a.id)}
+                      disabled={approveMutation.isPending}
+                      className="flex items-center gap-2 px-4 py-2 rounded-2xl font-bold hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+                      style={{
+                        background: scheduleOpenFor === a.id ? '#1d4ed8' : 'white',
+                        color: scheduleOpenFor === a.id ? 'white' : '#1d4ed8',
+                        border: '1.5px solid #bfdbfe',
+                        boxShadow: scheduleOpenFor === a.id ? '0 4px 16px rgba(29,78,216,0.25)' : undefined,
+                      }}
+                    >
+                      <CalendarClock className="w-4 h-4" />
+                      Schedule
+                    </button>
+                  )}
+
                   <button
                     onClick={() => rejectMutation.mutate({ id: a.id })}
                     disabled={rejectMutation.isPending}
@@ -321,6 +436,7 @@ export default function ApprovalsPage() {
                     <XCircle className="w-4 h-4" />
                     Reject
                   </button>
+
                   {isShortsExport(a.job.type, a.job.result) && a.job.result.shortClipId && (
                     <button
                       onClick={() => moveToEditingMutation.mutate({ id: a.id })}
@@ -334,6 +450,24 @@ export default function ApprovalsPage() {
                     </button>
                   )}
                 </div>
+
+                {/* Inline schedule panel */}
+                {scheduleOpenFor === a.id && (
+                  <SchedulePanel
+                    approvalId={a.id}
+                    onConfirm={(id, scheduledAt) => approveMutation.mutate({ id, scheduledAt })}
+                    onCancel={() => setScheduleOpenFor(null)}
+                    isPending={approveMutation.isPending && approveMutation.variables?.id === a.id}
+                  />
+                )}
+
+                {approveMutation.isError && approveMutation.variables?.id === a.id && (
+                  <p className="text-xs text-red-600 mt-2">
+                    {approveMutation.error instanceof Error
+                      ? (approveMutation.error as { response?: { data?: { message?: string } } }).response?.data?.message ?? approveMutation.error.message
+                      : 'Action failed — please try again'}
+                  </p>
+                )}
               </div>
             ))}
           </div>

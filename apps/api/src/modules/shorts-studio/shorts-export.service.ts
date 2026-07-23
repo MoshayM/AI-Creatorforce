@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, HttpException, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../media/storage.service';
 import { ApprovalsService } from '../approvals/approvals.service';
@@ -6,7 +6,7 @@ import { ComplianceService } from '../compliance/compliance.service';
 import { PublishingService } from '../publishing/publishing.service';
 import { YouTubeReadService } from './youtube-read.service';
 import { CLIP_TYPE_PRESETS } from './clip-type-presets';
-import { MediaPipelineError } from '../media/media.errors';
+import { MediaPipelineError, YoutubeAuthFailedError } from '../media/media.errors';
 
 interface ClipMetadata {
   title: string;
@@ -227,7 +227,7 @@ export class ShortsExportService {
   }
 
   /** SHORTS_PUBLISH job body: compliance gate → YouTube upload → history. */
-  async publishClip(shortClipId: string, approvalId: string, exportId: string, onLog?: (msg: string) => void) {
+  async publishClip(shortClipId: string, approvalId: string, exportId: string, scheduledAt?: Date, onLog?: (msg: string) => void) {
     // Load clip + export history in parallel
     const [clip, history] = await Promise.all([
       this.prisma.shortClip.findUniqueOrThrow({
@@ -313,7 +313,7 @@ export class ShortsExportService {
       onLog?.('AI disclosure: timeline uses generated voice/music/imagery — setting the "Altered or synthetic content" label');
     }
 
-    onLog?.('Uploading to YouTube…');
+    onLog?.(scheduledAt ? `Scheduling YouTube upload for ${scheduledAt.toISOString()}…` : 'Uploading to YouTube…');
     let youtubeVideoId: string;
     try {
       youtubeVideoId = await this.publishing.publish({
@@ -325,19 +325,41 @@ export class ShortsExportService {
         videoFilePath: this.storage.resolve(exportKey),
         ...(originalAudioLanguage ? { defaultAudioLanguage: originalAudioLanguage } : {}),
         containsSyntheticMedia,
+        ...(scheduledAt ? { scheduledAt } : {}),
       }, approvalId);
     } catch (err) {
+      if (err instanceof HttpException) {
+        const body = err.getResponse() as Record<string, unknown>;
+        if (body?.['code'] === 'OAUTH_EXPIRED') {
+          throw new YoutubeAuthFailedError(
+            typeof body['message'] === 'string'
+              ? body['message']
+              : 'Your YouTube authorization has expired. Please reconnect your channel.',
+          );
+        }
+        throw err;
+      }
       const msg = err instanceof Error ? err.message : 'YouTube upload failed';
       throw new MediaPipelineError('YOUTUBE_UPLOAD_FAILED', 'Upload to YouTube failed', msg, { originalError: msg });
     }
 
     await this.prisma.shortsExportHistory.update({
       where: { id: exportId },
-      data: { publishedAt: new Date(), publishTargetId: youtubeVideoId },
+      data: {
+        publishedAt: scheduledAt ?? new Date(),
+        publishTargetId: youtubeVideoId,
+      },
     });
-    await this.prisma.shortClip.update({ where: { id: shortClipId }, data: { status: 'PUBLISHED' } });
-    onLog?.(`Published ✓ — https://youtube.com/shorts/${youtubeVideoId}`);
-    return { youtubeVideoId, url: `https://youtube.com/shorts/${youtubeVideoId}` };
+    await this.prisma.shortClip.update({
+      where: { id: shortClipId },
+      data: { status: scheduledAt ? 'APPROVED' : 'PUBLISHED' },
+    });
+    const shortUrl = `https://youtube.com/shorts/${youtubeVideoId}`;
+    onLog?.(scheduledAt
+      ? `Scheduled ✓ — publishes ${scheduledAt.toISOString()} — ${shortUrl}`
+      : `Published ✓ — ${shortUrl}`,
+    );
+    return { youtubeVideoId, url: shortUrl, scheduledAt: scheduledAt?.toISOString() ?? null };
   }
 
   /**

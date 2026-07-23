@@ -70,6 +70,12 @@ export class StorageError extends MediaPipelineError {
   }
 }
 
+export class YoutubeAuthFailedError extends MediaPipelineError {
+  constructor(reason: string, details?: Record<string, unknown>) {
+    super('YOUTUBE_AUTH_FAILED', 'Your YouTube authorization has expired. Please reconnect your channel.', reason, details);
+  }
+}
+
 /**
  * Map any thrown error to a structured job failure payload for persisting in AgentJob.
  * - MediaPipelineError: extracts typed fields.

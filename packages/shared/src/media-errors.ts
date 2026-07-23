@@ -9,6 +9,7 @@ export const MEDIA_ERROR_CODES = [
   'STORAGE_FAILED',
   'CHAPTER_SYNC_FAILED',
   'YOUTUBE_UPLOAD_FAILED',
+  'YOUTUBE_AUTH_FAILED',
   'COMPLIANCE_FAILED',
   'JOB_FAILED',
 ] as const;
@@ -26,6 +27,7 @@ export const MEDIA_ERROR_RETRYABLE: Record<MediaErrorCode, boolean> = {
   STORAGE_FAILED: true,
   CHAPTER_SYNC_FAILED: false,
   YOUTUBE_UPLOAD_FAILED: true,
+  YOUTUBE_AUTH_FAILED: false,
   COMPLIANCE_FAILED: false,
   JOB_FAILED: true,
 };

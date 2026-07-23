@@ -18,12 +18,14 @@ import {
   EditRenderPresetSchema,
   EditExportOptionsSchema,
   EDIT_PRESET_DIMS,
+  callAIStructured,
   type EditTimeline,
   type EditRenderPreset,
   type EditExportOptions,
   type EditItemFilters,
   type EditKeyframe,
 } from '@cf/shared';
+import { z } from 'zod';
 import {
   runFfmpeg,
   runFfmpegWithProgress,
@@ -105,6 +107,35 @@ function buildItemFilters(f: EditItemFilters): string {
   }
 
   return parts.join(',');
+}
+
+/**
+ * Build a chained atempo filter string for ffmpeg.
+ * atempo accepts [0.5, 2.0] only; chain multiple filters for values outside that range.
+ * Returns empty string when speed is effectively 1 (no-op).
+ *
+ * Examples:
+ *   4.0  → "atempo=2.0,atempo=2.0"
+ *   0.25 → "atempo=0.5,atempo=0.5"
+ *   3.0  → "atempo=2.0,atempo=1.500000"
+ */
+function buildAtempoChain(speed: number): string {
+  const filters: string[] = [];
+  let remaining = clamp(speed, 0.1, 10);
+  while (Math.abs(remaining - 1.0) > 1e-5) {
+    if (remaining > 2.0) {
+      filters.push('atempo=2.0');
+      remaining /= 2.0;
+    } else if (remaining < 0.5) {
+      filters.push('atempo=0.5');
+      remaining /= 0.5;
+    } else {
+      filters.push(`atempo=${remaining.toFixed(6)}`);
+      remaining = 1.0;
+    }
+    if (filters.length > 10) break;
+  }
+  return filters.join(',');
 }
 
 /**
@@ -718,6 +749,112 @@ export class EditorService {
     };
   }
 
+  // ── AI Copilot: editor-aware timeline editing ────────────────────────────────
+
+  async editorCopilot(id: string, userId: string, message: string): Promise<{
+    reply: string;
+    timeline: EditTimeline | null;
+  }> {
+    const ep = await this.assertEditProjectOwnership(id, userId);
+
+    const timelineParse = EditTimelineSchema.safeParse(ep.timeline);
+    if (!timelineParse.success || timelineParse.data.tracks.length === 0) {
+      return { reply: 'Add some clips to the timeline first, then I can help edit it.', timeline: null };
+    }
+    const timeline = timelineParse.data;
+
+    // Compact representation: omit internal asset paths from AI context
+    const compact = {
+      width: timeline.width,
+      height: timeline.height,
+      fps: timeline.fps,
+      durationMs: timeline.durationMs,
+      tracks: timeline.tracks.map((t) => ({
+        id: t.id,
+        kind: t.kind,
+        label: t.label,
+        items: t.items.map((item) => ({
+          id: item.id,
+          kind: item.kind,
+          timelineStartMs: item.timelineStartMs,
+          timelineEndMs: item.timelineEndMs,
+          ...(item.sourceInMs != null ? { sourceInMs: item.sourceInMs } : {}),
+          ...(item.sourceOutMs != null ? { sourceOutMs: item.sourceOutMs } : {}),
+          ...(item.sourceAssetId ? { sourceAssetId: item.sourceAssetId } : {}),
+          ...(item.properties ? { properties: item.properties } : {}),
+        })),
+      })),
+    };
+
+    const EditorResponseSchema = z.object({
+      reply: z.string(),
+      timeline: z.unknown().nullable().optional(),
+    });
+
+    const systemPrompt = `You are a video timeline editor AI for the CreatorForce platform.
+
+Current timeline (JSON):
+${JSON.stringify(compact, null, 2)}
+
+You can modify these per-item properties (EditItemProperties):
+
+VIDEO / IMAGE items:
+  volume: 0–2 (default 1.0)         — audio volume multiplier
+  speed: 0.1–10 (default 1.0)       — playback speed (2 = 2× faster, 0.5 = slow motion)
+  opacity: 0–1 (default 1.0)
+  scale: 0.1–3 (default 1.0)
+  x, y: position offset in pixels (default 0)
+  filters: { brightness?: -1..1, contrast?: 0..2, saturation?: 0..3, grayscale?: boolean, blur?: 0..20 }
+  transitionIn: { type: 'fade'|'dissolve'|'slide', durationMs: integer }
+
+TEXT items (kind: TEXT):
+  text: string
+  fontSize: 8–200
+  color: hex string e.g. "#ffffff"
+  textAnim: 'none'|'fade-in'|'slide-up'
+  x, y: position (0 = centered in frame)
+
+AUDIO items (kind: AUDIO):
+  volume: 0–2
+  fadeInMs / fadeOutMs: 0–5000 ms
+  gainDb: -60..12 (dB)
+  duckUnderVoice: boolean
+
+You can also shift a clip in time by changing timelineStartMs / timelineEndMs (integers, ms).
+You can trim source footage by changing sourceInMs / sourceOutMs.
+
+RULES:
+1. Only change exactly what the user asked for. Leave everything else untouched.
+2. NEVER change id, kind, or sourceAssetId on any item.
+3. NEVER add or remove tracks. NEVER change track id, kind, or label.
+4. Return the COMPLETE modified timeline including ALL tracks and ALL items.
+5. If the user is asking a question rather than requesting a change, set "timeline" to null.
+
+Respond with JSON only:
+{ "reply": "1–2 sentence plain English summary of what you changed", "timeline": <complete modified timeline JSON> | null }`;
+
+    const res = await callAIStructured(
+      [{ role: 'user', content: message }],
+      EditorResponseSchema,
+      { systemPrompt, bypassCache: true },
+    );
+
+    if (!res.timeline) {
+      return { reply: res.reply, timeline: null };
+    }
+
+    const validated = EditTimelineSchema.safeParse(res.timeline);
+    if (!validated.success) {
+      this.logger.warn(`[EditorCopilot] AI returned invalid timeline: ${validated.error.issues[0]?.message}`);
+      return {
+        reply: `${res.reply}\n\n(Some proposed changes could not be validated and were discarded.)`,
+        timeline: null,
+      };
+    }
+
+    return { reply: res.reply, timeline: validated.data };
+  }
+
   // ── Worker body: runRender ───────────────────────────────────────────────────
 
   /**
@@ -767,8 +904,8 @@ export class EditorService {
    * Phase 1 limitations still present:
    * ─────────────────────────────────────────────────────────────────────────────
    * - Multiple VIDEO tracks: Only the FIRST VIDEO track is rendered.
-   * - Speed property: Not applied (requires setpts/atempo chain; Phase 4).
-   * - IMAGE items: Supported via zoompan still; filters not yet applied to images.
+   * - Speed property: Applied via setpts (video) + atempo chain (audio) for [0.1, 10] range.
+   * - IMAGE items: Supported via zoompan; color/blur filters applied from properties.filters if present.
    */
   async runRender(
     editProjectId: string,
@@ -876,6 +1013,8 @@ export class EditorService {
         /** Present for VIDEO items; used by Phase 3 audio source collection. */
         itemId?: string;
         transitionIn?: { type: 'fade' | 'dissolve' | 'slide'; durationMs: number };
+        /** Color/blur filter chain for IMAGE items; appended after zoompan in the mixed render path. */
+        filterChain?: string;
       }[] = [];
 
       for (let i = 0; i < sortedVideoItems.length; i++) {
@@ -896,12 +1035,14 @@ export class EditorService {
             onLog?.(`Item ${item.id} image asset missing — skipping`);
             continue;
           }
+          const imgFilterChain = item.properties?.filters ? buildItemFilters(item.properties.filters) : undefined;
           segmentPaths.push({
             path: this.storage.resolve(r2Key),
             durationSecs: itemDurationSecs,
             isImage: true,
+            filterChain: imgFilterChain || undefined,
           });
-          onLog?.(`Item ${i + 1}/${sortedVideoItems.length}: IMAGE — ${Math.round(itemDurationSecs)}s`);
+          onLog?.(`Item ${i + 1}/${sortedVideoItems.length}: IMAGE — ${Math.round(itemDurationSecs)}s${imgFilterChain ? ' [filters]' : ''}`);
         } else if (item.kind === 'VIDEO') {
           if (!item.sourceAssetId) {
             onLog?.(`Item ${item.id} is VIDEO but has no sourceAssetId — skipping`);
@@ -921,10 +1062,28 @@ export class EditorService {
 
           const sourceInSecs = (item.sourceInMs ?? 0) / 1000;
           const sourceOutSecs = item.sourceOutMs ? item.sourceOutMs / 1000 : undefined;
-          const trimDuration = sourceOutSecs ? sourceOutSecs - sourceInSecs : itemDurationSecs;
 
-          // Phase 2: build per-item video filter chain (scale + color filters + keyframe)
+          // Speed: how fast to play this clip (1.0 = normal, 2.0 = 2× fast, 0.5 = half speed)
+          const speed = clamp(item.properties?.speed ?? 1, 0.1, 10);
+          const hasSpeed = Math.abs(speed - 1) > 1e-4;
+
+          // Source footage to extract: if sourceOut is set, honor it exactly;
+          // otherwise extract itemDurationSecs * speed worth of source so the
+          // output at the given speed fills the timeline slot.
+          const trimDuration = sourceOutSecs !== undefined
+            ? sourceOutSecs - sourceInSecs
+            : itemDurationSecs * speed;
+
+          // Actual rendered duration after speed filter
+          const segOutputDuration = trimDuration / speed;
+
+          // Phase 2: build per-item video filter chain (scale + color filters + speed + keyframe)
           let vfChain = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}`;
+
+          // Speed: setpts rescales presentation timestamps (1/speed × PTS = speed× playback)
+          if (hasSpeed) {
+            vfChain += `,setpts=${(1 / speed).toFixed(6)}*PTS`;
+          }
 
           // Append Phase 2 color/blur filters if present
           const f = item.properties?.filters;
@@ -940,11 +1099,15 @@ export class EditorService {
             onLog?.(`Item ${item.id}: keyframe animation — only first+last keyframe honored (Phase 2 subset); scale keyframes deferred`);
           }
 
+          // Audio speed filter chain (atempo, clamped to [0.5, 2.0] per filter with chaining)
+          const atempoChain = hasSpeed ? buildAtempoChain(speed) : '';
+
           const extractArgs = [
             '-ss', String(sourceInSecs),
             ...(trimDuration > 0 ? ['-t', String(trimDuration)] : []),
             '-i', sourcePath,
             '-vf', vfChain,
+            ...(atempoChain ? ['-af', atempoChain] : []),
             '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p',
             '-c:a', 'aac', '-b:a', '128k',
             segPath,
@@ -952,12 +1115,12 @@ export class EditorService {
           await runFfmpeg(extractArgs, 600_000);
           segmentPaths.push({
             path: segPath,
-            durationSecs: itemDurationSecs,
+            durationSecs: segOutputDuration,
             isImage: false,
             itemId: item.id,
             transitionIn: item.properties?.transitionIn,
           });
-          onLog?.(`Item ${i + 1}/${sortedVideoItems.length}: VIDEO extracted (${Math.round(trimDuration)}s trim → ${Math.round(itemDurationSecs)}s slot)`);
+          onLog?.(`Item ${i + 1}/${sortedVideoItems.length}: VIDEO extracted (${trimDuration.toFixed(2)}s trim → ${segOutputDuration.toFixed(2)}s output${hasSpeed ? ` [speed=${speed}×]` : ''})`);
         } else if (item.kind === 'TEXT') {
           // TEXT items on the VIDEO track are unusual; log and skip (they belong on TEXT track)
           onLog?.(`Item ${item.id}: TEXT on VIDEO track — use TEXT track for overlays`);
@@ -1163,7 +1326,8 @@ export class EditorService {
           if (seg.isImage) {
             args.push('-loop', '1', '-i', seg.path);
             const frames = Math.max(1, Math.round(seg.durationSecs * fps));
-            filters.push(`[${inputIdx}:v]scale=${Math.round(width * 1.5)}:${Math.round(height * 1.5)},zoompan=z='min(zoom+0.0006,1.15)':d=${frames}:s=${width}x${height}:fps=${fps},setsar=1[v${inputIdx}]`);
+            const imgTail = seg.filterChain ? `,${seg.filterChain}` : '';
+            filters.push(`[${inputIdx}:v]scale=${Math.round(width * 1.5)}:${Math.round(height * 1.5)},zoompan=z='min(zoom+0.0006,1.15)':d=${frames}:s=${width}x${height}:fps=${fps},setsar=1${imgTail}[v${inputIdx}]`);
           } else {
             args.push('-i', seg.path);
             filters.push(`[${inputIdx}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},trim=duration=${seg.durationSecs},setpts=PTS-STARTPTS[v${inputIdx}]`);

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -194,7 +194,13 @@ function PublishStepTimeline({ startedAt, jobStatus }: { startedAt?: string | nu
 
 export default function ClipExportPage() {
   const { shortClipId } = useParams<{ shortClipId: string }>();
+  const router = useRouter();
   const qc = useQueryClient();
+
+  const handleReconnectYouTube = () => {
+    sessionStorage.setItem('cf.oauth.returnUrl', `/shorts-studio/clips/${shortClipId}/export`);
+    router.push('/library?tab=channels');
+  };
 
   const { data: status } = useQuery<RenderStatus>({
     queryKey: ['render-status', shortClipId],
@@ -539,6 +545,7 @@ export default function ClipExportPage() {
               errorDetails={pub.publishJob.errorDetails}
               retryable={pub.publishJob.retryable}
               onRetry={() => { void publishMutation.mutate(); }}
+              onReconnect={pub.publishJob.errorCode === 'YOUTUBE_AUTH_FAILED' ? handleReconnectYouTube : undefined}
               className="mt-4"
             />
           )}

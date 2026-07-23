@@ -518,6 +518,26 @@ export class AutonomyService {
 
   // ── Calendar CRUD ─────────────────────────────────────────────────────────
 
+  async createManualEntry(
+    channelId: string,
+    userId: string,
+    data: { title: string; plannedAt: string; format?: 'VIDEO' | 'SHORT'; angle?: string },
+  ) {
+    await this.assertChannelOwnership(channelId, userId);
+    return this.prisma.contentCalendarEntry.create({
+      data: {
+        channelId,
+        batchId: 'manual',
+        title: data.title,
+        plannedAt: new Date(data.plannedAt),
+        format: data.format ?? 'VIDEO',
+        angle: data.angle ?? null,
+        source: 'manual',
+        status: 'PROPOSED',
+      },
+    });
+  }
+
   async listCalendar(
     channelId: string,
     userId: string,

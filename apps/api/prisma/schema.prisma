@@ -306,15 +306,16 @@ enum FlagSeverity {
 // ── Approvals ─────────────────────────────────────────────────────────────────
 
 model Approval {
-  id         String         @id @default(cuid())
-  projectId  String
-  jobId      String         @unique
-  status     ApprovalStatus @default(PENDING)
-  reviewedBy String?
-  notes      String?
-  reviewedAt DateTime?
-  expiresAt  DateTime
-  createdAt  DateTime       @default(now())
+  id          String         @id @default(cuid())
+  projectId   String
+  jobId       String         @unique
+  status      ApprovalStatus @default(PENDING)
+  reviewedBy  String?
+  notes       String?
+  reviewedAt  DateTime?
+  scheduledAt DateTime?      // set when approved with a future publish time
+  expiresAt   DateTime
+  createdAt   DateTime       @default(now())
 
   project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   job     AgentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)

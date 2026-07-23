@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { AlertCircle, RotateCcw, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertCircle, RotateCcw, X, ChevronDown, ChevronRight, RefreshCcw } from 'lucide-react';
 
 export type JobErrorCode =
   | 'FFMPEG_MISSING'
@@ -13,6 +13,7 @@ export type JobErrorCode =
   | 'STORAGE_FAILED'
   | 'CHAPTER_SYNC_FAILED'
   | 'YOUTUBE_UPLOAD_FAILED'
+  | 'YOUTUBE_AUTH_FAILED'
   | 'COMPLIANCE_FAILED'
   | 'JOB_FAILED';
 
@@ -73,6 +74,11 @@ const CODE_COPY: Record<JobErrorCode, ErrorCopy> = {
     desc: null, // use the server error — it contains the YouTube API reason
     fix: 'Retry the upload. If it keeps failing, re-connect your YouTube channel in Settings → Channels.',
   },
+  YOUTUBE_AUTH_FAILED: {
+    title: 'YouTube authorization expired',
+    desc: 'Your connection to YouTube has expired or was revoked.',
+    fix: 'Reconnect your YouTube channel to continue publishing.',
+  },
   COMPLIANCE_FAILED: {
     title: 'Content failed the compliance audit',
     desc: 'This clip did not pass the compliance check and cannot be published.',
@@ -107,6 +113,7 @@ export interface JobErrorCardProps {
   errorDetails?: Record<string, unknown> | null;
   retryable?: boolean;
   onRetry?: () => void;
+  onReconnect?: () => void;
   onRemove?: () => void;
   className?: string;
 }
@@ -117,6 +124,7 @@ export function JobErrorCard({
   errorDetails,
   retryable,
   onRetry,
+  onReconnect,
   onRemove,
   className = '',
 }: JobErrorCardProps) {
@@ -140,7 +148,9 @@ export function JobErrorCard({
     description = GENERIC_COPY.desc!;
   }
 
-  const showRetry = !!onRetry && retryable !== false;
+  const isAuthFailed = errorCode === 'YOUTUBE_AUTH_FAILED';
+  const showRetry = !!onRetry && retryable !== false && !isAuthFailed;
+  const showReconnect = isAuthFailed && !!onReconnect;
   const showRemove = !!onRemove;
   const showDetails = !!errorDetails;
 
@@ -156,8 +166,16 @@ export function JobErrorCard({
           <p className="text-xs text-red-700 mt-0.5">{description}</p>
           <p className="text-xs text-red-600 mt-1 italic">{copy.fix}</p>
 
-          {(showRetry || showRemove || showDetails) && (
+          {(showRetry || showReconnect || showRemove || showDetails) && (
             <div className="flex items-center gap-2 mt-3 flex-wrap">
+              {showReconnect && (
+                <button
+                  onClick={onReconnect}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <RefreshCcw className="w-3 h-3" /> Reconnect YouTube
+                </button>
+              )}
               {showRetry && (
                 <button
                   onClick={onRetry}

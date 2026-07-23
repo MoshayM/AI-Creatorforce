@@ -1499,10 +1499,12 @@ Return a VideoScenePlanOutput with semanticMethod="cinematic-director", sceneCou
         const shortClipId = payload['shortClipId'] as string;
         const approvalId = payload['approvalId'] as string;
         const exportId = payload['exportId'] as string;
+        const scheduledAtStr = payload['scheduledAt'] as string | undefined;
+        const scheduledAt = scheduledAtStr ? new Date(scheduledAtStr) : undefined;
         if (!shortClipId || !approvalId || !exportId) {
           throw new Error('SHORTS_PUBLISH requires payload.shortClipId, approvalId and exportId');
         }
-        return this.shortsExport.publishClip(shortClipId, approvalId, exportId, (m) => this.log(jobId, projectId, m));
+        return this.shortsExport.publishClip(shortClipId, approvalId, exportId, scheduledAt, (m) => this.log(jobId, projectId, m));
       }
 
       case 'SHORTS_ANALYZE': {

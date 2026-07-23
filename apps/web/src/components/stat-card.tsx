@@ -38,7 +38,7 @@ export function StatCard({
         {icon}
       </div>
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className="text-3xl font-extrabold text-gray-900 mt-0.5 tabular-nums leading-none">{value}</p>
+      <div className="text-3xl font-extrabold text-gray-900 mt-0.5 tabular-nums leading-none">{value}</div>
       {sub && <p className={`text-xs mt-1.5 font-medium ${subClassName}`}>{sub}</p>}
     </div>
   );

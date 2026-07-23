@@ -8,7 +8,7 @@ import {
   Volume2, Zap, Type, Image, X,
   ZoomIn, ZoomOut, Plus, Maximize2,
   SlidersHorizontal, ChevronDown, Clapperboard, Sparkles, KeyRound,
-  Music,
+  Music, CheckCircle2,
 } from 'lucide-react';
 import {
   api,
@@ -287,10 +287,11 @@ const AUTO_EDIT_INSTRUCTION =
   'filler words to cut, pacing improvements, and any title/text overlays or transitions ' +
   'that would improve it. List each suggested edit with timestamps so I can apply them.';
 
-function AiEditDialog({ editId, timeline, autoSuggest = false, onClose }: { editId: string; timeline: EditTimeline | null; autoSuggest?: boolean; onClose: () => void }) {
+function AiEditDialog({ editId, timeline, autoSuggest = false, onClose, onApplyTimeline }: { editId: string; timeline: EditTimeline | null; autoSuggest?: boolean; onClose: () => void; onApplyTimeline: (t: unknown) => void }) {
   const [instruction, setInstruction] = useState(autoSuggest ? AUTO_EDIT_INSTRUCTION : '');
   const [busy, setBusy] = useState(false);
   const [reply, setReply] = useState<string | null>(null);
+  const [pendingTimeline, setPendingTimeline] = useState<unknown | null>(null);
   const [error, setError] = useState<string | null>(null);
   const autoRan = useRef(false);
 
@@ -305,29 +306,26 @@ function AiEditDialog({ editId, timeline, autoSuggest = false, onClose }: { edit
     if (!prompt || busy) return;
     setBusy(true);
     setReply(null);
+    setPendingTimeline(null);
     setError(null);
     try {
-      // Route through the existing copilot endpoint — do NOT make a direct LLM call.
-      // The copilot handles instructions with editor context; Phase 2 will wire up
-      // a dedicated apply-to-timeline endpoint.
-      // TODO (Phase 2): parse structured commands from the response and apply them
-      // to the timeline via api.editor.saveTimeline when the backend exposes an
-      // editor-aware copilot action.
-      const res = await apiClient.post<{ reply: string }>('/copilot/chat', {
-        messages: [
-          {
-            role: 'user',
-            content: `[Video Editor context — editId: ${editId}, tracks: ${timeline?.tracks.length ?? 0}, duration: ${timeline ? fmtMs(timeline.durationMs) : 'unknown'}]\n\n${prompt}`,
-          },
-        ],
-        inputMode: 'text',
-      });
+      const res = await apiClient.post<{ reply: string; timeline: unknown | null }>(`/editor/${editId}/copilot`, { message: prompt });
       setReply(res.data.reply);
+      if (res.data.timeline) {
+        setPendingTimeline(res.data.timeline);
+      }
     } catch (err) {
       const e = err as { response?: { data?: { message?: string } } };
       setError(e.response?.data?.message ?? 'Request failed');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleApply = () => {
+    if (pendingTimeline) {
+      onApplyTimeline(pendingTimeline);
+      onClose();
     }
   };
 
@@ -355,18 +353,30 @@ function AiEditDialog({ editId, timeline, autoSuggest = false, onClose }: { edit
         </div>
         <div className="p-5 space-y-3">
           <p className="text-xs text-gray-500">
-            Describe what you want to change — the Copilot will guide you. Automatic timeline application is coming in Phase 2.
+            Describe what to change — the Copilot will propose timeline edits you can review and apply.
           </p>
           <textarea
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
             rows={3}
-            placeholder={'Try: "trim the silent intro", "add a title that says Welcome", "speed up the middle section"'}
+            placeholder={'Try: "trim the silent intro", "add a title that says Welcome", "speed up the middle section to 2×", "add a fade transition between clips"'}
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-400 resize-none"
           />
           {reply && (
             <div className="rounded-xl bg-brand-50 border border-brand-100 p-4 text-sm text-gray-800 whitespace-pre-wrap">
               {reply}
+            </div>
+          )}
+          {pendingTimeline != null && (
+            <div className="rounded-xl bg-green-50 border border-green-200 p-3 flex items-center gap-3">
+              <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+              <p className="text-sm text-green-800 flex-1">Changes ready — click Apply to update your timeline.</p>
+              <button
+                onClick={handleApply}
+                className="px-4 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 shrink-0"
+              >
+                Apply
+              </button>
             </div>
           )}
           {error && (
@@ -1780,7 +1790,15 @@ export default function EditorWorkspacePage() {
 
       {/* Dialogs */}
       {showExport && <ExportDialog editId={editId} onClose={() => setShowExport(false)} />}
-      {showAiEdit && <AiEditDialog editId={editId} timeline={timeline} autoSuggest={aiAutoSuggest} onClose={() => { setShowAiEdit(false); setAiAutoSuggest(false); }} />}
+      {showAiEdit && (
+        <AiEditDialog
+          editId={editId}
+          timeline={timeline}
+          autoSuggest={aiAutoSuggest}
+          onClose={() => { setShowAiEdit(false); setAiAutoSuggest(false); }}
+          onApplyTimeline={(t) => { setTimeline(t as EditTimeline); setDirty(true); setShowAiEdit(false); setAiAutoSuggest(false); }}
+        />
+      )}
     </div>
   );
 }

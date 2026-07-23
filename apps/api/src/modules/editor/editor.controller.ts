@@ -6,9 +6,11 @@ import {
   Param,
   Body,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import { EditorService } from './editor.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { TierRateLimit } from '../../common/guards/rate-limit.guard';
 import { CurrentUser, type JwtPayload } from '../../common/decorators/current-user.decorator';
 
 /**
@@ -140,5 +142,19 @@ export class EditorController {
   @Get(':id/render-status')
   async renderStatus(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.editor.renderStatus(id, user.sub);
+  }
+
+  /** AI Copilot: receive a free-text instruction, return a modified timeline */
+  @Post(':id/copilot')
+  @TierRateLimit({ bucket: 'copilot-chat', windowSecs: 3600, limits: { FREE: 10, STARTER: 40, PRO: 150, AGENCY: 400, default: 10 } })
+  editorCopilot(
+    @Param('id') id: string,
+    @Body() body: { message?: string },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (!body?.message || typeof body.message !== 'string' || !body.message.trim()) {
+      throw new BadRequestException('message is required');
+    }
+    return this.editor.editorCopilot(id, user.sub, body.message.trim());
   }
 }

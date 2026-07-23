@@ -613,7 +613,8 @@ export const api = {
       apiClient.get(`/approvals/pending${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
     listHistory: (cursor?: string) =>
       apiClient.get(`/approvals/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
-    approve: (id: string, notes?: string) => apiClient.post(`/approvals/${id}/approve`, { notes }),
+    approve: (id: string, notes?: string, scheduledAt?: string) =>
+      apiClient.post(`/approvals/${id}/approve`, { notes, ...(scheduledAt ? { scheduledAt } : {}) }),
     reject: (id: string, notes?: string) => apiClient.post(`/approvals/${id}/reject`, { notes }),
     moveToEditing: (id: string, notes?: string) => apiClient.post(`/approvals/${id}/move-to-editing`, { notes }),
   },
@@ -818,6 +819,8 @@ export const api = {
       const qs = sp.toString();
       return apiClient.get<CalendarEntry[]>(`/autonomy/channels/${channelId}/calendar${qs ? `?${qs}` : ''}`);
     },
+    createEntry: (channelId: string, data: { title: string; plannedAt: string; format?: CalendarFormat; angle?: string }) =>
+      apiClient.post<CalendarEntry>(`/autonomy/channels/${channelId}/calendar/entry`, data),
     generateCalendarAsync: (channelId: string, body?: { weeks?: number; perWeek?: number; dryRun?: boolean }) =>
       apiClient.post<{ jobId: string }>(`/autonomy/channels/${channelId}/calendar/generate-async`, body ?? {}),
     approveEntry: (entryId: string) =>
@@ -945,6 +948,8 @@ export const api = {
       apiClient.get<EditProject[]>(`/editor/projects/${projectId}`),
     saveTimeline: (editId: string, timeline: EditTimeline) =>
       apiClient.put<EditProject>(`/editor/${editId}/timeline`, timeline),
+    editorCopilot: (editId: string, message: string) =>
+      apiClient.post<{ reply: string; timeline: unknown | null }>(`/editor/${editId}/copilot`, { message }),
     mediaBin: (editId: string) =>
       apiClient.get<MediaBinEntry[]>(`/editor/${editId}/media-bin`),
     render: (editId: string, options: RenderPreset | EditExportOptions) =>

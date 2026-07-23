@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import type { CalendarEntryStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -19,6 +19,13 @@ class ListCalendarDto {
   status?: CalendarEntryStatus;
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
+}
+
+class CreateEntryDto {
+  @IsString() @IsNotEmpty() title!: string;
+  @IsDateString() plannedAt!: string;
+  @IsOptional() @IsIn(['VIDEO', 'SHORT']) format?: 'VIDEO' | 'SHORT';
+  @IsOptional() @IsString() angle?: string;
 }
 
 class GetProfileDto {
@@ -82,6 +89,15 @@ export class AutonomyController {
       from: dto.from ? new Date(dto.from) : undefined,
       to: dto.to ? new Date(dto.to) : undefined,
     });
+  }
+
+  @Post('channels/:channelId/calendar/entry')
+  createEntry(
+    @Param('channelId') channelId: string,
+    @Body() dto: CreateEntryDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.svc.createManualEntry(channelId, user.sub, dto);
   }
 
   @Post('calendar/:entryId/approve')

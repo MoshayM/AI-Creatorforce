@@ -9,6 +9,12 @@ class ReviewDto {
   @IsOptional() @IsString() notes?: string;
 }
 
+class ApproveDto {
+  @IsOptional() @IsString() notes?: string;
+  /** ISO-8601 datetime string. When provided the publish is scheduled; omit for immediate publish. */
+  @IsOptional() @IsString() scheduledAt?: string;
+}
+
 @ApiTags('approvals')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -35,8 +41,9 @@ export class ApprovalsController {
   }
 
   @Post(':id/approve')
-  approve(@Param('id') id: string, @Body() dto: ReviewDto, @CurrentUser() user: JwtPayload) {
-    return this.svc.approve(id, user.sub, dto.notes);
+  approve(@Param('id') id: string, @Body() dto: ApproveDto, @CurrentUser() user: JwtPayload) {
+    const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : undefined;
+    return this.svc.approve(id, user.sub, dto.notes, scheduledAt);
   }
 
   @Post(':id/reject')
