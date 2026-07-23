@@ -10,7 +10,6 @@ logs
 **/coverage
 .turbo
 apps/e2e
-apps/api
 n8n
 infra
 *.zip
