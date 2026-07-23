@@ -35,7 +35,7 @@ export async function createNestServer(): Promise<express.Application> {
     'https://www.aicreatorforce.net',
   ];
   app.enableCors({ origin: allowedOrigins, credentials: true });
-  app.setGlobalPrefix('api', { exclude: ['metrics', 'health', 'ready'] });
+  app.setGlobalPrefix('api', { exclude: ['', 'metrics', 'health', 'ready'] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalPipes(
