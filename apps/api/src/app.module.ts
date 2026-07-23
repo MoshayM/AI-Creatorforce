@@ -51,17 +51,31 @@ import { EditorModule } from './modules/editor/editor.module';
       envFilePath: ['../../.env', '.env'],
     }),
     BullModule.forRoot({
-      connection: {
-        host: '127.0.0.1',
-        port: 6379,
-        // No lazyConnect: a lazy connect() that fails (Redis down at first
-        // enqueue) is cached by BullMQ as a forever-rejected init promise, so
-        // the queue never recovers even after Redis comes back. An eager
-        // connection retries until Redis is ready and heals on its own;
-        // JobsService fails fast while it isn't.
-        enableOfflineQueue: false,
-        maxRetriesPerRequest: null,
-      },
+      connection: (() => {
+        const url = process.env['REDIS_URL'];
+        if (url) {
+          const u = new URL(url);
+          return {
+            host: u.hostname,
+            port: u.port ? parseInt(u.port, 10) : 6379,
+            ...(u.password ? { password: u.password } : {}),
+            ...(u.protocol === 'rediss:' ? { tls: {} } : {}),
+            // No lazyConnect: a lazy connect() that fails (Redis down at first
+            // enqueue) is cached by BullMQ as a forever-rejected init promise, so
+            // the queue never recovers even after Redis comes back. An eager
+            // connection retries until Redis is ready and heals on its own;
+            // JobsService fails fast while it isn't.
+            enableOfflineQueue: false,
+            maxRetriesPerRequest: null,
+          };
+        }
+        return {
+          host: '127.0.0.1',
+          port: 6379,
+          enableOfflineQueue: false,
+          maxRetriesPerRequest: null,
+        };
+      })(),
     }),
     PrismaModule,
     AuthModule,
